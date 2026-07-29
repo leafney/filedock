@@ -14,8 +14,12 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/leafney/filedock/config"
 	"github.com/leafney/filedock/internal/api"
+	"github.com/leafney/filedock/pkg/errc"
+	"github.com/leafney/filedock/pkg/i18n"
+	"github.com/leafney/filedock/pkg/response"
 	"github.com/leafney/filedock/pkg/zlogx"
 	"github.com/leafney/filedock/static"
+	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -23,12 +27,15 @@ type Server struct {
 	app *fiber.App
 }
 
-func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, versionAPI *api.VersionAPI) (*Server, error) {
+func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("server config is required")
 	}
 	if log == nil {
 		return nil, fmt.Errorf("server logger is required")
+	}
+	if catalog == nil {
+		return nil, fmt.Errorf("server i18n catalog is required")
 	}
 	if versionAPI == nil {
 		return nil, fmt.Errorf("version api is required")
@@ -38,9 +45,12 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, versionAPI *api.VersionAP
 	if err != nil {
 		return nil, err
 	}
-	app := fiber.New(fiber.Config{ErrorHandler: handleHTTPError})
+	app := fiber.New(fiber.Config{ErrorHandler: func(c *fiber.Ctx, err error) error {
+		return handleHTTPError(log, c, err)
+	}})
 	app.Use(recover.New())
 	app.Use(requestLogger.Handle)
+	app.Use(localizationMiddleware(catalog))
 	registerRoutes(app, versionAPI)
 	if err := registerStatic(app); err != nil {
 		return nil, fmt.Errorf("register static resources: %w", err)
@@ -71,20 +81,49 @@ func (s *Server) Shutdown() error {
 	return s.app.ShutdownWithContext(ctx)
 }
 
-func handleHTTPError(c *fiber.Ctx, err error) error {
+func handleHTTPError(log *zlogx.ZLogSvc, c *fiber.Ctx, err error) error {
 	status := fiber.StatusInternalServerError
-	message := "Internal Server Error"
 	var fiberErr *fiber.Error
 	if errors.As(err, &fiberErr) {
 		status = fiberErr.Code
-		message = fiberErr.Message
-	} else if err != nil {
-		message = err.Error()
 	}
-	if strings.HasPrefix(c.Path(), "/api/") {
-		return c.Status(status).JSON(fiber.Map{"code": status, "message": message})
+	if status >= fiber.StatusInternalServerError && log != nil {
+		fields := []zap.Field{
+			zap.String("method", c.Method()),
+			zap.String("path", c.Path()),
+			zap.Int("status", status),
+		}
+		if requestID, ok := c.Locals(requestIDLocalKey).(string); ok {
+			fields = append(fields, zap.String("request_id", requestID))
+		}
+		if err != nil {
+			fields = append(fields, zap.Error(err))
+		}
+		log.Error("http handler error", fields...)
 	}
-	return c.Status(status).JSON(fiber.Map{"message": message})
+	setLanguageResponseHeaders(c, response.Locale(c))
+	return response.Error(c, errorCodeForHTTPStatus(status), nil)
+}
+
+func errorCodeForHTTPStatus(status int) int {
+	switch status {
+	case fiber.StatusBadRequest:
+		return errc.ErrClient
+	case fiber.StatusMethodNotAllowed:
+		return errc.ErrMethodNotAllowed
+	case fiber.StatusUnauthorized:
+		return errc.ErrUnAuthorized
+	case fiber.StatusForbidden:
+		return errc.ErrForbidden
+	case fiber.StatusNotFound:
+		return errc.ErrNotFound
+	case fiber.StatusRequestTimeout, fiber.StatusGatewayTimeout:
+		return errc.ErrTimeOut
+	case fiber.StatusConflict:
+		return errc.ErrConflict
+	default:
+		return errc.ErrServer
+	}
 }
 
 func registerStatic(app *fiber.App) error {

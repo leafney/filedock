@@ -1,0 +1,23 @@
+{
+  "common.success": "操作成功",
+  "common.created": "创建成功",
+  "error.failed": "操作失败",
+  "error.client": "客户端请求错误",
+  "error.internal_server": "服务器繁忙，请稍后重试",
+  "error.unauthorized": "鉴权失败",
+  "error.auth_expired": "授权已过期",
+  "error.forbidden": "禁止访问",
+  "error.params": "请求参数错误",
+  "error.no_login": "用户未登录",
+  "error.bind_params": "请求参数绑定错误",
+  "error.not_found": "请求的资源不存在或不可用",
+  "error.method_not_allowed": "请求方法不受支持",
+  "error.token_invalid_or_expired": "令牌无权限或已过期",
+  "error.existed": "资源已存在",
+  "error.duplicate": "数据已存在",
+  "error.user_not_found": "用户不存在",
+  "error.conflict": "当前资源状态冲突",
+  "error.timeout": "请求超时，请稍后重试",
+  "error.database": "数据库操作异常",
+  "error.cache": "缓存操作异常"
+}

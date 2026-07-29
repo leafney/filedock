@@ -10,7 +10,7 @@
 - 数据库：`github.com/libtnb/sqlite`，通过迁入的 `pkg/gormx` 装配
 - 日志：迁入的 `pkg/zlogx`
 - 前端：React 18、TypeScript、Vite、Tailwind CSS v3、Bun
-- 前端依赖：React Router、TanStack Query、Zustand、axios、idb、Lucide React、`@microsoft/fetch-event-source`
+- 前端依赖：React Router、TanStack Query、Zustand、axios、i18next、react-i18next、idb、Lucide React、`@microsoft/fetch-event-source`
 - 发布方式：Vite 构建后由 Go `embed` 内嵌
 
 ## 环境要求
@@ -77,7 +77,7 @@ GET /version
 ```json
 {
   "code": 200,
-  "message": "success",
+  "message": "操作成功",
   "data": {
     "status": "ok",
     "version": "dev",
@@ -89,6 +89,31 @@ GET /version
 ```
 
 开发阶段 `status` 固定为 `ok`；SQLite 连接失败会阻止服务启动。
+
+## 多语言
+
+页面支持“简体中文”和“English”即时切换。语言选择保存在浏览器 localStorage；没有保存值时优先匹配浏览器语言，不支持时使用简体中文。
+
+前端请求统一发送标准语言头：
+
+```http
+Accept-Language: zh-CN
+```
+
+后端支持 `zh`、`zh-CN`、`en`、`en-US` 等常见变体及标准权重列表，并返回实际采用的语言：
+
+```http
+Content-Language: zh-CN
+Vary: Accept-Language
+```
+
+请求 English 版本接口：
+
+```bash
+curl -H 'Accept-Language: en' http://127.0.0.1:8195/version
+```
+
+成功响应中的 `message` 为 `Success`。业务错误、参数校验和全局 HTTP 错误同样根据请求语言返回；内部技术错误不会暴露给客户端。
 
 ## 构建
 

@@ -1,0 +1,23 @@
+{
+  "common.success": "Success",
+  "common.created": "Created successfully",
+  "error.failed": "Operation failed",
+  "error.client": "Invalid client request",
+  "error.internal_server": "The server is busy. Please try again later",
+  "error.unauthorized": "Authentication failed",
+  "error.auth_expired": "Authorization has expired",
+  "error.forbidden": "Access forbidden",
+  "error.params": "Invalid request parameters",
+  "error.no_login": "You are not signed in",
+  "error.bind_params": "Unable to bind request parameters",
+  "error.not_found": "The requested resource does not exist or is unavailable",
+  "error.method_not_allowed": "The request method is not supported",
+  "error.token_invalid_or_expired": "The token lacks permission or has expired",
+  "error.existed": "The resource already exists",
+  "error.duplicate": "The data already exists",
+  "error.user_not_found": "User not found",
+  "error.conflict": "Resource state conflict",
+  "error.timeout": "The request timed out. Please try again later",
+  "error.database": "A database error occurred",
+  "error.cache": "A cache error occurred"
+}

@@ -1,70 +1,73 @@
 package validator
 
 import (
-	"fmt"
+	"errors"
 	"reflect"
 	"strings"
 
-	"github.com/go-playground/locales/zh"
+	localeen "github.com/go-playground/locales/en"
+	localezh "github.com/go-playground/locales/zh"
 	ut "github.com/go-playground/universal-translator"
-	"github.com/go-playground/validator/v10"
-	zh_translations "github.com/go-playground/validator/v10/translations/zh"
+	playground "github.com/go-playground/validator/v10"
+	enTranslations "github.com/go-playground/validator/v10/translations/en"
+	zhTranslations "github.com/go-playground/validator/v10/translations/zh"
+	"github.com/leafney/filedock/pkg/i18n"
 )
 
 var (
-	validate *validator.Validate
-	trans    ut.Translator
+	validate    *playground.Validate
+	translators map[i18n.Locale]ut.Translator
 )
 
 func init() {
-	validate = validator.New()
-
-	// 注册一个函数，获取结构体标签中的 json 名字
-	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
-		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+	validate = playground.New()
+	validate.RegisterTagNameFunc(func(field reflect.StructField) string {
+		name := strings.SplitN(field.Tag.Get("json"), ",", 2)[0]
 		if name == "-" {
 			return ""
 		}
 		return name
 	})
 
-	// 注册中文翻译器
-	zhTrans := zh.New()
-	uni := ut.New(zhTrans, zhTrans)
-	trans, _ = uni.GetTranslator("zh")
-
-	// 注册翻译
-	_ = zh_translations.RegisterDefaultTranslations(validate, trans)
+	zhLocale := localezh.New()
+	enLocale := localeen.New()
+	universal := ut.New(zhLocale, zhLocale, enLocale)
+	zhTranslator, _ := universal.GetTranslator("zh")
+	enTranslator, _ := universal.GetTranslator("en")
+	if err := zhTranslations.RegisterDefaultTranslations(validate, zhTranslator); err != nil {
+		panic(err)
+	}
+	if err := enTranslations.RegisterDefaultTranslations(validate, enTranslator); err != nil {
+		panic(err)
+	}
+	translators = map[i18n.Locale]ut.Translator{
+		i18n.LocaleZhCN: zhTranslator,
+		i18n.LocaleEn:   enTranslator,
+	}
 }
 
-// Validate 验证结构体
-func Validate(s interface{}) error {
-	err := validate.Struct(s)
-	if err != nil {
-		if errs, ok := err.(validator.ValidationErrors); ok {
-			var errMsgs []string
-			for _, e := range errs {
-				errMsgs = append(errMsgs, e.Translate(trans))
-			}
-			return fmt.Errorf("%s", strings.Join(errMsgs, "; "))
-		}
-		return err
-	}
-	return nil
+func Validate(value interface{}) error {
+	return validate.Struct(value)
 }
 
-// ValidateVar 验证变量
-func ValidateVar(field interface{}, tag string) error {
-	err := validate.Var(field, tag)
-	if err != nil {
-		if errs, ok := err.(validator.ValidationErrors); ok {
-			var errMsgs []string
-			for _, e := range errs {
-				errMsgs = append(errMsgs, e.Translate(trans))
-			}
-			return fmt.Errorf("%s", strings.Join(errMsgs, "; "))
-		}
-		return err
+func ValidateVar(value interface{}, tag string) error {
+	return validate.Var(value, tag)
+}
+
+func FirstMessage(err error, locale i18n.Locale) string {
+	if err == nil {
+		return ""
 	}
-	return nil
+	translator, ok := translators[locale]
+	if !ok {
+		translator = translators[i18n.DefaultLocale]
+	}
+	var validationErrors playground.ValidationErrors
+	if errors.As(err, &validationErrors) && len(validationErrors) > 0 {
+		return validationErrors[0].Translate(translator)
+	}
+	if locale == i18n.LocaleEn {
+		return "Invalid request parameters"
+	}
+	return "请求参数错误"
 }

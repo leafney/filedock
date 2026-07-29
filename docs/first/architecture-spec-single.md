@@ -414,7 +414,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 ```json
 {
   "code": 200,
-  "message": "success",
+  "message": "操作成功",
   "data": {
     "status": "ok",
     "version": "dev",
@@ -432,11 +432,24 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 - 便于探针检查
 - 便于排障
 
-### 7.2 业务接口
+`message` 必须按请求语言返回；English 请求对应值为 `Success`。`code` 和 `data` 中的机器数据不随语言变化。
+
+### 7.2 多语言响应
+
+- 首期支持 `zh-CN` 与 `en`，默认语言为 `zh-CN`。
+- 客户端通过标准 `Accept-Language` 请求头声明语言；后端负责地区变体、权重列表和不支持语言的回退。
+- JSON 响应必须返回 `Content-Language`，并设置 `Vary: Accept-Language`。
+- 成功、业务错误、参数校验、鉴权、权限和全局 HTTP 错误都必须通过统一响应层翻译。
+- 业务层只返回错误码、翻译参数和内部原因，不得生成最终用户文案。
+- 未知内部错误只记录日志，客户端返回安全通用译文。
+- 新增翻译键时必须同时提供 `zh-CN` 与 `en`，缺少任一语言时构建或启动失败。
+- 日志、错误码、DTO 字段名、机器状态值和用户输入不翻译。
+
+### 7.3 业务接口
 
 所有 `/api/...` 接口统一使用 `pkg/response` 响应包装，不得在 handler 中直接调用 `fiber.Ctx.JSON`。
 
-### 7.3 列表接口分页规范
+### 7.4 列表接口分页规范
 
 所有列表类业务接口必须默认支持分页，禁止直接返回完整数组。
 
@@ -482,10 +495,12 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 ```json
 {
   "code": 200,
-  "message": "success",
+  "message": "操作成功",
   "data": {}
 }
 ```
+
+English 请求中的成功消息为 `Success`。
 
 建议复用：
 

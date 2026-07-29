@@ -284,7 +284,7 @@ SQLite DSN 必须表达以下设置：
 成功响应使用 HTTP 200，并且由 `internal/api/version.api.go` 调用 `pkg/response.Success` 返回统一响应包装。禁止在 handler 中直接调用 `fiber.Ctx.JSON`。统一结构固定为：
 
 - `code`：成功时为 `200`。
-- `message`：成功时为 `success`。
+- `message`：成功时按请求语言返回；`zh-CN` 为“操作成功”，`en` 为 `Success`。具体规则见 `docs/plan/2026-07-30-i18n-language-support.md`。
 - `data`：版本数据对象。
 
 `data` 内字段固定为：
@@ -566,7 +566,7 @@ Makefile 的默认目标为帮助信息。必须提供：
 必须覆盖：
 
 1. `GET /version` 返回 HTTP 200。
-2. 顶层统一响应的 `code` 等于 `200`，`message` 等于 `success`。
+2. 顶层统一响应的 `code` 等于 `200`，`message` 按请求语言返回“操作成功”或 `Success`。
 3. `data` 字段恰好包含 `status`、`version`、`git_branch`、`git_commit` 和 `build_time`，且 `status` 等于 `ok`。
 4. Wire 注入的构建信息原样进入响应。
 5. 响应的 `data` 不包含 `service`。

@@ -22,6 +22,10 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
+	catalog, err := provideI18nCatalog(zLogSvc)
+	if err != nil {
+		return nil, err
+	}
 	versionSvc := provideVersionSvc(build)
 	versionBiz, err := provideVersionBiz(versionSvc)
 	if err != nil {
@@ -31,7 +35,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	server, err := provideServer(config, zLogSvc, versionAPI)
+	server, err := provideServer(config, zLogSvc, catalog, versionAPI)
 	if err != nil {
 		return nil, err
 	}

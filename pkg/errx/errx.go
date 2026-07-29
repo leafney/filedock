@@ -1,11 +1,3 @@
-/**
- * @Author:      leafney
- * @GitHub:      https://github.com/leafney
- * @Project:     grape
- * @Date:        2024-11-11 22:30
- * @Description:
- */
-
 package errx
 
 import (
@@ -13,105 +5,76 @@ import (
 	"fmt"
 
 	"github.com/leafney/filedock/pkg/errc"
+	"github.com/leafney/filedock/pkg/i18n"
 )
 
-const defCode = errc.Failed
-
 type XError struct {
-	Code int
-	Msg  string
+	code   int
+	params i18n.Params
+	cause  error
+}
+
+func New(code int, params i18n.Params) error {
+	return &XError{code: normalizedCode(code), params: cloneParams(params)}
+}
+
+func Wrap(code int, cause error, params i18n.Params) error {
+	return &XError{code: normalizedCode(code), params: cloneParams(params), cause: cause}
 }
 
 func (e *XError) Error() string {
-	return fmt.Sprintf("error: code = %d desc = %s", e.Code, e.Msg)
+	if e == nil {
+		return "<nil>"
+	}
+	if e.cause != nil {
+		return fmt.Sprintf("business error: code=%d: %v", e.code, e.cause)
+	}
+	return fmt.Sprintf("business error: code=%d", e.code)
 }
 
-func ErrorCM(code int, msg string) error {
-	return &XError{
-		Code: code,
-		Msg:  msg,
+func (e *XError) Unwrap() error {
+	if e == nil {
+		return nil
 	}
+	return e.cause
 }
 
-func ErrorCF(code int, format string, a ...interface{}) error {
-	return &XError{
-		Code: code,
-		Msg:  fmt.Sprintf(format, a...),
+func As(err error) (*XError, bool) {
+	var target *XError
+	if !errors.As(err, &target) {
+		return nil, false
 	}
+	return target, true
 }
 
-func ErrorCE(code int, err error) error {
-	return &XError{
-		Code: code,
-		Msg:  err.Error(),
+func Code(err error) int {
+	if target, ok := As(err); ok {
+		return target.code
 	}
+	return errc.ErrServer
 }
 
-func ErrorE(err error) error {
-	return &XError{
-		Code: defCode,
-		Msg:  err.Error(),
+func Params(err error) i18n.Params {
+	if target, ok := As(err); ok {
+		return cloneParams(target.params)
 	}
+	return nil
 }
 
-func ErrorM(msg string) error {
-	return &XError{
-		Code: defCode,
-		Msg:  msg,
+func normalizedCode(code int) int {
+	if _, ok := errc.Lookup(code); ok {
+		return code
 	}
+	return errc.ErrServer
 }
 
-func ErrorMF(format string, a ...interface{}) error {
-	return &XError{
-		Code: defCode,
-		Msg:  fmt.Sprintf(format, a...),
+func cloneParams(params i18n.Params) i18n.Params {
+	if len(params) == 0 {
+		return nil
 	}
-}
-
-func GetError(err error) (int, string) {
-	//if s, ok := status.FromError(err); ok {
-	//	// err 为 nil 时，返回的 code 为 0
-	//	// 如果是默认的 err , code 为 Unknown，需要排除这种情况，改用自己的自定义默认错误码
-	//	if s.Code() != codes.Unknown {
-	//		// 此处返回的Message 为 `rpc error: code = Unknown desc = xxx` 中的 xxx
-	//		return int(s.Code()), errors.New(s.Message())
-	//	}
-	//}
-
-	var s *XError
-	if errors.As(err, &s) {
-		return s.Code, s.Msg
+	cloned := make(i18n.Params, len(params))
+	for key, value := range params {
+		cloned[key] = value
 	}
-
-	return defCode, err.Error()
-}
-
-func GetCode(err error) int {
-	//// 如果是能解析的错误，则解析得到 code
-	//if s, ok := status.FromError(err); ok {
-	//	// err 为 nil 时，返回的 code 为 0
-	//	// 如果是默认的 err , code 为 Unknown，需要排除这种情况，改用自己的自定义默认错误码
-	//	if s.Code() != codes.Unknown {
-	//		return int(s.Code())
-	//	}
-	//}
-
-	var s *XError
-	if errors.As(err, &s) {
-		return s.Code
-	}
-	//// 不能解析的错误，返回默认 code
-	return defCode
-}
-
-func GetMsg(err error) string {
-	//if s, ok := status.FromError(err); ok {
-	//	return s.Message()
-	//}
-
-	var s *XError
-	if errors.As(err, &s) {
-		return s.Msg
-	}
-	return err.Error()
+	return cloned
 }

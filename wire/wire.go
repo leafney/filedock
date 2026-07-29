@@ -12,6 +12,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	wire.Build(
 		provideConfig,
 		provideLogger,
+		provideI18nCatalog,
 		provideSQLiteDB,
 		provideVersionSvc,
 		provideVersionBiz,

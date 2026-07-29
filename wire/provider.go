@@ -11,8 +11,10 @@ import (
 	"github.com/leafney/filedock/internal/biz"
 	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/gormx"
+	"github.com/leafney/filedock/pkg/i18n"
 	"github.com/leafney/filedock/pkg/zlogx"
 	"github.com/libtnb/sqlite"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -30,6 +32,19 @@ func provideLogger(cfg *config.Config) *zlogx.ZLogSvc {
 		Output: cfg.Log.Output,
 		File:   cfg.Log.File,
 	}, nil)
+}
+
+func provideI18nCatalog(log *zlogx.ZLogSvc) (*i18n.Catalog, error) {
+	if log == nil {
+		return nil, fmt.Errorf("i18n logger is required")
+	}
+	return i18n.NewCatalog(i18n.WithMissingKeyHandler(func(locale i18n.Locale, key string, err error) {
+		log.Error("missing translation",
+			zap.String("locale", string(locale)),
+			zap.String("key", key),
+			zap.Error(err),
+		)
+	}))
 }
 
 func provideSQLiteDB(cfg *config.Config, log *zlogx.ZLogSvc) (*gormx.GormDBSvc, error) {
@@ -120,8 +135,8 @@ func provideVersionAPI(versionBiz *biz.VersionBiz) (*api.VersionAPI, error) {
 	return api.NewVersionAPI(versionBiz)
 }
 
-func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, versionAPI *api.VersionAPI) (*core.Server, error) {
-	return core.NewServer(cfg, log, versionAPI)
+func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI) (*core.Server, error) {
+	return core.NewServer(cfg, log, catalog, versionAPI)
 }
 
 func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *core.Server) (*core.App, error) {
