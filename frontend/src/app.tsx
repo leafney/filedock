@@ -14,7 +14,7 @@ function VersionStatus() {
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-12 text-slate-100">
       <section className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
         <p className="text-sm font-medium uppercase tracking-[0.3em] text-cyan-400">FileDock</p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight">局域网文件码头</h1>
+        <h1 className="mt-4 text-4xl font-semibold tracking-tight">码头</h1>
         <p className="mt-3 text-slate-400">浏览器即开即用的文件传输基础服务。</p>
 
         {versionQuery.isPending && (
