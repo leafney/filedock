@@ -127,7 +127,9 @@
 职责：
 
 - 服务入口
-- 读取启动参数
+- 使用 `github.com/spf13/pflag` 读取启动参数
+- 版本参数同时支持 `-v` 和 `--version`
+- 配置路径参数同时支持 `-c` 和 `--config`
 - 注入构建版本信息
 - 调用 Wire 初始化服务
 - 调用 `app.Run()`
@@ -403,25 +405,27 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 
 ## 7. 响应规范
 
-### 7.1 服务级接口
+### 7.1 统一接口响应
 
-以下接口允许直接返回简单 JSON：
+`internal/api` 中的 JSON 接口必须使用 `pkg/response` 提供的方法返回，禁止直接调用 `fiber.Ctx.JSON` 或自行拼装响应结构。`/version` 同样遵守统一响应规范。
 
-- `/version`
-
-统一返回字段：
+`/version` 的成功响应为：
 
 ```json
 {
-  "status": "ok",
-  "version": "dev",
-  "git_branch": "unknown",
-  "git_commit": "unknown",
-  "build_time": "unknown"
+  "code": 0,
+  "message": "success",
+  "data": {
+    "status": "ok",
+    "version": "dev",
+    "git_branch": "unknown",
+    "git_commit": "unknown",
+    "build_time": "unknown"
+  }
 }
 ```
 
-其中 `status` 用于判断服务健康状态，其余字段用于查看构建版本。
+其中 `data.status` 用于判断服务健康状态，其余 `data` 字段用于查看构建版本。
 
 原因：
 
@@ -430,7 +434,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 
 ### 7.2 业务接口
 
-所有 `/api/...` 接口统一使用响应包装。
+所有 `/api/...` 接口统一使用 `pkg/response` 响应包装，不得在 handler 中直接调用 `fiber.Ctx.JSON`。
 
 ### 7.3 列表接口分页规范
 

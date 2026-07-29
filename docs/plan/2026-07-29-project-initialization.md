@@ -98,7 +98,7 @@ FileDock 当前只有项目说明和需求文档，还没有可编译、可运�
 - `Makefile`：统一开发和构建命令。
 - `README.md`：项目说明、环境要求、开发启动和构建说明。
 - `go.mod`、`go.sum`：Go 模块和依赖。
-- `main.go`：进程入口、参数解析、构建信息注入、Wire 初始化和运行。
+- `main.go`：进程入口，使用 `github.com/spf13/pflag` 解析 `-v/--version` 和 `-c/--config`，完成构建信息注入、Wire 初始化和运行。
 
 配置层：
 
@@ -146,6 +146,7 @@ FileDock 当前只有项目说明和需求文档，还没有可编译、可运�
 - `frontend/src/styles.css`：Tailwind 指令和最小全局样式。
 - `frontend/src/lib/api-client.ts`：axios 最小客户端。
 - `frontend/src/services/version.ts`：版本接口请求函数。
+- `frontend/src/types/api.ts`：统一接口响应泛型。
 - `frontend/src/types/version.ts`：版本响应类型。
 - `frontend/src/vite-env.d.ts`：Vite 类型声明。
 
@@ -280,7 +281,13 @@ SQLite DSN 必须表达以下设置：
 
 只注册 `GET /version`，禁止注册 `/health`。
 
-成功响应使用 HTTP 200 和直接 JSON，不使用业务响应包装。字段固定为：
+成功响应使用 HTTP 200，并且由 `internal/api/version.api.go` 调用 `pkg/response.Success` 返回统一响应包装。禁止在 handler 中直接调用 `fiber.Ctx.JSON`。统一结构固定为：
+
+- `code`：成功时为 `0`。
+- `message`：成功时为 `success`。
+- `data`：版本数据对象。
+
+`data` 内字段固定为：
 
 - `status`：开发阶段固定字符串 `ok`。
 - `version`：构建版本，开发默认 `dev`。
@@ -559,10 +566,10 @@ Makefile 的默认目标为帮助信息。必须提供：
 必须覆盖：
 
 1. `GET /version` 返回 HTTP 200。
-2. 返回字段恰好包含 `status`、`version`、`git_branch`、`git_commit` 和 `build_time`。
-3. `status` 等于 `ok`。
+2. 顶层统一响应的 `code` 等于 `0`，`message` 等于 `success`。
+3. `data` 字段恰好包含 `status`、`version`、`git_branch`、`git_commit` 和 `build_time`，且 `status` 等于 `ok`。
 4. Wire 注入的构建信息原样进入响应。
-5. 响应不包含 `service`。
+5. 响应的 `data` 不包含 `service`。
 6. `/health` 不存在，不能返回成功。
 
 ### 静态资源测试
@@ -603,10 +610,11 @@ Makefile 的默认目标为帮助信息。必须提供：
 
 1. 使用预先创建的开发配置启动服务。
 2. 确认监听 `:8195`。
-3. 请求 `/version` 并核对五个字段。
-4. 浏览器打开根页面，确认显示 FileDock、状态和版本。
-5. 刷新一个未知前端路由，确认返回 SPA 首页。
-6. 停止服务，确认 HTTP、SQLite 和日志资源正常关闭。
+3. 分别执行 `-v` 和 `--version`，确认均输出版本信息；通过 `-c` 或 `--config` 指定开发配置启动服务。
+4. 请求 `/version`，确认顶层 `code`、`message` 以及 `data` 内五个版本字段。
+5. 浏览器打开根页面，确认显示 FileDock、状态和版本。
+6. 刷新一个未知前端路由，确认返回 SPA 首页。
+7. 停止服务，确认 HTTP、SQLite 和日志资源正常关闭。
 
 ## Out of Scope
 

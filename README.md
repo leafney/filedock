@@ -47,6 +47,15 @@ make deps
 make run
 ```
 
+命令行参数同时支持短格式和长格式：
+
+```bash
+./bin/filedock -v
+./bin/filedock --version
+./bin/filedock -c data/config.toml
+./bin/filedock --config data/config.toml
+```
+
 启动前端开发服务器：
 
 ```bash
@@ -63,7 +72,23 @@ make dev
 GET /version
 ```
 
-返回 `status`、`version`、`git_branch`、`git_commit` 和 `build_time`。开发阶段 `status` 固定为 `ok`；SQLite 连接失败会阻止服务启动。
+接口通过 `pkg/response` 返回统一结构，版本信息位于 `data`：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "status": "ok",
+    "version": "dev",
+    "git_branch": "unknown",
+    "git_commit": "unknown",
+    "build_time": "unknown"
+  }
+}
+```
+
+开发阶段 `status` 固定为 `ok`；SQLite 连接失败会阻止服务启动。
 
 ## 构建
 

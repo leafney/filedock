@@ -44,9 +44,19 @@ func TestServerVersionRoute(t *testing.T) {
 	if response.StatusCode != fiber.StatusOK {
 		t.Fatalf("/version status = %d, want 200", response.StatusCode)
 	}
-	var body map[string]string
+	var body struct {
+		Code    int               `json:"code"`
+		Message string            `json:"message"`
+		Data    map[string]string `json:"data"`
+	}
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode /version response: %v", err)
+	}
+	if body.Code != 0 {
+		t.Fatalf("/version code = %d, want 0", body.Code)
+	}
+	if body.Message != "success" {
+		t.Fatalf("/version message = %q, want success", body.Message)
 	}
 	for key, want := range map[string]string{
 		"status":     "ok",
@@ -55,12 +65,12 @@ func TestServerVersionRoute(t *testing.T) {
 		"git_commit": "test-commit",
 		"build_time": "test-time",
 	} {
-		if body[key] != want {
-			t.Fatalf("/version %s = %q, want %q", key, body[key], want)
+		if body.Data[key] != want {
+			t.Fatalf("/version data.%s = %q, want %q", key, body.Data[key], want)
 		}
 	}
-	if _, ok := body["service"]; ok {
-		t.Fatal("/version response contains forbidden service field")
+	if _, ok := body.Data["service"]; ok {
+		t.Fatal("/version response data contains forbidden service field")
 	}
 	if response.Header.Get("X-Request-ID") == "" {
 		t.Fatal("X-Request-ID header is empty")

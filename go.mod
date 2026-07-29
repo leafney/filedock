@@ -18,6 +18,7 @@ require (
 	github.com/libtnb/sqlite v1.2.1
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/mojocn/base64Captcha v1.3.8
+	github.com/spf13/pflag v1.0.10
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.54.0
 	gorm.io/gorm v1.31.2

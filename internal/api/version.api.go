@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/leafney/filedock/internal/biz"
+	"github.com/leafney/filedock/pkg/response"
 )
 
 type VersionAPI struct {
@@ -19,5 +20,5 @@ func NewVersionAPI(versionBiz *biz.VersionBiz) (*VersionAPI, error) {
 }
 
 func (a *VersionAPI) HandleVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusOK).JSON(a.biz.GetVersion())
+	return response.Success(c, a.biz.GetVersion())
 }

@@ -172,6 +172,7 @@
 
 - 使用 React 18、TypeScript、Vite、React Router、TanStack Query、Zustand、Tailwind CSS、axios、`@microsoft/fetch-event-source`、idb 和 Lucide React。
 - 最小首页使用 axios 调用 `/version`，显示 FileDock、服务状态、版本和失败提示。
+
 - 开发环境使用 Vite 代理，不开启全局 CORS。
 - 前端构建输出复制到 `static/dist`，再通过 Go embed 内嵌；Fiber 提供静态资源和 SPA 回退。
 
@@ -194,3 +195,10 @@
 
 - 默认监听端口最终确定为 `8195`。
 - 配置默认值、示例配置、Vite 代理、测试、README 和 PRD 已统一同步。
+
+### 2026-07-29：手工验证后的接口与参数优化
+
+- `main.go` 改用 `github.com/spf13/pflag` 解析参数。
+- 版本查看同时支持 `-v` 和 `--version`。
+- 配置路径同时支持 `-c` 和 `--config`。
+- `internal/api` 中的 JSON 接口统一使用 `pkg/response` 返回，不直接调用 `fiber.Ctx.JSON`；`/version` 的版本字段放在统一响应的 `data` 中。
