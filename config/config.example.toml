@@ -14,4 +14,4 @@ file = "data/logs/filedock.log"
 caller = true
 
 [sqlite]
-path = ""
+path = "data/filedock.db"
