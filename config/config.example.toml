@@ -1,0 +1,17 @@
+[app]
+name = "filedock"
+env = "dev"
+data_dir = "data"
+
+[http]
+addr = ":8095"
+
+[log]
+enable = true
+level = "info"
+output = "stdout"
+file = "data/logs/filedock.log"
+caller = true
+
+[sqlite]
+path = ""
