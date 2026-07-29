@@ -1,0 +1,13 @@
+package static
+
+import (
+	"embed"
+	"io/fs"
+)
+
+//go:embed dist
+var dist embed.FS
+
+func Dist() (fs.FS, error) {
+	return fs.Sub(dist, "dist")
+}

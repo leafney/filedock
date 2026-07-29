@@ -25,6 +25,7 @@ node_modules/
 frontend/dist/
 static/dist/*
 !static/dist/.placeholder
+!static/dist/index.html
 
 # Local environment and tools
 .env

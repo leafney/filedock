@@ -6,6 +6,10 @@ import (
 	"strings"
 
 	"github.com/leafney/filedock/config"
+	"github.com/leafney/filedock/core"
+	"github.com/leafney/filedock/internal/api"
+	"github.com/leafney/filedock/internal/biz"
+	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/gormx"
 	"github.com/leafney/filedock/pkg/zlogx"
 	"github.com/libtnb/sqlite"
@@ -97,4 +101,29 @@ func validateSQLitePragmas(db *gorm.DB) error {
 		return fmt.Errorf("sqlite busy timeout = %d, want at least %d", busyTimeout, sqliteBusyTimeout)
 	}
 	return nil
+}
+
+func provideVersionSvc(build core.BuildInfo) *service.VersionSvc {
+	return service.NewVersionSvc(service.BuildInfo{
+		Version:   build.Version,
+		Branch:    build.Branch,
+		Commit:    build.Commit,
+		BuildTime: build.BuildTime,
+	})
+}
+
+func provideVersionBiz(version *service.VersionSvc) (*biz.VersionBiz, error) {
+	return biz.NewVersionBiz(version)
+}
+
+func provideVersionAPI(versionBiz *biz.VersionBiz) (*api.VersionAPI, error) {
+	return api.NewVersionAPI(versionBiz)
+}
+
+func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, versionAPI *api.VersionAPI) (*core.Server, error) {
+	return core.NewServer(cfg, log, versionAPI)
+}
+
+func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *core.Server) (*core.App, error) {
+	return core.NewApp(cfg, log, db, server)
 }
