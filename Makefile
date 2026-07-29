@@ -57,6 +57,7 @@ web:
 	@cd $(FRONTEND_DIR) && bun run build
 	@rm -rf $(STATIC_DIST_DIR)
 	@cp -R $(FRONTEND_DIR)/dist $(STATIC_DIST_DIR)
+	@touch $(STATIC_DIST_DIR)/.placeholder
 
 run:
 	@go run . -config $(CONFIG)
