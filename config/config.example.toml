@@ -4,7 +4,7 @@ env = "dev"
 data_dir = "data"
 
 [http]
-addr = ":8095"
+addr = ":8195"
 
 [log]
 enable = true

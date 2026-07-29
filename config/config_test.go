@@ -16,8 +16,8 @@ func TestLoadDefaultsWhenConfigMissing(t *testing.T) {
 	if cfg.App.Name != "filedock" {
 		t.Fatalf("App.Name = %q, want filedock", cfg.App.Name)
 	}
-	if cfg.HTTP.Addr != ":8095" {
-		t.Fatalf("HTTP.Addr = %q, want :8095", cfg.HTTP.Addr)
+	if cfg.HTTP.Addr != ":8195" {
+		t.Fatalf("HTTP.Addr = %q, want :8195", cfg.HTTP.Addr)
 	}
 	if cfg.SQLite.Path != filepath.Join("data", "filedock.db") {
 		t.Fatalf("SQLite.Path = %q, want data/filedock.db", cfg.SQLite.Path)

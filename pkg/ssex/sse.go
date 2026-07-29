@@ -86,4 +86,3 @@ func WriteEvent(w *bufio.Writer, event *Event) error {
 	}
 	return w.Flush()
 }
-

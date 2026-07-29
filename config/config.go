@@ -13,7 +13,7 @@ import (
 const (
 	DefaultConfigPath = "data/config.toml"
 	DefaultDataDir    = "data"
-	DefaultHTTPAddr   = ":8095"
+	DefaultHTTPAddr   = ":8195"
 )
 
 type Config struct {

@@ -68,7 +68,7 @@
 
 **推荐答案：** 最初建议 `:8080`，使局域网设备可直接访问。
 
-**用户答案：** 改用 `:8095`。
+**用户答案：** 改用 `:8195`。
 
 ### Q11：服务级接口保留哪些内容？
 
@@ -138,7 +138,7 @@
 
 - 当前只初始化可运行基础架构，不实现会话、房间、成员、上传、下载、聊天、SSE 等业务。
 - 架构冲突时，以架构规范为准；业务逻辑以产品文档为准；参考项目提供实现模式。
-- 项目统一命名为 FileDock，Go module 为 `github.com/leafney/filedock`，默认 HTTP 地址为 `:8095`。
+- 项目统一命名为 FileDock，Go module 为 `github.com/leafney/filedock`，默认 HTTP 地址为 `:8195`。
 
 ### 后端架构
 
@@ -189,3 +189,8 @@
 - 用户明确要求直接使用迁入的 `pkg/gormx` 构造并管理 GORM 数据库。
 - 不创建 `internal/service/sqlite.svc.go`，不增加 `SQLiteDBSvc` 包装层。
 - SQLite DSN、连接参数和 PRAGMA 验证由 Wire provider 配置，应用直接持有并关闭 `*gormx.GormDBSvc`。
+
+### 2026-07-29：修正默认 HTTP 端口
+
+- 默认监听端口最终确定为 `8195`。
+- 配置默认值、示例配置、Vite 代理、测试、README 和 PRD 已统一同步。
