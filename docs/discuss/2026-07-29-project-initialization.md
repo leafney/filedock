@@ -202,3 +202,4 @@
 - 版本查看同时支持 `-v` 和 `--version`。
 - 配置路径同时支持 `-c` 和 `--config`。
 - `internal/api` 中的 JSON 接口统一使用 `pkg/response` 返回，不直接调用 `fiber.Ctx.JSON`；`/version` 的版本字段放在统一响应的 `data` 中。
+- 统一接口响应的 `code` 为 `200` 时表示成功，`pkg/errc.Success` 固定为 `200`。

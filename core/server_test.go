@@ -52,8 +52,8 @@ func TestServerVersionRoute(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode /version response: %v", err)
 	}
-	if body.Code != 0 {
-		t.Fatalf("/version code = %d, want 0", body.Code)
+	if body.Code != 200 {
+		t.Fatalf("/version code = %d, want 200", body.Code)
 	}
 	if body.Message != "success" {
 		t.Fatalf("/version message = %q, want success", body.Message)

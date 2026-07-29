@@ -76,7 +76,7 @@ GET /version
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "success",
   "data": {
     "status": "ok",

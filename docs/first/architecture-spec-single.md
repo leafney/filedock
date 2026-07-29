@@ -413,7 +413,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "success",
   "data": {
     "status": "ok",
@@ -481,7 +481,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, userAPI *api.Use
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "message": "success",
   "data": {}
 }

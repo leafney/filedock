@@ -537,7 +537,7 @@ CREATE TABLE upload_chunks (
 
 ```json
 // 成功
-{ "code": 0, "data": { ... } }
+{ "code": 200, "data": { ... } }
 
 // 失败
 {
@@ -573,7 +573,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "userId": "01JXYZ...",
     "displayName": "Alice",
@@ -606,7 +606,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "roomId": "01JROOM...",
     "roomCode": "1234",
@@ -631,7 +631,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "roomId": "01JROOM...",
     "roomCode": "1234",
@@ -651,7 +651,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "roomId": "01JROOM...",
     "roomCode": "1234",
@@ -680,7 +680,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "expiresAt": 1785343200
   }
@@ -702,7 +702,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "members": [
       {
@@ -736,7 +736,7 @@ CREATE TABLE upload_chunks (
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "fileId": "01JFILE...",
     "uploadUrl": "/api/v1/uploads/01JFILE..."
@@ -758,7 +758,7 @@ Content-Length: <文件大小>
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "fileId": "01JFILE...",
     "hashBlake3": "abc123...",
@@ -773,7 +773,7 @@ Content-Length: <文件大小>
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "downloadUrl": "/api/v1/files/01JFILE.../download"
   }
@@ -814,7 +814,7 @@ Range: bytes=0-1048575
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "items": [
       {
@@ -858,7 +858,7 @@ Range: bytes=0-1048575
 **响应：**
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "messageId": "01JMSG...",
     "sequence": 43,
