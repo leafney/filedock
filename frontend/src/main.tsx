@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ConfigProvider } from "antd";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 
@@ -13,7 +14,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
+        <ConfigProvider theme={{ token: { colorPrimary: "#0f766e", borderRadius: 10, colorLink: "#0f766e" } }}>
+          <App />
+        </ConfigProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
