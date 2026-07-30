@@ -185,7 +185,10 @@ func (s *LifecycleSvc) expireJoinRequests(now time.Time) error {
 		if err := s.db.Model(&model.JoinRequest{}).Where("id = ? AND status = ?", request.ID, model.JoinRequestPending).Updates(map[string]interface{}{"status": model.JoinRequestExpired, "processed_at": now.Unix(), "next_allowed_at": next}).Error; err != nil {
 			return err
 		}
-		s.hub.PublishUsers([]string{request.UserID}, "room.join_request_changed", map[string]interface{}{"roomId": request.RoomID, "requestId": request.ID, "status": model.JoinRequestExpired})
+		var room model.Room
+		if err := s.db.Select("code, owner_user_id").Where("id = ?", request.RoomID).First(&room).Error; err == nil {
+			s.hub.PublishUsers([]string{request.UserID, room.OwnerUserID}, "room.join_request_changed", map[string]interface{}{"roomCode": room.Code, "requestId": request.ID, "status": model.JoinRequestExpired})
+		}
 	}
 	return nil
 }

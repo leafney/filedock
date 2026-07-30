@@ -121,6 +121,10 @@ func (p *PresenceSvc) broadcast(userID, status string) {
 		for _, roomMember := range roomMembers {
 			userIDs = append(userIDs, roomMember.UserID)
 		}
-		p.hub.PublishUsers(userIDs, "room.member_presence_changed", map[string]interface{}{"roomId": member.RoomID, "userId": userID, "status": status})
+		var room model.Room
+		if err := p.db.Select("code").Where("id = ?", member.RoomID).First(&room).Error; err != nil {
+			continue
+		}
+		p.hub.PublishUsers(userIDs, "room.member_presence_changed", map[string]interface{}{"roomCode": room.Code, "userId": userID, "status": status})
 	}
 }
