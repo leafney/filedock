@@ -115,6 +115,46 @@ func TestLifecycleCleanupRetriesAtMostOnce(t *testing.T) {
 	}
 }
 
+func TestLifecycleRecoveryDoesNotExceedCleanupAttempts(t *testing.T) {
+	_, db, _ := newSessionTestService(t)
+	lifecycle, err := NewLifecycleSvc(db, NewStreamHub())
+	if err != nil {
+		t.Fatalf("NewLifecycleSvc() error = %v", err)
+	}
+	base := time.Unix(2_500_000, 0)
+	firstID, err := ulidx.New()
+	if err != nil {
+		t.Fatalf("generate first job id: %v", err)
+	}
+	secondID, err := ulidx.New()
+	if err != nil {
+		t.Fatalf("generate second job id: %v", err)
+	}
+	if err := db.Create(&model.CleanupJob{ID: firstID, RoomID: "01ROOMRECOVER0001", Status: model.CleanupRunning, Phase: "running", AttemptCount: 1, ScheduledAt: base.Unix()}).Error; err != nil {
+		t.Fatalf("create first running job: %v", err)
+	}
+	if err := db.Create(&model.CleanupJob{ID: secondID, RoomID: "01ROOMRECOVER0002", Status: model.CleanupRunning, Phase: "running", AttemptCount: 2, ScheduledAt: base.Unix()}).Error; err != nil {
+		t.Fatalf("create second running job: %v", err)
+	}
+	lifecycle.now = func() time.Time { return base }
+	if err := lifecycle.recoverCleanupJobs(); err != nil {
+		t.Fatalf("recover cleanup jobs: %v", err)
+	}
+	var first, second model.CleanupJob
+	if err := db.First(&first, "id = ?", firstID).Error; err != nil {
+		t.Fatalf("load first job: %v", err)
+	}
+	if err := db.First(&second, "id = ?", secondID).Error; err != nil {
+		t.Fatalf("load second job: %v", err)
+	}
+	if first.Status != model.CleanupRetryWaiting || first.AttemptCount != 1 {
+		t.Fatalf("first recovered job = %+v", first)
+	}
+	if second.Status != model.CleanupFailed || second.AttemptCount != 2 {
+		t.Fatalf("second recovered job = %+v", second)
+	}
+}
+
 func TestLifecycleReleasesRoomAfterCooldownAndCleanup(t *testing.T) {
 	_, db, _ := newSessionTestService(t)
 	lifecycle, err := NewLifecycleSvc(db, NewStreamHub())

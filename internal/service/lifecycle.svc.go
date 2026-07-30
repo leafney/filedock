@@ -159,9 +159,20 @@ func (s *LifecycleSvc) expireSessions(now time.Time) error {
 // recoverCleanupJobs makes tasks interrupted during a previous process run
 // executable again without giving them an extra attempt.
 func (s *LifecycleSvc) recoverCleanupJobs() error {
-	return s.db.Model(&model.CleanupJob{}).
-		Where("status = ?", model.CleanupRunning).
-		Updates(map[string]interface{}{"status": model.CleanupRetryWaiting, "phase": "recovered", "scheduled_at": s.now().Unix()}).Error
+	var jobs []model.CleanupJob
+	if err := s.db.Where("status = ?", model.CleanupRunning).Find(&jobs).Error; err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		updates := map[string]interface{}{"status": model.CleanupRetryWaiting, "phase": "recovered", "scheduled_at": s.now().Unix()}
+		if job.AttemptCount >= 2 {
+			updates = map[string]interface{}{"status": model.CleanupFailed, "phase": "failed", "finished_at": s.now().Unix(), "error_summary": "cleanup interrupted after retry"}
+		}
+		if err := s.db.Model(&model.CleanupJob{}).Where("id = ? AND status = ?", job.ID, model.CleanupRunning).Updates(updates).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *LifecycleSvc) expireJoinRequests(now time.Time) error {
