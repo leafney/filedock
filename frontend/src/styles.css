@@ -8,6 +8,13 @@
   background: #020617;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --radar-node-border: rgb(255 255 255 / 84%);
+  --radar-node-shadow: 0 8px 20px rgb(15 23 42 / 13%);
+  --radar-label-background: rgb(255 255 255 / 88%);
+  --radar-label-color: #475569;
+  --radar-label-shadow: 0 2px 8px rgb(15 23 42 / 7%);
+  --radar-wave-color: rgb(13 148 136 / 18%);
+  --radar-center-shadow: 0 14px 35px rgb(15 118 110 / 24%);
 }
 
 * {
@@ -77,7 +84,7 @@ body {
   position: absolute;
   width: 52%;
   aspect-ratio: 1;
-  border: 1px solid rgb(13 148 136 / 18%);
+  border: 1px solid var(--radar-wave-color);
   border-radius: 50%;
   animation: radar-wave 5s ease-out infinite;
 }
@@ -98,7 +105,7 @@ body {
 }
 
 .radar-center .ant-avatar {
-  box-shadow: 0 14px 35px rgb(15 118 110 / 24%);
+  box-shadow: var(--radar-center-shadow);
 }
 
 .radar-center-name {
@@ -114,14 +121,13 @@ body {
 .radar-node {
   z-index: 1;
   display: flex;
-  min-width: 4.5rem;
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
-  color: #475569;
+  color: var(--radar-label-color);
   pointer-events: none;
-  transform: translate(-50%, -50%);
   transition: opacity 350ms ease, transform 350ms ease;
+  transform-origin: center;
 }
 
 .radar-node-entering { animation: radar-node-in 400ms ease both; }
@@ -129,24 +135,25 @@ body {
 
 .radar-node-avatar {
   display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
+  flex: 0 0 auto;
   place-items: center;
-  border: 3px solid rgb(255 255 255 / 82%);
+  border-color: var(--radar-node-border);
+  border-style: solid;
   border-radius: 50%;
   color: white;
-  font-size: 0.68rem;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgb(15 23 42 / 11%);
+  line-height: 1;
+  box-shadow: var(--radar-node-shadow);
 }
 
 .radar-node-label {
   border-radius: 999px;
-  background: rgb(255 255 255 / 84%);
-  box-shadow: 0 2px 8px rgb(15 23 42 / 7%);
+  background: var(--radar-label-background);
+  box-shadow: var(--radar-label-shadow);
   font-size: 0.7rem;
   letter-spacing: 0.07em;
   padding: 0.2rem 0.45rem;
+  white-space: nowrap;
 }
 
 .radar-canvas-reduced .radar-waves span { animation: none; }
@@ -159,13 +166,13 @@ body {
 }
 
 @keyframes radar-node-in {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.78); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  from { opacity: 0; transform: scale(0.78); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes radar-node-out {
-  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  to { opacity: 0; transform: translate(-50%, -50%) scale(0.82); }
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.82); }
 }
 
 @media (max-width: 768px) {
