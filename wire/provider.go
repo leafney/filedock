@@ -9,6 +9,7 @@ import (
 	"github.com/leafney/filedock/core"
 	"github.com/leafney/filedock/internal/api"
 	"github.com/leafney/filedock/internal/biz"
+	"github.com/leafney/filedock/internal/dal"
 	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/gormx"
 	"github.com/leafney/filedock/pkg/i18n"
@@ -72,6 +73,10 @@ func provideSQLiteDB(cfg *config.Config, log *zlogx.ZLogSvc) (*gormx.GormDBSvc, 
 	}, log)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	if err := dal.AutoMigrate(db.DB); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("auto migrate database: %w", err)
 	}
 	return db, nil
 }
