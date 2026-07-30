@@ -5,6 +5,7 @@ import { currentLanguage } from "../i18n";
 export const apiClient = axios.create({
   baseURL: "/",
   timeout: 10_000,
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config) => {
