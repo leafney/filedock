@@ -56,8 +56,8 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	if limiter == nil {
 		return nil, fmt.Errorf("rate limiter is required")
 	}
-	if (cfg.HTTP.CertFile == "") != (cfg.HTTP.KeyFile == "") {
-		return nil, fmt.Errorf("tls certificate and key must be configured together")
+	if err := validateTLSConfig(cfg.HTTP); err != nil {
+		return nil, err
 	}
 
 	requestLogger, err := NewRequestLogger(log)
@@ -76,6 +76,13 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 		return nil, fmt.Errorf("register static resources: %w", err)
 	}
 	return &Server{cfg: cfg, app: app}, nil
+}
+
+func validateTLSConfig(cfg config.HTTPConfig) error {
+	if (strings.TrimSpace(cfg.CertFile) == "") != (strings.TrimSpace(cfg.KeyFile) == "") {
+		return fmt.Errorf("tls certificate and key must be configured together")
+	}
+	return nil
 }
 
 func (s *Server) Run() error {

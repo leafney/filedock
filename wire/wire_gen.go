@@ -22,6 +22,11 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
+	streamHub := provideStreamHub()
+	lifecycleSvc, err := provideLifecycleSvc(gormDBSvc, streamHub)
+	if err != nil {
+		return nil, err
+	}
 	catalog, err := provideI18nCatalog(zLogSvc)
 	if err != nil {
 		return nil, err
@@ -51,7 +56,6 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	streamHub := provideStreamHub()
 	presenceSvc, err := providePresenceSvc(gormDBSvc, streamHub)
 	if err != nil {
 		return nil, err
@@ -77,7 +81,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	app, err := provideApp(config, zLogSvc, gormDBSvc, server)
+	app, err := provideApp(config, zLogSvc, gormDBSvc, lifecycleSvc, server)
 	if err != nil {
 		return nil, err
 	}

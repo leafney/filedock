@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -23,6 +24,13 @@ import (
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
+	cfg := config.Default()
+	cfg.App.DataDir = t.TempDir()
+	return newTestServerWithConfig(t, cfg)
+}
+
+func newTestServerWithConfig(t *testing.T, cfg *config.Config) *Server {
+	t.Helper()
 	versionSvc := service.NewVersionSvc(service.BuildInfo{
 		Version:   "test-version",
 		Branch:    "test-branch",
@@ -42,7 +50,8 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("NewCatalog() error = %v", err)
 	}
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	dsn := "file:core_" + strings.ReplaceAll(t.Name(), "/", "_") + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open test sqlite: %v", err)
 	}
@@ -53,8 +62,6 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("NewNicknameSvc() error = %v", err)
 	}
-	cfg := config.Default()
-	cfg.App.DataDir = t.TempDir()
 	sessionSvc, err := service.NewSessionSvc(db, cfg.App.DataDir, nicknameSvc)
 	if err != nil {
 		t.Fatalf("NewSessionSvc() error = %v", err)
@@ -165,6 +172,35 @@ func TestServerVersionRoute(t *testing.T) {
 	defer healthResponse.Body.Close()
 	if healthResponse.StatusCode == fiber.StatusOK {
 		t.Fatal("/health unexpectedly returned 200")
+	}
+}
+
+func TestServerTLSConfigurationAndSecureCookie(t *testing.T) {
+	if err := validateTLSConfig(config.HTTPConfig{CertFile: "cert.pem"}); err == nil {
+		t.Fatal("partial TLS configuration unexpectedly accepted")
+	}
+	if err := validateTLSConfig(config.HTTPConfig{KeyFile: "key.pem"}); err == nil {
+		t.Fatal("partial TLS key configuration unexpectedly accepted")
+	}
+
+	cfg := config.Default()
+	cfg.App.DataDir = t.TempDir()
+	cfg.HTTP.CertFile = "cert.pem"
+	cfg.HTTP.KeyFile = "key.pem"
+	server := newTestServerWithConfig(t, cfg)
+	request := httptest.NewRequest(fiber.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"displayName":"TLS用户"}`))
+	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	response, err := server.App().Test(request)
+	if err != nil {
+		t.Fatalf("create session request error = %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("create session status = %d, want 200", response.StatusCode)
+	}
+	setCookie := response.Header.Get(fiber.HeaderSetCookie)
+	if !strings.Contains(strings.ToLower(setCookie), "secure") {
+		t.Fatalf("HTTPS session cookie missing Secure attribute: %q", setCookie)
 	}
 }
 

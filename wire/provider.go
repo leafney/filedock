@@ -195,6 +195,13 @@ func provideStreamAPI(hub *service.StreamHub, presence *service.PresenceSvc) (*a
 	return api.NewStreamAPI(hub, presence)
 }
 
+func provideLifecycleSvc(db *gormx.GormDBSvc, hub *service.StreamHub) (*service.LifecycleSvc, error) {
+	if db == nil {
+		return nil, fmt.Errorf("lifecycle database is required")
+	}
+	return service.NewLifecycleSvc(db.DB, hub)
+}
+
 func provideRateLimiter() *service.RateLimiter {
 	return service.NewRateLimiter()
 }
@@ -203,6 +210,6 @@ func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog
 	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, streamAPI, limiter)
 }
 
-func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *core.Server) (*core.App, error) {
-	return core.NewApp(cfg, log, db, server)
+func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, lifecycle *service.LifecycleSvc, server *core.Server) (*core.App, error) {
+	return core.NewApp(cfg, log, db, lifecycle, server)
 }

@@ -10,21 +10,23 @@ import (
 	"syscall"
 
 	"github.com/leafney/filedock/config"
+	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/gormx"
 	"github.com/leafney/filedock/pkg/zlogx"
 )
 
 type App struct {
-	cfg    *config.Config
-	log    *zlogx.ZLogSvc
-	db     *gormx.GormDBSvc
-	server *Server
+	cfg       *config.Config
+	log       *zlogx.ZLogSvc
+	db        *gormx.GormDBSvc
+	lifecycle *service.LifecycleSvc
+	server    *Server
 
 	closeOnce sync.Once
 	closeErr  error
 }
 
-func NewApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *Server) (*App, error) {
+func NewApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, lifecycle *service.LifecycleSvc, server *Server) (*App, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("app config is required")
 	}
@@ -34,10 +36,13 @@ func NewApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server 
 	if db == nil {
 		return nil, fmt.Errorf("app database is required")
 	}
+	if lifecycle == nil {
+		return nil, fmt.Errorf("app lifecycle service is required")
+	}
 	if server == nil {
 		return nil, fmt.Errorf("app server is required")
 	}
-	return &App{cfg: cfg, log: log, db: db, server: server}, nil
+	return &App{cfg: cfg, log: log, db: db, lifecycle: lifecycle, server: server}, nil
 }
 
 func (a *App) Run() error {
@@ -54,6 +59,9 @@ func (a *App) RunContext(ctx context.Context) (err error) {
 		return fmt.Errorf("app context is required")
 	}
 	a.log.Info("filedock starting")
+	if err := a.lifecycle.Start(ctx); err != nil {
+		return fmt.Errorf("start lifecycle service: %w", err)
+	}
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- a.server.Run()
@@ -81,6 +89,9 @@ func (a *App) Close() error {
 	}
 	a.closeOnce.Do(func() {
 		var errs []error
+		if err := a.lifecycle.Stop(); err != nil {
+			errs = append(errs, fmt.Errorf("stop lifecycle service: %w", err))
+		}
 		if err := a.server.Shutdown(); err != nil {
 			errs = append(errs, fmt.Errorf("shutdown http server: %w", err))
 		}
