@@ -10,6 +10,7 @@ export function reduceState(state, action) {
         ui: {
           ...state.ui,
           currentUserId: action.value,
+          selectedChatUserId: state.ui.selectedChatUserId === action.value ? state.room.ownerId : state.ui.selectedChatUserId,
           selectedFileIds: [],
           selectedRecipientIds: [],
         },
@@ -126,6 +127,10 @@ export function reduceState(state, action) {
       return { ...state, ui: { ...state.ui, selectedChatUserId: action.value, mobilePage: action.mobile ? "chat" : state.ui.mobilePage, drawer: null } };
     case "ui/set-mobile-page":
       return { ...state, ui: { ...state.ui, mobilePage: action.value } };
+    case "ui/toggle-controller":
+      return { ...state, ui: { ...state.ui, controllerOpen: !state.ui.controllerOpen, controllerHidden: false } };
+    case "ui/hide-controller":
+      return { ...state, ui: { ...state.ui, controllerOpen: false, controllerHidden: true } };
     case "ui/open-drawer":
       return { ...state, ui: { ...state.ui, drawer: action.value } };
     case "ui/close-drawer":
@@ -156,6 +161,10 @@ export function reduceState(state, action) {
     }
     case "chat/recall":
       return { ...state, messages: state.messages.map((message) => message.id === action.messageId && message.fromId === state.ui.currentUserId ? { ...message, status: "recalled", text: "" } : message) };
+    case "chat/inject-message":
+      return { ...state, messages: [...state.messages, action.message] };
+    case "chat/mark-outgoing-read":
+      return { ...state, messages: state.messages.map((message) => message.fromId === state.ui.currentUserId && message.toId === state.ui.selectedChatUserId && message.status !== "recalled" ? { ...message, status: "read" } : message) };
     case "recycle/set-count-toward-capacity":
       return {
         ...state,

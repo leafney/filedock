@@ -7,6 +7,7 @@ export function renderModel(state) {
   if (!user) return;
   document.documentElement.lang = state.ui.language;
   document.body.classList.toggle("is-mobile-chat", state.ui.mobilePage === "chat");
+  renderStaticI18n(state);
   renderCapacity(state);
   renderMembers(state, user);
   renderTabs(state, user);
@@ -16,14 +17,23 @@ export function renderModel(state) {
   renderTasks(state);
   renderAuxiliary(state, user);
   renderScenario(state);
+  renderController(state, user);
+}
+
+function renderStaticI18n(state) {
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = translate(state.ui.language, node.dataset.i18n);
+  });
+  const memberCount = document.querySelector(".member-summary-value");
+  if (memberCount) memberCount.textContent = state.ui.language === "en" ? String(state.room.memberCount) : `${state.room.memberCount} 人`;
 }
 
 function renderMembers(state, currentUser) {
   const panel = document.querySelector(".member-panel");
   if (!panel) return;
   const peers = state.users.filter((user) => user.id !== currentUser.id);
-  panel.innerHTML = `<div class="panel-heading member-panel__heading"><div><p class="eyebrow">会话</p><h1 id="member-panel-title">房间成员</h1></div><span class="count-badge">${state.room.memberCount}</span></div>
-    <label class="search-box">${searchIcon()}<span class="visually-hidden">搜索成员 / Search members</span><input type="search" placeholder="搜索成员" /></label>
+  panel.innerHTML = `<div class="panel-heading member-panel__heading"><div><p class="eyebrow">${t(state, "conversations")}</p><h1 id="member-panel-title">${t(state, "roomMembers")}</h1></div><span class="count-badge">${state.room.memberCount}</span></div>
+    <label class="search-box">${searchIcon()}<span class="visually-hidden">${t(state, "searchMembers")}</span><input type="search" placeholder="${t(state, "searchMembers")}" /></label>
     <div class="member-list" role="list" aria-label="成员列表 / Member list">${renderMemberItems(peers, state)}</div>`;
 }
 
@@ -34,7 +44,7 @@ function renderMemberItems(peers, state) {
     const unread = conversation.filter((message) => message.fromId === member.id && message.toId === state.ui.currentUserId && message.status !== "read" && message.status !== "recalled").length;
     return `<div role="listitem"><button class="member-item${member.id === state.ui.selectedChatUserId ? " is-active" : ""}" data-action="select-member" data-user-id="${member.id}" type="button">
       <span class="avatar avatar--${member.color}">${escapeHTML(member.avatar)}</span><span class="member-item__body"><span><strong>${escapeHTML(member.displayName)}</strong><time>${last ? formatTimestamp(last.createdAt, state.ui.language).split(" ").at(-1) : ""}</time></span><span>${escapeHTML(messageSummary(last, state))}</span></span>
-      ${unread ? `<span class="unread-badge">${unread}</span>` : ""}<span class="presence presence--${member.presence}" title="${presenceLabel(member.presence)}"></span></button></div>`;
+      ${unread ? `<span class="unread-badge">${unread}</span>` : ""}<span class="presence presence--${member.presence}" title="${presenceLabel(member.presence, state.ui.language)}"></span></button></div>`;
   }).join("");
 }
 
@@ -43,26 +53,26 @@ function renderChat(state, currentUser) {
   if (!panel) return;
   const peer = state.users.find((user) => user.id === state.ui.selectedChatUserId && user.id !== currentUser.id);
   if (!peer) {
-    panel.innerHTML = `<div class="content-placeholder"><h3>选择一名成员</h3><p>这里只支持房间内一对一聊天，不提供群聊。</p></div>`;
+    panel.innerHTML = `<div class="content-placeholder"><h3>${t(state, "selectMember")}</h3><p>${t(state, "noGroupChat")}</p></div>`;
     return;
   }
   const messages = state.ui.scenario === "empty-chat" ? [] : state.messages.filter((message) => isConversation(message, currentUser.id, peer.id));
   const lastOutgoingId = [...messages].reverse().find((message) => message.fromId === currentUser.id && message.status !== "recalled")?.id;
-  panel.innerHTML = `<div class="chat-header"><button class="icon-button mobile-chat-back" data-action="close-mobile-chat" type="button" aria-label="返回文件">←</button><span class="avatar avatar--${peer.color}">${escapeHTML(peer.avatar)}</span><div><h2 id="chat-panel-title">${escapeHTML(peer.displayName)}</h2><p><span class="presence presence--${peer.presence}"></span>${presenceLabel(peer.presence)} · 一对一聊天</p></div><button class="icon-button" data-action="open-members" type="button" aria-label="切换成员">•••</button></div>
-    <div class="chat-content" aria-label="聊天消息 / Chat messages">${messages.length ? `<div class="chat-message-list">${messages.map((message) => renderMessage(message, state, currentUser, lastOutgoingId)).join("")}</div>` : `<div class="chat-empty"><strong>暂无消息</strong><span>发送文字或引用共享文件开始对话。</span></div>`}</div>
-    <div class="chat-composer" aria-label="消息输入 / Message composer"><div class="chat-composer__tools"><button class="icon-button" data-action="append-emoji" type="button" aria-label="添加表情"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></button><button class="icon-button" data-action="chat-direct-file" type="button" aria-label="发送私密文件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8 8a6 6 0 0 1-8-8l9-9a4 4 0 0 1 6 6l-9 9a2 2 0 0 1-3-3l8-8"/></svg></button><button class="icon-button" data-action="open-shared-reference" type="button" aria-label="引用共享文件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14 21 3M15 3h6v6M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></button></div><textarea data-input="chat-draft" aria-label="输入消息 / Enter message" placeholder="输入消息，Enter 发送" maxlength="500">${escapeHTML(state.ui.chatDraft)}</textarea><button class="button button--primary" data-action="send-chat" type="button" ${state.ui.chatDraft.trim() ? "" : "disabled"}>发送</button></div>`;
+  panel.innerHTML = `<div class="chat-header"><button class="icon-button mobile-chat-back" data-action="close-mobile-chat" type="button" aria-label="${t(state, "backFiles")}">←</button><span class="avatar avatar--${peer.color}">${escapeHTML(peer.avatar)}</span><div><h2 id="chat-panel-title">${escapeHTML(peer.displayName)}</h2><p><span class="presence presence--${peer.presence}"></span>${presenceLabel(peer.presence, state.ui.language)} · ${t(state, "oneToOne")}</p></div><button class="icon-button" data-action="open-members" type="button" aria-label="${t(state, "switchMember")}">•••</button></div>
+    <div class="chat-content" aria-label="${t(state, "oneToOne")}">${messages.length ? `<div class="chat-message-list">${messages.map((message) => renderMessage(message, state, currentUser, lastOutgoingId)).join("")}</div>` : `<div class="chat-empty"><strong>${t(state, "noChatTitle")}</strong><span>${t(state, "noChatText")}</span></div>`}</div>
+    <div class="chat-composer" aria-label="${t(state, "typeMessage")}"><div class="chat-composer__tools"><button class="icon-button" data-action="append-emoji" type="button" aria-label="${t(state, "addEmoji")}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></button><button class="icon-button" data-action="chat-direct-file" type="button" aria-label="${t(state, "sendPrivateFile")}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8 8a6 6 0 0 1-8-8l9-9a4 4 0 0 1 6 6l-9 9a2 2 0 0 1-3-3l8-8"/></svg></button><button class="icon-button" data-action="open-shared-reference" type="button" aria-label="${t(state, "referenceShared")}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14 21 3M15 3h6v6M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></button></div><textarea data-input="chat-draft" aria-label="${t(state, "typeMessage")}" placeholder="${t(state, "typeMessage")}" maxlength="500">${escapeHTML(state.ui.chatDraft)}</textarea><button class="button button--primary" data-action="send-chat" type="button" ${state.ui.chatDraft.trim() ? "" : "disabled"}>${t(state, "send")}</button></div>`;
 }
 
 function renderMessage(message, state, currentUser, lastOutgoingId) {
   const outgoing = message.fromId === currentUser.id;
-  if (message.status === "recalled") return `<article class="chat-message chat-message--system">${outgoing ? "你" : "对方"}撤回了一条消息</article>`;
+  if (message.status === "recalled") return `<article class="chat-message chat-message--system">${t(state, outgoing ? "recalledSelf" : "recalledPeer")}</article>`;
   const file = message.fileId ? state.files.find((item) => item.id === message.fileId) : null;
   let content = escapeHTML(message.text ?? "");
-  if (message.type === "image") content = `<div class="message-image" role="img" aria-label="${escapeHTML(message.text ?? "聊天图片")}"><span>图片预览</span></div>`;
-  if (message.type === "shared_reference" && file) content = renderMessageFile(file, "共享文件引用", "查看共享文件", false);
-  if (message.type === "direct_file" && file) content = renderMessageFile(file, `私密文件#${file.alias}`, file.receiverStates?.[currentUser.id] === "pending" ? "接受并下载" : "下载", true);
-  const receipt = outgoing && message.id === lastOutgoingId ? `<span class="read-receipt">${message.status === "read" ? "已读" : message.status === "failed" ? "发送失败" : message.status === "sending" ? "发送中" : "已送达"}</span>` : "";
-  return `<article class="chat-message ${outgoing ? "chat-message--outgoing" : "chat-message--incoming"}" data-message-id="${message.id}"><div class="message-bubble ${outgoing ? "message-bubble--outgoing" : ""}">${content}</div><time>${formatTimestamp(message.createdAt, state.ui.language).split(" ").at(-1)}</time>${outgoing ? `<button class="recall-button" data-action="recall-message" data-message-id="${message.id}" type="button">撤回</button>` : ""}${receipt}</article>`;
+  if (message.type === "image") content = `<div class="message-image" role="img" aria-label="${escapeHTML(message.text ?? t(state, "imagePreview"))}"><span>${t(state, "imagePreview")}</span></div>`;
+  if (message.type === "shared_reference" && file) content = renderMessageFile(file, t(state, "sharedReference"), t(state, "viewShared"), false);
+  if (message.type === "direct_file" && file) content = renderMessageFile(file, t(state, "privateFile", { alias: file.alias }), file.receiverStates?.[currentUser.id] === "pending" ? t(state, "acceptDownload") : t(state, "download"), true);
+  const receipt = outgoing && message.id === lastOutgoingId ? `<span class="read-receipt">${t(state, message.status === "read" ? "read" : message.status === "failed" ? "sendFailed" : message.status === "sending" ? "sending" : "delivered")}</span>` : "";
+  return `<article class="chat-message ${outgoing ? "chat-message--outgoing" : "chat-message--incoming"}" data-message-id="${message.id}"><div class="message-bubble ${outgoing ? "message-bubble--outgoing" : ""}">${content}</div><time>${formatTimestamp(message.createdAt, state.ui.language).split(" ").at(-1)}</time>${outgoing ? `<button class="recall-button" data-action="recall-message" data-message-id="${message.id}" type="button">${t(state, "recall")}</button>` : ""}${receipt}</article>`;
 }
 
 function renderMessageFile(file, label, action, direct) {
@@ -74,26 +84,54 @@ function renderAuxiliary(state, currentUser) {
   if (!root) { root = document.createElement("div"); root.id = "auxiliary-root"; document.body.append(root); }
   if (state.ui.modal?.type === "shared-reference") {
     const files = projectFilesForUser(state.files, currentUser, state.room).filter((file) => file.scope === "shared" && file.status === "available");
-    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="reference-title"><header><h2 id="reference-title">引用共享文件</h2><button class="icon-button" data-action="close-modal" aria-label="关闭" type="button">×</button></header><div class="existing-list">${files.map((file) => `<button data-action="send-shared-reference" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>${formatBytes(file.sizeBytes)} · 只发送引用，不增加容量</span></button>`).join("")}</div></section></div>`;
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="reference-title"><header><h2 id="reference-title">${t(state, "referenceTitle")}</h2><button class="icon-button" data-action="close-modal" aria-label="${t(state, "close")}" type="button">×</button></header><div class="existing-list">${files.map((file) => `<button data-action="send-shared-reference" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>${formatBytes(file.sizeBytes)} · ${t(state, "noCapacityIncrease")}</span></button>`).join("")}</div></section></div>`;
+    return;
+  }
+  if (state.ui.modal?.type === "capacity") {
+    const capacity = calculateCapacity({ files: state.files, roomCapacityBytes: state.room.capacityBytes, recycleConfig: state.recycleConfig });
+    const owner = currentUser.id === state.room.ownerId;
+    const rows = owner ? [
+      ["sharedUsage", capacity.sharedBytes], ["directUsage", capacity.directBytes], ["reservedUsage", capacity.reservedBytes],
+      ["recycleActual", capacity.recycledBytes], ["recycleFree", capacity.freeRecycleBytes], ["recycleCharged", capacity.recycledChargedBytes],
+      ["totalUsed", capacity.occupiedBytes], ["totalCapacity", capacity.capacityBytes],
+    ] : [["totalUsed", capacity.occupiedBytes], ["totalCapacity", capacity.capacityBytes]];
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal capacity-modal" role="dialog" aria-modal="true" aria-labelledby="capacity-title"><header><h2 id="capacity-title">${t(state, "capacityDetails")}</h2><button class="icon-button" data-action="close-modal" aria-label="${t(state, "close")}" type="button">×</button></header><dl>${rows.map(([key, bytes]) => `<div><dt>${t(state, key)}</dt><dd>${formatBytes(bytes)}</dd></div>`).join("")}</dl></section></div>`;
+    return;
+  }
+  if (state.ui.modal?.type === "qr") {
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal qr-modal" role="dialog" aria-modal="true" aria-labelledby="qr-title"><header><h2 id="qr-title">${t(state, "qrCode")}</h2><button class="icon-button" data-action="close-modal" aria-label="${t(state, "close")}" type="button">×</button></header><div class="mock-qr" aria-label="${t(state, "qrCode")}">${Array.from({ length: 81 }, (_, index) => `<i class="${[0,1,2,9,11,18,19,20,6,7,8,15,17,24,25,26,54,55,56,63,65,72,73,74].includes(index) || (index * 7 + index % 5) % 4 === 0 ? "is-dark" : ""}"></i>`).join("")}</div><strong>1234</strong><p>${t(state, "scanJoin")}</p></section></div>`;
+    return;
+  }
+  if (state.ui.modal?.type === "room-menu") {
+    const owner = currentUser.id === state.room.ownerId;
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal room-menu-modal" role="dialog" aria-modal="true" aria-labelledby="room-menu-title"><header><h2 id="room-menu-title">${t(state, "roomActions")}</h2><button class="icon-button" data-action="close-modal" aria-label="${t(state, "close")}" type="button">×</button></header><div class="room-menu-list"><button data-action="show-capacity" type="button">${t(state, "roomDetails")}<span>1234 · ${state.room.memberCount}</span></button>${owner ? `<button data-action="extend-room" type="button">${t(state, "extendRoom")}<span>+ 2 h</span></button><button class="is-danger" data-action="dissolve-room" type="button">${t(state, "dissolveRoom")}</button>` : `<button class="is-danger" data-action="leave-room" type="button">${t(state, "leaveRoom")}</button>`}</div></section></div>`;
     return;
   }
   if (state.ui.drawer === "members" || state.ui.drawer === "requests") {
     const members = state.users.filter((user) => user.id !== currentUser.id);
-    root.innerHTML = `<div class="drawer-backdrop" data-action="close-drawer"><aside class="prototype-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" onclick="event.stopPropagation()"><header><div><p class="eyebrow">${state.ui.drawer === "requests" ? "房主管理" : "一对一会话"}</p><h2 id="drawer-title">${state.ui.drawer === "requests" ? "加入申请" : "房间成员"}</h2></div><button class="icon-button" data-action="close-drawer" type="button" aria-label="关闭">×</button></header>${state.ui.drawer === "requests" ? renderRequests() : `<div class="drawer-member-list">${renderMemberItems(members, state)}</div>`}</aside></div>`;
+    root.innerHTML = `<div class="drawer-backdrop" data-action="close-drawer"><aside class="prototype-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" onclick="event.stopPropagation()"><header><div><p class="eyebrow">${t(state, state.ui.drawer === "requests" ? "ownerManagement" : "oneToOne")}</p><h2 id="drawer-title">${t(state, state.ui.drawer === "requests" ? "joinRequests" : "roomMembers")}</h2></div><button class="icon-button" data-action="close-drawer" type="button" aria-label="${t(state, "close")}">×</button></header>${state.ui.drawer === "requests" ? renderRequests(state) : `<div class="drawer-member-list">${renderMemberItems(members, state)}</div>`}</aside></div>`;
     return;
   }
   root.innerHTML = "";
 }
 
-function renderRequests() {
-  return `<div class="join-request-list"><article><span class="avatar avatar--blue">许</span><div><strong>许知夏</strong><small>申请剩余 01:42</small></div><button class="mini-button mini-button--primary" data-action="resolve-request" type="button">同意</button><button class="mini-button" data-action="resolve-request" type="button">拒绝</button></article><article><span class="avatar avatar--amber">韩</span><div><strong>韩川</strong><small>申请剩余 03:18</small></div><button class="mini-button mini-button--primary" data-action="resolve-request" type="button">同意</button><button class="mini-button" data-action="resolve-request" type="button">拒绝</button></article></div>`;
+function renderRequests(state) {
+  return `<div class="join-request-list"><article><span class="avatar avatar--blue">许</span><div><strong>许知夏</strong><small>01:42</small></div><button class="mini-button mini-button--primary" data-action="resolve-request" type="button">${t(state, "approve")}</button><button class="mini-button" data-action="resolve-request" type="button">${t(state, "reject")}</button></article><article><span class="avatar avatar--amber">韩</span><div><strong>韩川</strong><small>03:18</small></div><button class="mini-button mini-button--primary" data-action="resolve-request" type="button">${t(state, "approve")}</button><button class="mini-button" data-action="resolve-request" type="button">${t(state, "reject")}</button></article></div>`;
 }
 
 function renderScenario(state) {
   let root = document.querySelector("#scenario-root");
   if (!root) { root = document.createElement("div"); root.id = "scenario-root"; document.body.append(root); }
   const scenario = state.ui.scenario;
-  const scenes = {
+  const scenes = state.ui.language === "en" ? {
+    "join-free": ["Join room 1234", "No verification is required for this room.", "Join now", "workspace"],
+    pin: ["Enter room PIN", "Enter the 4-digit PIN provided by the owner.", "Verify and join", "pending"],
+    pending: ["Waiting for approval", "Your request was sent. You will enter after approval.", "Back to home", "workspace"],
+    dissolved: ["Room dissolved", "All files and Recycle Bin content will be removed.", "Back to home", "workspace"],
+    kicked: ["Removed from room", "The owner ended your room access.", "Back to home", "workspace"],
+    "not-found": ["Room not found", "The room code is invalid, expired, or dissolved.", "Back to home", "workspace"],
+    "load-error": ["Load failed", "Unable to load room data. Check the LAN connection.", "Retry", "workspace"],
+  } : {
     "join-free": ["加入房间 1234", "该房间无需验证，可直接加入。", "立即加入", "workspace"],
     pin: ["输入房间密码", "请输入房主提供的 4 位数字密码。", "验证并加入", "pending"],
     pending: ["等待房主审批", "申请已发送，批准后自动进入房间。", "返回首页", "workspace"],
@@ -107,9 +145,33 @@ function renderScenario(state) {
   root.innerHTML = `<div class="scenario-screen" role="alertdialog" aria-modal="true"><section><div class="brand-mark">FD</div><p class="eyebrow">FileDock 房间</p><h1>${title}</h1><p>${text}</p>${scenario === "pin" ? `<div class="pin-inputs" aria-label="四位房间密码"><input inputmode="numeric" maxlength="1" value="1"><input inputmode="numeric" maxlength="1" value="2"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"></div>` : ""}<button class="button button--primary" data-action="set-scenario" data-scenario="${next}" type="button">${button}</button></section></div>`;
 }
 
+function renderController(state, currentUser) {
+  let root = document.querySelector("#demo-controller-root");
+  if (!root) { root = document.createElement("div"); root.id = "demo-controller-root"; document.body.append(root); }
+  if (state.ui.controllerHidden) { root.innerHTML = ""; return; }
+  const owner = currentUser.id === state.room.ownerId;
+  const scenarios = [
+    ["workspace", "workspace"], ["join-free", "joinFree"], ["pin", "pinJoin"], ["pending", "approvalWait"],
+    ["dissolved", "dissolved"], ["kicked", "kicked"], ["not-found", "notFound"], ["load-error", "loadError"],
+    ["empty-files", "emptyFiles"], ["empty-chat", "emptyChat"], ["empty-recycle", "emptyRecycle"],
+  ];
+  root.innerHTML = `<div class="demo-controller${state.ui.controllerOpen ? " is-open" : ""}">
+    <button class="demo-controller__toggle" data-action="toggle-controller" type="button" aria-expanded="${state.ui.controllerOpen}" aria-label="${t(state, "openController")}"><span>PROTOTYPE</span>${t(state, "demo")}</button>
+    ${state.ui.controllerOpen ? `<section aria-label="${t(state, "demo")}"><header><div><strong>${t(state, "demo")}</strong><span>${t(state, "demoOnly")}</span></div><button class="icon-button" data-action="toggle-controller" type="button" aria-label="${t(state, "close")}">×</button></header>
+      <label><span>${t(state, "role")}</span><select data-input="demo-role"><option value="user-owner"${owner ? " selected" : ""}>${t(state, "owner")}</option><option value="user-lin"${!owner ? " selected" : ""}>${t(state, "member")} · 林小满</option></select></label>
+      <label><span>${t(state, "language")}</span><select data-input="demo-language"><option value="zh-CN"${state.ui.language === "zh-CN" ? " selected" : ""}>简体中文</option><option value="en"${state.ui.language === "en" ? " selected" : ""}>English</option></select></label>
+      <label><span>${t(state, "scenario")}</span><select data-input="demo-scenario">${scenarios.map(([value, key]) => option(value, t(state, key), state.ui.scenario)).join("")}</select></label>
+      <label class="switch-row"><span>${t(state, "recycleCounts")}</span><input data-input="recycle-count" type="checkbox" role="switch" ${state.recycleConfig.countTowardRoomCapacity ? "checked" : ""}></label>
+      ${state.recycleConfig.countTowardRoomCapacity ? "" : `<label><span>${t(state, "freeRecycle")}</span><input data-input="recycle-free" type="number" min="0" step="16" value="${Math.round(state.recycleConfig.freeBytes / 1024 / 1024)}"><small>MB</small></label>`}
+      <div class="demo-injections"><span>${t(state, "injectEvent")}</span><div><button data-action="inject-event" data-inject="upload" type="button">${t(state, "upload")}</button><button data-action="inject-event" data-inject="download" type="button">${t(state, "receive")}</button><button data-action="inject-event" data-inject="message" type="button">${t(state, "send")}</button><button data-action="inject-event" data-inject="read" type="button">${t(state, "read")}</button><button data-action="inject-event" data-inject="request" type="button">${t(state, "requestRestore")}</button></div></div>
+      <footer><button class="button" data-action="reset-state" type="button">${t(state, "reset")}</button><button class="button button--text" data-action="hide-controller" type="button">${t(state, "hideController")}</button></footer>
+    </section>` : ""}
+  </div>`;
+}
+
 function renderCapacity(state) {
   const capacity = calculateCapacity({ files: state.files, roomCapacityBytes: state.room.capacityBytes, recycleConfig: state.recycleConfig });
-  const label = document.querySelector(".capacity-summary dd");
+  const label = document.querySelector(".capacity-summary__value");
   const fill = document.querySelector(".capacity-track span");
   if (label) label.textContent = `${formatBytes(capacity.occupiedBytes)} / ${formatBytes(capacity.capacityBytes)}`;
   if (fill) fill.style.width = `${Math.min(100, capacity.usageRatio * 100).toFixed(1)}%`;
@@ -148,46 +210,51 @@ function renderFileList(state, user) {
   return `
     <div class="file-filter-bar">
       <label class="search-box file-search">
-        ${searchIcon()}<span class="visually-hidden">搜索文件 / Search files</span>
-        <input data-input="file-search" type="search" placeholder="搜索文件名" value="${escapeHTML(state.ui.fileSearch)}" />
+        ${searchIcon()}<span class="visually-hidden">${t(state, "searchFiles")}</span>
+        <input data-input="file-search" type="search" placeholder="${t(state, "searchFiles")}" value="${escapeHTML(state.ui.fileSearch)}" />
       </label>
-      <label class="select-shell"><span class="visually-hidden">文件范围 / File scope</span>
+      <label class="select-shell"><span class="visually-hidden">${t(state, "allFiles")}</span>
         <select data-input="file-scope">
-          ${option("all", "全部文件", state.ui.fileScopeFilter)}${option("shared", "公共文件", state.ui.fileScopeFilter)}
-          ${option("direct", "定向文件", state.ui.fileScopeFilter)}${option("mine", "我上传的", state.ui.fileScopeFilter)}
-          ${option("sent-to-me", "发给我的", state.ui.fileScopeFilter)}
+          ${option("all", t(state, "allFiles"), state.ui.fileScopeFilter)}${option("shared", t(state, "sharedFiles"), state.ui.fileScopeFilter)}
+          ${option("direct", t(state, "directFiles"), state.ui.fileScopeFilter)}${option("mine", t(state, "uploadedByMe"), state.ui.fileScopeFilter)}
+          ${option("sent-to-me", t(state, "sentToMe"), state.ui.fileScopeFilter)}
         </select>${chevronIcon()}</label>
-      <label class="select-shell"><span class="visually-hidden">文件排序 / File sorting</span>
+      <label class="select-shell"><span class="visually-hidden">${t(state, "newest")}</span>
         <select data-input="file-sort">
-          ${option("newest", "最新上传", state.ui.fileSort)}${option("oldest", "最早上传", state.ui.fileSort)}
-          ${option("size-asc", "大小升序", state.ui.fileSort)}${option("size-desc", "大小降序", state.ui.fileSort)}
+          ${option("newest", t(state, "newest"), state.ui.fileSort)}${option("oldest", t(state, "oldest"), state.ui.fileSort)}
+          ${option("size-asc", t(state, "sizeAsc"), state.ui.fileSort)}${option("size-desc", t(state, "sizeDesc"), state.ui.fileSort)}
         </select>${chevronIcon()}</label>
       <span class="file-result-count">${translate(state.ui.language, "filesCount", { count: visibleFiles.length })}</span>
     </div>
     <div class="drop-zone" data-drop-zone>
       <div class="file-table" role="table" aria-label="当前房间文件 / Current room files">
-        ${renderTableHeader()}
-        ${visibleFiles.length ? visibleFiles.map((file) => renderFileRow(file, state, user)).join("") : renderEmptyRow("没有符合条件的文件")}
+        ${renderTableHeader(state)}
+        ${visibleFiles.length ? visibleFiles.map((file) => renderFileRow(file, state, user)).join("") : renderEmptyRow(t(state, "noMatchingFiles"))}
       </div>
-      <div class="drop-overlay" aria-hidden="true"><strong>释放文件到待发送区</strong><span>松手后仍需确认范围和接收者</span></div>
+      <div class="drop-overlay" aria-hidden="true"><strong>${t(state, "dropTitle")}</strong><span>${t(state, "dropText")}</span></div>
     </div>
-    <div class="file-list-footer"><span>已显示 ${visibleFiles.length} 个文件</span><span>拖放文件不会立即上传</span></div>`;
+    <div class="file-list-footer"><span>${t(state, "shownFiles", { count: visibleFiles.length })}</span><span>${t(state, "dropHint")}</span></div>`;
 }
 
 function renderTimeline(state, user) {
   const events = projectEventsForUser(state.events, state.files, user, state.room)
     .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
-  if (!events.length) return renderEmptyState("暂无文件动态", "上传、下载和回收操作会出现在这里。");
-  return `<div class="timeline-toolbar"><strong>文件动态</strong><span>${events.length} 条可见记录 · 最新优先</span></div>
+  if (!events.length) return renderEmptyState(t(state, "fileTimeline"), t(state, "noMessages"));
+  return `<div class="timeline-toolbar"><strong>${t(state, "fileTimeline")}</strong><span>${t(state, "timelineVisible", { count: events.length })}</span></div>
     <ol class="file-timeline">${events.map((event) => renderTimelineEvent(event, state)).join("")}</ol>
-    <button class="button timeline-more" type="button">加载更早记录</button>`;
+    <button class="button timeline-more" type="button">${t(state, "loadEarlier")}</button>`;
 }
 
 function renderTimelineEvent(event, state) {
   const actor = state.users.find((user) => user.id === event.actorId)?.displayName ?? "未知用户";
   const file = event.file;
-  const name = file.visibility === "anonymous" ? `私密文件#${file.alias}` : file.name;
-  const labels = {
+  const name = file.visibility === "anonymous" ? t(state, "privateFile", { alias: file.alias }) : file.name;
+  const labels = state.ui.language === "en" ? {
+    upload_started: "started uploading", upload_completed: "uploaded", upload_progress: "is uploading", upload_failed: "upload failed",
+    direct_sent: "sent privately", resent: "sent again from history", download_started: "started receiving", download_completed: "completed transfer",
+    recycled: "moved to Recycle Bin", restore_requested: "requested restore", restored: "restored", restore_approved: "approved restore",
+    permanently_deleted: "deleted permanently", published_shared: "published to shared files",
+  } : {
     upload_started: "开始上传", upload_completed: "完成上传", upload_progress: "正在上传", upload_failed: "上传失败",
     direct_sent: "定向发送", resent: "从历史文件再次发送", download_started: "开始接收", download_completed: "传输完成",
     recycled: "移入回收站", restore_requested: "申请恢复", restored: "恢复文件", restore_approved: "批准恢复",
@@ -197,7 +264,7 @@ function renderTimelineEvent(event, state) {
   return `<li class="timeline-item${file.visibility === "anonymous" ? " timeline-item--audit" : ""}">
     <time>${formatTimestamp(event.occurredAt, state.ui.language)}</time>
     <span class="timeline-dot" aria-hidden="true"></span>
-    <article class="timeline-card"><div><strong>${escapeHTML(actor)} ${labels[event.type] ?? event.type}</strong><span class="scope-tag scope-tag--${file.visibility === "anonymous" ? "private" : file.scope}">${file.visibility === "anonymous" ? "匿名审计" : file.scope === "shared" ? "公共" : "定向"}</span></div>
+    <article class="timeline-card"><div><strong>${escapeHTML(actor)} ${labels[event.type] ?? event.type}</strong><span class="scope-tag scope-tag--${file.visibility === "anonymous" ? "private" : file.scope}">${t(state, file.visibility === "anonymous" ? "privateAudit" : file.scope)}</span></div>
       <p>${escapeHTML(name ?? "-")} · ${formatBytes(file.sizeBytes)}</p>
       ${progress !== null && progress < 100 ? `<div class="timeline-progress"><span style="width:${progress}%"></span></div><small>${progress}%</small>` : ""}
     </article></li>`;
@@ -206,25 +273,25 @@ function renderTimelineEvent(event, state) {
 function renderRecycleBin(state, user) {
   const files = state.ui.scenario === "empty-recycle" ? [] : projectFilesForUser(state.files, user, state.room).filter((file) => file.status === "recycled");
   const capacity = calculateCapacity({ files: state.files, roomCapacityBytes: state.room.capacityBytes, recycleConfig: state.recycleConfig });
-  return `<div class="recycle-summary"><div><strong>回收站</strong><span>文件保留至房间销毁</span></div><div><span>实际大小 ${formatBytes(capacity.recycledBytes)}</span><span>计费 ${formatBytes(capacity.recycledChargedBytes)}</span></div></div>
+  return `<div class="recycle-summary"><div><strong>${t(state, "recycleBin")}</strong><span>${t(state, "recycleRetention")}</span></div><div><span>${t(state, "actualSize", { size: formatBytes(capacity.recycledBytes) })}</span><span>${t(state, "chargedSize", { size: formatBytes(capacity.recycledChargedBytes) })}</span></div></div>
     <div class="file-table" role="table" aria-label="回收站文件 / Recycled files">
-      ${renderTableHeader()}
-      ${files.length ? files.map((file) => renderRecycleRow(file, state, user)).join("") : renderEmptyRow("回收站为空")}
+      ${renderTableHeader(state)}
+      ${files.length ? files.map((file) => renderRecycleRow(file, state, user)).join("") : renderEmptyRow(t(state, "recycleEmpty"))}
     </div>`;
 }
 
 function renderFileRow(file, state, user) {
   const permissions = getFilePermissions(file, user, state.room);
-  return renderCommonRow(file, state, permissions, renderFileActions(file, permissions));
+  return renderCommonRow(file, state, permissions, renderFileActions(file, permissions, state));
 }
 
 function renderRecycleRow(file, state, user) {
   const permissions = getFilePermissions(file, user, state.room);
   let action = "";
-  if (permissions.canRestore) action += `<button class="mini-button mini-button--primary" data-action="restore" data-file-id="${escapeHTML(file.id)}" type="button">恢复</button>`;
-  if (permissions.canRequestRestore) action += `<button class="mini-button" data-action="request-restore" data-file-id="${escapeHTML(file.id)}" type="button">${file.restoreRequested ? "已申请" : "申请恢复"}</button>`;
-  if (file.restoreRequested && user.id === state.room.ownerId) action += `<button class="mini-button mini-button--primary" data-action="approve-restore" data-file-id="${escapeHTML(file.id)}" type="button">批准恢复</button>`;
-  if (permissions.canPermanentDelete) action += `<button class="mini-button mini-button--danger" data-action="permanent-delete" data-file-id="${escapeHTML(file.id)}" type="button">永久删除</button>`;
+  if (permissions.canRestore) action += `<button class="mini-button mini-button--primary" data-action="restore" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, "restore")}</button>`;
+  if (permissions.canRequestRestore) action += `<button class="mini-button" data-action="request-restore" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, file.restoreRequested ? "requested" : "requestRestore")}</button>`;
+  if (file.restoreRequested && user.id === state.room.ownerId) action += `<button class="mini-button mini-button--primary" data-action="approve-restore" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, "approveRestore")}</button>`;
+  if (permissions.canPermanentDelete) action += `<button class="mini-button mini-button--danger" data-action="permanent-delete" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, "permanentDelete")}</button>`;
   return renderCommonRow(file, state, permissions, action || "—");
 }
 
@@ -234,11 +301,11 @@ function renderCommonRow(file, state, permissions, actions) {
   const recipients = file.recipientIds?.map((id) => state.users.find((item) => item.id === id)?.displayName).filter(Boolean).join("、");
   const anonymous = file.visibility === "anonymous";
   const displayName = anonymous ? translate(locale, "privateFile", { alias: file.alias }) : file.name;
-  const secondary = anonymous ? "房主匿名审计视图" : file.scope === "direct" ? translate(locale, "privateFile", { alias: file.alias }) : file.mimeLabel;
+  const secondary = anonymous ? t(state, "privateAudit") : file.scope === "direct" ? translate(locale, "privateFile", { alias: file.alias }) : file.mimeLabel;
   const ownerLabel = anonymous ? `${uploader?.displayName ?? "-"} → ${recipients || "-"}` : uploader?.displayName ?? "-";
   return `<article class="file-row${anonymous ? " file-row--private-audit" : ""}" role="row" data-file-id="${escapeHTML(file.id)}">
     <div class="file-cell file-cell--name" role="cell"><span class="file-icon file-icon--${escapeHTML(file.kind ?? "document")}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(displayName ?? "")}</strong><small>${escapeHTML(secondary ?? "")}</small></div></div>
-    <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--${anonymous ? "private" : file.scope}">${anonymous ? "匿名审计" : file.scope === "shared" ? "公共" : "定向"}</span></div>
+    <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--${anonymous ? "private" : file.scope}">${t(state, anonymous ? "privateAudit" : file.scope)}</span></div>
     <div class="file-cell file-cell--owner" role="cell">${escapeHTML(ownerLabel)}</div>
     <div class="file-cell file-cell--size" role="cell">${formatBytes(file.sizeBytes)}</div>
     <div class="file-cell file-cell--time" role="cell">${formatTimestamp(file.recycledAt ?? file.createdAt, locale)}</div>
@@ -246,14 +313,15 @@ function renderCommonRow(file, state, permissions, actions) {
     <div class="file-cell file-cell--actions" role="cell">${actions}</div></article>`;
 }
 
-function renderFileActions(file, permissions) {
-  if (file.status === "uploading") return `<button class="mini-button" type="button" data-action="show-tasks">查看任务</button>`;
-  if (file.visibility === "anonymous") return permissions.canRecycle ? `<button class="mini-button mini-button--danger" data-action="recycle" data-file-id="${file.id}" type="button">移入回收站</button>` : "";
+function renderFileActions(file, permissions, state) {
+  if (file.status === "uploading") return `<button class="mini-button" type="button" data-action="show-tasks">${t(state, "viewTask")}</button>`;
+  if (file.visibility === "anonymous") return permissions.canRecycle ? `<button class="mini-button mini-button--danger" data-action="recycle" data-file-id="${file.id}" type="button">${t(state, "recycle")}</button>` : "";
   let actions = "";
-  if (permissions.canAccept || permissions.canDownload) actions += `<button class="mini-button mini-button--primary" data-action="download" data-file-id="${file.id}" type="button">${permissions.canAccept ? "接受并下载" : "下载"}</button>`;
-  if (permissions.canResend) actions += `<button class="mini-button" data-action="reuse-file" data-file-id="${file.id}" type="button">再次发送</button>`;
-  if (permissions.canPublishShared) actions += `<button class="mini-button" data-action="publish-shared" data-file-id="${file.id}" type="button">公开</button>`;
-  if (permissions.canRecycle) actions += `<button class="mini-button mini-button--danger" data-action="recycle" data-file-id="${file.id}" type="button">回收</button>`;
+  const locale = state.ui.language;
+  if (permissions.canAccept || permissions.canDownload) actions += `<button class="mini-button mini-button--primary" data-action="download" data-file-id="${file.id}" type="button">${translate(locale, permissions.canAccept ? "acceptDownload" : "download")}</button>`;
+  if (permissions.canResend) actions += `<button class="mini-button" data-action="reuse-file" data-file-id="${file.id}" type="button">${translate(locale, "resend")}</button>`;
+  if (permissions.canPublishShared) actions += `<button class="mini-button" data-action="publish-shared" data-file-id="${file.id}" type="button">${translate(locale, "publish")}</button>`;
+  if (permissions.canRecycle) actions += `<button class="mini-button mini-button--danger" data-action="recycle" data-file-id="${file.id}" type="button">${translate(locale, "recycleBin")}</button>`;
   return actions;
 }
 
@@ -262,10 +330,10 @@ function renderStatus(file, locale) {
     const progress = Math.max(0, Math.min(100, file.uploadProgress ?? 0));
     return `<div class="row-progress" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><small>${progress}%</small>`;
   }
-  if (file.status === "recycled") return `<span class="file-status">回收站</span>`;
+  if (file.status === "recycled") return `<span class="file-status">${translate(locale, "recycleBin")}</span>`;
   if (file.visibility === "anonymous") return `<span class="file-status">${translate(locale, "transferComplete")}</span>`;
   const accepted = Object.values(file.receiverStates ?? {}).filter((value) => value === "accepted" || value === "downloaded").length;
-  if (file.scope === "direct" && accepted > 0) return `<span class="file-status file-status--accepted">${accepted} 人已接收</span>`;
+  if (file.scope === "direct" && accepted > 0) return `<span class="file-status file-status--accepted">${translate(locale, "receivedCount", { count: accepted })}</span>`;
   return `<span class="file-status file-status--ready">${translate(locale, "ready")}</span>`;
 }
 
@@ -280,7 +348,7 @@ function renderComposer(state, user) {
   if (!composer) { root.innerHTML = ""; return; }
   if (composer.existingFileId === "choose") {
     const reusable = projectFilesForUser(state.files, user, state.room).filter((file) => file.scope === "direct" && file.uploaderId === user.id && file.status === "available");
-    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="existing-title"><header><div><p class="eyebrow">历史复用</p><h2 id="existing-title">选择已上传文件</h2></div><button class="icon-button" data-action="close-composer" aria-label="关闭" type="button">×</button></header><div class="existing-list">${reusable.length ? reusable.map((file) => `<button data-action="choose-existing" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>私密文件#${file.alias} · ${formatBytes(file.sizeBytes)}</span></button>`).join("") : "<p>没有可复用的定向文件</p>"}</div></section></div>`;
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="existing-title"><header><div><p class="eyebrow">${t(state, "historyReuse")}</p><h2 id="existing-title">${t(state, "chooseUploaded")}</h2></div><button class="icon-button" data-action="close-composer" aria-label="${t(state, "close")}" type="button">×</button></header><div class="existing-list">${reusable.length ? reusable.map((file) => `<button data-action="choose-existing" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>${t(state, "privateFile", { alias: file.alias })} · ${formatBytes(file.sizeBytes)}</span></button>`).join("") : `<p>${t(state, "noReusable")}</p>`}</div></section></div>`;
     return;
   }
   const pending = composer.pendingFiles ?? [];
@@ -289,11 +357,11 @@ function renderComposer(state, user) {
   const recipients = state.users.filter((member) => member.id !== user.id);
   const submitDisabled = (!existing && pending.length === 0) || (composer.mode === "direct" && state.ui.selectedRecipientIds.length === 0);
   root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal send-modal" role="dialog" aria-modal="true" aria-labelledby="send-title">
-    <header><div><p class="eyebrow">发送前确认</p><h2 id="send-title">待发送区</h2></div><button class="icon-button" data-action="close-composer" aria-label="关闭" type="button">×</button></header>
-    <div class="send-mode" role="radiogroup" aria-label="发送范围"><button class="${composer.mode === "shared" ? "is-active" : ""}" data-action="set-send-mode" data-mode="shared" type="button">共享到房间</button><button class="${composer.mode === "direct" ? "is-active" : ""}" data-action="set-send-mode" data-mode="direct" type="button">定向发送</button></div>
-    <div class="pending-list">${existing ? `<article><div><strong>${escapeHTML(existing.name)}</strong><span>复用历史文件，不重复占用容量</span></div><b>${formatBytes(existing.sizeBytes)}</b></article>` : pending.map((file) => `<article><div><strong>${escapeHTML(file.name)}</strong><span>${escapeHTML(file.type || "未知类型")}</span></div><b>${formatBytes(file.sizeBytes)}</b><button class="icon-button icon-button--small" data-action="remove-pending" data-pending-id="${file.id}" aria-label="移除 ${escapeHTML(file.name)}" type="button">×</button></article>`).join("") || `<div class="composer-drop-empty">拖放文件到页面，或点击“添加文件”</div>`}</div>
-    ${composer.mode === "direct" ? `<div class="recipient-heading"><strong>选择接收者</strong><button class="button button--text" data-action="select-all-recipients" type="button">全选在线成员</button></div><div class="recipient-grid">${recipients.map((member) => { const already = existing?.recipientIds.includes(member.id); const selected = state.ui.selectedRecipientIds.includes(member.id); return `<button class="recipient-chip${selected ? " is-selected" : ""}" data-action="toggle-recipient" data-user-id="${member.id}" type="button" ${already ? "disabled" : ""}><span class="presence presence--${member.presence}"></span>${escapeHTML(member.displayName)}${already ? " · 已发送" : ""}</button>`; }).join("")}</div>` : `<div class="shared-warning">房间当前及后加入成员都能查看和下载这些文件。</div>`}
-    <footer><div><strong>${existing ? 1 : pending.length} 个文件 · ${formatBytes(total)}</strong><span>${existing ? "服务端直接发送" : "确认后开始模拟上传"}</span></div>${existing ? "" : `<button class="button" data-action="add-files" type="button">添加文件</button>`}<button class="button button--primary" data-action="confirm-send" type="button" ${submitDisabled ? "disabled" : ""}>${existing ? "发送给接收者" : "开始上传并发送"}</button></footer>
+    <header><div><p class="eyebrow">${t(state, "pendingConfirm")}</p><h2 id="send-title">${t(state, "pendingArea")}</h2></div><button class="icon-button" data-action="close-composer" aria-label="${t(state, "close")}" type="button">×</button></header>
+    <div class="send-mode" role="radiogroup" aria-label="${t(state, "pendingConfirm")}"><button class="${composer.mode === "shared" ? "is-active" : ""}" data-action="set-send-mode" data-mode="shared" type="button">${t(state, "sharedToRoom")}</button><button class="${composer.mode === "direct" ? "is-active" : ""}" data-action="set-send-mode" data-mode="direct" type="button">${t(state, "directSend")}</button></div>
+    <div class="pending-list">${existing ? `<article><div><strong>${escapeHTML(existing.name)}</strong><span>${t(state, "reuseNoCapacity")}</span></div><b>${formatBytes(existing.sizeBytes)}</b></article>` : pending.map((file) => `<article><div><strong>${escapeHTML(file.name)}</strong><span>${escapeHTML(file.type || "-")}</span></div><b>${formatBytes(file.sizeBytes)}</b><button class="icon-button icon-button--small" data-action="remove-pending" data-pending-id="${file.id}" aria-label="${t(state, "close")} ${escapeHTML(file.name)}" type="button">×</button></article>`).join("") || `<div class="composer-drop-empty">${t(state, "dropTitle")} · ${t(state, "addFiles")}</div>`}</div>
+    ${composer.mode === "direct" ? `<div class="recipient-heading"><strong>${t(state, "selectRecipients")}</strong><button class="button button--text" data-action="select-all-recipients" type="button">${t(state, "selectOnline")}</button></div><div class="recipient-grid">${recipients.map((member) => { const already = existing?.recipientIds.includes(member.id); const selected = state.ui.selectedRecipientIds.includes(member.id); return `<button class="recipient-chip${selected ? " is-selected" : ""}" data-action="toggle-recipient" data-user-id="${member.id}" type="button" ${already ? "disabled" : ""}><span class="presence presence--${member.presence}"></span>${escapeHTML(member.displayName)}${already ? ` · ${t(state, "alreadySent")}` : ""}</button>`; }).join("")}</div>` : `<div class="shared-warning">${t(state, "sharedWarning")}</div>`}
+    <footer><div><strong>${translate(state.ui.language, "filesCount", { count: existing ? 1 : pending.length })} · ${formatBytes(total)}</strong><span>${t(state, existing ? "serverDirect" : "confirmUpload")}</span></div>${existing ? "" : `<button class="button" data-action="add-files" type="button">${t(state, "addFiles")}</button>`}<button class="button button--primary" data-action="confirm-send" type="button" ${submitDisabled ? "disabled" : ""}>${t(state, existing ? "sendRecipients" : "startUpload")}</button></footer>
   </section></div>`;
 }
 
@@ -305,8 +373,8 @@ function renderTasks(state) {
   const totalBytes = shown.reduce((sum, task) => sum + task.sizeBytes, 0);
   const sentBytes = shown.reduce((sum, task) => sum + task.transferredBytes, 0);
   const progress = totalBytes ? Math.round(sentBytes / totalBytes * 100) : 0;
-  const title = active.length ? `${active.length} 个传输任务` : state.tasks.length ? "传输已完成" : "暂无传输任务";
-  bar.innerHTML = `<div class="transfer-bar__summary"><span class="transfer-indicator${active.length ? "" : " is-idle"}" aria-hidden="true"></span><strong>${title}</strong><span>${shown.map((task) => `${task.type === "upload" ? "上传" : "接收"} ${task.progress}%`).join(" · ")}</span></div><div class="transfer-progress" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><button class="button button--text" data-action="show-tasks" type="button">查看任务</button>`;
+  const title = active.length ? t(state, "tasksCount", { count: active.length }) : state.tasks.length ? t(state, "tasksDone") : t(state, "noTasks");
+  bar.innerHTML = `<div class="transfer-bar__summary"><span class="transfer-indicator${active.length ? "" : " is-idle"}" aria-hidden="true"></span><strong>${title}</strong><span>${shown.map((task) => `${t(state, task.type === "upload" ? "upload" : "receive")} ${task.progress}%`).join(" · ")}</span></div><div class="transfer-progress" role="progressbar" aria-label="${t(state, "tasks")}" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><button class="button button--text" data-action="show-tasks" type="button">${t(state, "tasks")}</button>`;
 }
 
 function filterAndSort(files, state, user) {
@@ -328,22 +396,27 @@ function sortFiles(left, right, sort) {
   return Date.parse(right.createdAt) - Date.parse(left.createdAt);
 }
 
-function renderTableHeader() { return `<div class="file-table__header" role="row"><span role="columnheader">文件名</span><span role="columnheader">范围</span><span role="columnheader">上传者</span><span role="columnheader">大小</span><span role="columnheader">时间</span><span role="columnheader">状态</span><span role="columnheader">操作</span></div>`; }
+function renderTableHeader(state) {
+  const labels = state.ui.language === "en" ? ["File", "Scope", "Uploader", "Size", "Time", "Status", "Actions"] : ["文件名", "范围", "上传者", "大小", "时间", "状态", "操作"];
+  return `<div class="file-table__header" role="row">${labels.map((label) => `<span role="columnheader">${label}</span>`).join("")}</div>`;
+}
 function renderEmptyRow(text) { return `<div class="table-empty">${escapeHTML(text)}</div>`; }
 function renderEmptyState(title, text) { return `<div class="content-placeholder"><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></div>`; }
 function option(value, label, selected) { return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`; }
 function searchIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`; }
 function chevronIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`; }
 function isConversation(message, firstId, secondId) { return (message.fromId === firstId && message.toId === secondId) || (message.fromId === secondId && message.toId === firstId); }
-function presenceLabel(value) { return ({ online: "在线", away: "暂离", offline: "离线" })[value] ?? value; }
+function presenceLabel(value, locale = "zh-CN") { return translate(locale, value); }
 function messageSummary(message, state) {
-  if (!message) return "暂无消息";
-  if (message.status === "recalled") return "消息已撤回";
-  if (message.type === "image") return "[图片]";
-  if (message.type === "direct_file") return "发来一个私密文件";
-  if (message.type === "shared_reference") return `引用：${state.files.find((file) => file.id === message.fileId)?.name ?? "共享文件"}`;
+  if (!message) return t(state, "noMessages");
+  if (message.status === "recalled") return t(state, "recall");
+  if (message.type === "image") return state.ui.language === "en" ? "[Image]" : "[图片]";
+  if (message.type === "direct_file") return t(state, "sendPrivateFile");
+  if (message.type === "shared_reference") return `${t(state, "sharedReference")}: ${state.files.find((file) => file.id === message.fileId)?.name ?? t(state, "sharedFiles")}`;
   return message.text ?? "";
 }
+
+function t(state, key, params = {}) { return translate(state.ui.language, key, params); }
 
 export function formatBytes(value) {
   const bytes = Math.max(0, Number(value) || 0);

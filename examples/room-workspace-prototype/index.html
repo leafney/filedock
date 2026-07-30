@@ -16,8 +16,8 @@
   </head>
   <body>
     <div class="prototype-notice" role="note">
-      <span class="prototype-notice__badge">仅原型</span>
-      <span>静态桌面布局骨架 · Prototype desktop shell</span>
+      <span class="prototype-notice__badge" data-i18n="prototypeOnly">仅原型</span>
+      <span data-i18n="prototypeNotice">独立交互原型 · 不连接生产服务</span>
     </div>
 
     <div class="room-shell">
@@ -31,8 +31,8 @@
           <div class="brand-mark" aria-hidden="true">FD</div>
           <div class="room-identity">
             <div class="room-identity__line">
-              <strong>房间 1234</strong>
-              <span class="status-pill">进行中</span>
+              <button class="room-code-button" data-action="copy-room" type="button" aria-label="复制房间号 / Copy room code"><span data-i18n="room">房间</span> 1234</button>
+              <span class="status-pill" data-i18n="active">进行中</span>
             </div>
             <span>设计协作间</span>
           </div>
@@ -40,17 +40,19 @@
 
         <dl class="room-header__summary">
           <div>
-            <dt>成员</dt>
-            <dd>8 人</dd>
+            <dt data-i18n="members">成员</dt>
+            <dd class="member-summary-value">8 人</dd>
           </div>
           <div>
-            <dt>剩余时间</dt>
+            <dt data-i18n="remainingTime">剩余时间</dt>
             <dd>10:24:36</dd>
           </div>
           <div class="capacity-summary">
-            <dt>房间容量</dt>
-            <dd>620 MB / 2 GB</dd>
-            <span class="capacity-track" aria-hidden="true"><span></span></span>
+            <button data-action="show-capacity" type="button">
+              <span class="capacity-summary__label" data-i18n="roomCapacity">房间容量</span>
+              <span class="capacity-summary__value">620 MB / 2 GB</span>
+              <span class="capacity-track" aria-hidden="true"><span></span></span>
+            </button>
           </div>
         </dl>
 
@@ -66,7 +68,7 @@
             </svg>
             <span class="notification-badge">3</span>
           </button>
-          <button class="icon-button desktop-room-action" type="button" aria-label="显示二维码 / Show QR code">
+          <button class="icon-button desktop-room-action" data-action="show-qr" type="button" aria-label="显示二维码 / Show QR code">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2" />
             </svg>
@@ -77,7 +79,7 @@
             </svg>
             <span class="notification-badge">2</span>
           </button>
-          <button class="icon-button" type="button" aria-label="更多操作 / More actions">
+          <button class="icon-button" data-action="show-room-menu" type="button" aria-label="更多操作 / More actions">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="5" cy="12" r="1" />
               <circle cx="12" cy="12" r="1" />
@@ -146,26 +148,26 @@
         <section class="file-panel" aria-labelledby="file-panel-title">
           <div class="file-toolbar">
             <div>
-              <p class="eyebrow">文件工作区</p>
-              <h2 id="file-panel-title">房间文件</h2>
+              <p class="eyebrow" data-i18n="fileWorkspace">文件工作区</p>
+              <h2 id="file-panel-title" data-i18n="roomFiles">房间文件</h2>
             </div>
             <div class="file-toolbar__actions" aria-label="文件操作 / File actions">
               <button class="button button--primary" data-action="open-upload" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
                 </svg>
-                上传共享文件
+                <span data-i18n="uploadShared">上传共享文件</span>
               </button>
-              <button class="button" data-action="open-direct" type="button">定向发送</button>
-              <button class="button button--text" data-action="open-existing" type="button">选择已有文件</button>
+              <button class="button" data-action="open-direct" data-i18n="directSend" type="button">定向发送</button>
+              <button class="button button--text" data-action="open-existing" data-i18n="chooseExisting" type="button">选择已有文件</button>
             </div>
           </div>
 
           <div class="file-tabs" role="tablist" aria-label="文件视图 / File views">
-            <button class="file-tab is-active" data-tab="files" type="button" role="tab" aria-selected="true">文件列表</button>
-            <button class="file-tab" data-tab="timeline" type="button" role="tab" aria-selected="false">文件动态</button>
+            <button class="file-tab is-active" data-tab="files" data-i18n="fileList" type="button" role="tab" aria-selected="true">文件列表</button>
+            <button class="file-tab" data-tab="timeline" data-i18n="fileTimeline" type="button" role="tab" aria-selected="false">文件动态</button>
             <button class="file-tab" data-tab="recycle" type="button" role="tab" aria-selected="false">
-              回收站 <span class="tab-count">4</span>
+              <span data-i18n="recycleBin">回收站</span> <span class="tab-count">4</span>
             </button>
           </div>
 
@@ -335,8 +337,8 @@
       </main>
 
       <nav class="mobile-file-actions" aria-label="移动端文件操作 / Mobile file actions">
-        <button class="button button--primary" data-action="open-upload" type="button">上传共享文件</button>
-        <button class="button" data-action="open-direct" type="button">定向发送</button>
+        <button class="button button--primary" data-action="open-upload" data-i18n="uploadShared" type="button">上传共享文件</button>
+        <button class="button" data-action="open-direct" data-i18n="directSend" type="button">定向发送</button>
       </nav>
 
       <footer class="transfer-bar" aria-label="传输任务 / Transfer tasks">

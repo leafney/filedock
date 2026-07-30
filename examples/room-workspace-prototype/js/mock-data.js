@@ -190,6 +190,8 @@ export function createMockState() {
       composer: null,
       modal: null,
       drawer: null,
+      controllerOpen: false,
+      controllerHidden: false,
     },
   };
 }
