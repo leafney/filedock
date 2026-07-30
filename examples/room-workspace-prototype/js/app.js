@@ -1,5 +1,6 @@
 import { canRestoreFile } from "./capacity.js";
 import { getDefaultComposerMode } from "./file-list.js";
+import { translate } from "./i18n.js";
 import { renderModel } from "./render.js";
 import { createStore } from "./state.js";
 
@@ -29,7 +30,7 @@ document.addEventListener("click", (event) => {
   }
   const target = event.target.closest("[data-action]");
   if (!target || target.disabled) return;
-  if (["open-upload", "open-direct", "open-existing", "open-file-actions", "open-members", "open-requests", "open-shared-reference", "show-capacity", "show-qr", "show-room-menu"].includes(target.dataset.action)) {
+  if (["open-upload", "open-direct", "open-existing", "open-file-actions", "open-reject-confirm", "open-members", "open-requests", "open-shared-reference", "show-capacity", "show-qr", "show-room-menu"].includes(target.dataset.action)) {
     lastOverlayTrigger = target;
   }
   handleAction(target.dataset.action, target);
@@ -54,7 +55,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     const state = store.getState();
     if (state.ui.composer) store.dispatch({ type: "ui/close-composer" });
-    else if (state.ui.openFileMenuId || state.ui.actionSheetFileId || state.ui.rejectFileId) store.dispatch({ type: "ui/close-file-overlays" });
+    else if (state.ui.openFileMenuId || state.ui.actionSheetFileId || state.ui.rejectFileId) closeOverlay("ui/close-file-overlays");
     else if (state.ui.modal) store.dispatch({ type: "ui/close-modal" });
     else if (state.ui.drawer) store.dispatch({ type: "ui/close-drawer" });
   }
@@ -70,6 +71,22 @@ document.addEventListener("keydown", (event) => {
     next.focus();
     store.dispatch({ type: "ui/set-tab", value: next.dataset.tab });
   }
+  if (event.target.matches('.file-scope-switch [role="radio"]') && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    event.preventDefault();
+    const scopes = [...document.querySelectorAll('.file-scope-switch [role="radio"]')];
+    const offset = event.key === "ArrowRight" ? 1 : -1;
+    const next = scopes[(scopes.indexOf(event.target) + offset + scopes.length) % scopes.length];
+    store.dispatch({ type: "ui/set-file-scope-view", value: next.dataset.scope });
+    window.setTimeout(() => document.querySelector(`.file-scope-switch [data-scope="${next.dataset.scope}"]`)?.focus(), 0);
+  }
+  if (event.target.closest('[role="menu"]') && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    const items = [...event.target.closest('[role="menu"]').querySelectorAll('[role="menuitem"]')];
+    const current = items.indexOf(event.target);
+    const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[index]?.focus();
+  }
+  trapOverlayFocus(event);
 });
 
 document.addEventListener("change", (event) => {
@@ -156,22 +173,30 @@ function handleAction(action, target) {
       eventId: uniqueId("event"),
     }));
     store.dispatch({ type: "ui/exit-batch-mode" });
-    return showToast(localized(state, "已开始批量接收", "Batch download started"));
+    return showToast(translate(state.ui.language, "batchDownloadStarted"));
   }
   if (action === "batch-private-send") {
     return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileIds: [...state.ui.selectedFileIds] });
   }
   if (action === "open-file-actions") {
-    if (window.innerWidth < 768) return store.dispatch({ type: "ui/open-action-sheet", value: target.dataset.fileId });
+    if (window.innerWidth < 768) {
+      store.dispatch({ type: "ui/open-action-sheet", value: target.dataset.fileId });
+      return focusFirstOverlayControl();
+    }
     const value = state.ui.openFileMenuId === target.dataset.fileId ? null : target.dataset.fileId;
-    return store.dispatch({ type: "ui/open-file-menu", value });
+    store.dispatch({ type: "ui/open-file-menu", value });
+    if (value) window.setTimeout(() => document.querySelector('.file-action-menu [role="menuitem"]')?.focus(), 0);
+    return;
   }
   if (action === "close-file-overlays") return closeOverlay("ui/close-file-overlays");
-  if (action === "open-reject-confirm") return store.dispatch({ type: "ui/open-reject-confirm", value: target.dataset.fileId });
+  if (action === "open-reject-confirm") {
+    store.dispatch({ type: "ui/open-reject-confirm", value: target.dataset.fileId });
+    return focusFirstOverlayControl();
+  }
   if (action === "confirm-decline") {
     store.dispatch({ type: "files/decline", fileId: target.dataset.fileId, ...common });
     store.dispatch({ type: "ui/close-file-overlays" });
-    return showToast(localized(state, "已拒绝接收该私密文件", "Private file declined"));
+    return showToast(translate(state.ui.language, "declinedToast"));
   }
   if (action === "file-menu-action") {
     store.dispatch({ type: "ui/close-file-overlays" });
@@ -295,7 +320,7 @@ function resolveHiddenBatchSelection(isVisible) {
   if (!state.ui.batchMode || !state.ui.selectedFileIds.length) return;
   const hidden = state.files.some((file) => state.ui.selectedFileIds.includes(file.id) && !isVisible(file));
   if (!hidden) return;
-  const preserve = window.confirm(localized(state, "切换后部分已选文件会隐藏。确定保留隐藏选择；取消则清空选择。", "Some selected files will be hidden. OK keeps hidden selections; Cancel clears them."));
+  const preserve = window.confirm(translate(state.ui.language, "hiddenSelectionPrompt"));
   if (!preserve) store.dispatch({ type: "ui/set-file-selection", value: [] });
 }
 
@@ -450,6 +475,27 @@ function formatCompactBytes(bytes) {
 }
 
 function closeOverlay(type) {
+  const action = lastOverlayTrigger?.dataset.action;
+  const fileId = lastOverlayTrigger?.dataset.fileId;
   store.dispatch({ type });
-  window.setTimeout(() => lastOverlayTrigger?.focus(), 0);
+  window.setTimeout(() => {
+    const selector = fileId ? `[data-action="${action}"][data-file-id="${fileId}"]` : action ? `[data-action="${action}"]` : null;
+    (selector ? document.querySelector(selector) : null)?.focus();
+  }, 0);
+}
+
+function focusFirstOverlayControl() {
+  window.setTimeout(() => document.querySelector('#auxiliary-root [role="dialog"] button, #auxiliary-root [role="alertdialog"] button')?.focus(), 0);
+}
+
+function trapOverlayFocus(event) {
+  if (event.key !== "Tab") return;
+  const overlay = document.querySelector('#auxiliary-root [role="dialog"], #auxiliary-root [role="alertdialog"], #prototype-overlay-root [role="dialog"]');
+  if (!overlay) return;
+  const controls = [...overlay.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')];
+  if (!controls.length) return;
+  const first = controls[0];
+  const last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }

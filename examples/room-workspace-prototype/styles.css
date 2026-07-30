@@ -2686,7 +2686,7 @@ button.member-item.is-active {
 
   .file-cell--owner::before {
     color: var(--color-text-muted);
-    content: "上传者：";
+    content: attr(data-label) ": ";
   }
 
   .mobile-file-actions {

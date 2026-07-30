@@ -325,12 +325,12 @@ function renderTimelineEvent(event, state) {
   const name = file.visibility === "anonymous" ? t(state, "privateFile", { alias: file.alias }) : file.name;
   const labels = state.ui.language === "en" ? {
     upload_started: "started uploading", upload_completed: "uploaded", upload_progress: "is uploading", upload_failed: "upload failed",
-    direct_sent: "sent privately", resent: "sent again from history", download_started: "started receiving", download_completed: "completed transfer",
+    direct_sent: "sent privately", direct_declined: "declined", resent: "sent again from history", download_started: "started receiving", download_completed: "completed transfer",
     recycled: "moved to Recycle Bin", restore_requested: "requested restore", restored: "restored", restore_approved: "approved restore",
     permanently_deleted: "deleted permanently", published_shared: "published to shared files",
   } : {
     upload_started: "开始上传", upload_completed: "完成上传", upload_progress: "正在上传", upload_failed: "上传失败",
-    direct_sent: "定向发送", resent: "从历史文件再次发送", download_started: "开始接收", download_completed: "传输完成",
+    direct_sent: "私密发送", direct_declined: "拒绝接收", resent: "从历史文件再次发送", download_started: "开始接收", download_completed: "传输完成",
     recycled: "移入回收站", restore_requested: "申请恢复", restored: "恢复文件", restore_approved: "批准恢复",
     permanently_deleted: "永久删除", published_shared: "发布到共享目录",
   };
@@ -380,7 +380,7 @@ function renderCommonRow(file, state, permissions, actions) {
   const checkbox = state.ui.batchMode ? `<input class="file-select-checkbox" data-input="file-selection" data-file-id="${escapeHTML(file.id)}" type="checkbox" ${selected ? "checked" : ""} aria-label="${t(state, "selectFile", { name: displayName })}">` : "";
   return `<article class="file-row${anonymous ? " file-row--private-audit" : ""}${selected ? " is-selected" : ""}" role="row" data-file-id="${escapeHTML(file.id)}">
     <div class="file-cell file-cell--name" role="cell">${checkbox}<span class="file-icon file-icon--${escapeHTML(file.kind ?? "document")}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(displayName ?? "")}</strong><small>${escapeHTML(secondary ?? "")}</small><span class="scope-tag mobile-scope-tag scope-tag--${anonymous ? "private" : file.scope}">${t(state, anonymous ? "privateAudit" : file.scope)}</span></div></div>
-    <div class="file-cell file-cell--owner" role="cell">${escapeHTML(ownerLabel)}</div>
+    <div class="file-cell file-cell--owner" role="cell" data-label="${t(state, "uploader")}">${escapeHTML(ownerLabel)}</div>
     <div class="file-cell file-cell--size" role="cell">${formatBytes(file.sizeBytes)}</div>
     <div class="file-cell file-cell--time" role="cell">${formatTimestamp(file.recycledAt ?? file.createdAt, locale)}</div>
     <div class="file-cell file-cell--status" role="cell">${renderStatus(file, locale)}</div>
