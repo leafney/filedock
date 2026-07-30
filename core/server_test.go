@@ -13,9 +13,12 @@ import (
 	"github.com/leafney/filedock/config"
 	"github.com/leafney/filedock/internal/api"
 	"github.com/leafney/filedock/internal/biz"
+	"github.com/leafney/filedock/internal/dal"
 	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/i18n"
 	"github.com/leafney/filedock/pkg/zlogx"
+	"github.com/libtnb/sqlite"
+	"gorm.io/gorm"
 )
 
 func newTestServer(t *testing.T) *Server {
@@ -39,7 +42,32 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("NewCatalog() error = %v", err)
 	}
-	server, err := NewServer(config.Default(), log, catalog, versionAPI)
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open test sqlite: %v", err)
+	}
+	if err := dal.AutoMigrate(db); err != nil {
+		t.Fatalf("migrate test sqlite: %v", err)
+	}
+	nicknameSvc, err := service.NewNicknameSvc(db)
+	if err != nil {
+		t.Fatalf("NewNicknameSvc() error = %v", err)
+	}
+	cfg := config.Default()
+	cfg.App.DataDir = t.TempDir()
+	sessionSvc, err := service.NewSessionSvc(db, cfg.App.DataDir, nicknameSvc)
+	if err != nil {
+		t.Fatalf("NewSessionSvc() error = %v", err)
+	}
+	sessionBiz, err := biz.NewSessionBiz(sessionSvc, nicknameSvc)
+	if err != nil {
+		t.Fatalf("NewSessionBiz() error = %v", err)
+	}
+	sessionAPI, err := api.NewSessionAPI(sessionBiz, cfg)
+	if err != nil {
+		t.Fatalf("NewSessionAPI() error = %v", err)
+	}
+	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc)
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
@@ -164,6 +192,62 @@ func TestServerLocalizesAndSanitizesErrors(t *testing.T) {
 				t.Fatalf("response leaked internal error: %q", body.Message)
 			}
 		})
+	}
+}
+
+func TestSessionRoutesUseCookieIdentity(t *testing.T) {
+	server := newTestServer(t)
+	createRequest := httptest.NewRequest(fiber.MethodPost, "/api/v1/sessions", strings.NewReader(`{"displayName":"张飞"}`))
+	createRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	createResponse, err := server.App().Test(createRequest)
+	if err != nil {
+		t.Fatalf("create session request error = %v", err)
+	}
+	defer createResponse.Body.Close()
+	if createResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("create session status = %d, want 200", createResponse.StatusCode)
+	}
+	cookie := createResponse.Header.Get(fiber.HeaderSetCookie)
+	if !strings.HasPrefix(cookie, "session_token=") || !strings.Contains(cookie, "HttpOnly") || !strings.Contains(cookie, "SameSite=Lax") {
+		t.Fatalf("session cookie = %q, missing required attributes", cookie)
+	}
+	var created struct {
+		Data struct {
+			UserID      string `json:"userId"`
+			DisplayName string `json:"displayName"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(createResponse.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create session response: %v", err)
+	}
+	if created.Data.UserID == "" || created.Data.DisplayName != "张飞" {
+		t.Fatalf("created session data = %+v", created.Data)
+	}
+
+	currentRequest := httptest.NewRequest(fiber.MethodGet, "/api/v1/sessions/me", nil)
+	currentRequest.Header.Set(fiber.HeaderCookie, strings.Split(cookie, ";")[0])
+	currentResponse, err := server.App().Test(currentRequest)
+	if err != nil {
+		t.Fatalf("current session request error = %v", err)
+	}
+	defer currentResponse.Body.Close()
+	if currentResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("current session status = %d, want 200", currentResponse.StatusCode)
+	}
+
+	resetRequest := httptest.NewRequest(fiber.MethodDelete, "/api/v1/sessions/me", nil)
+	resetRequest.Header.Set(fiber.HeaderCookie, strings.Split(cookie, ";")[0])
+	resetResponse, err := server.App().Test(resetRequest)
+	if err != nil {
+		t.Fatalf("reset session request error = %v", err)
+	}
+	defer resetResponse.Body.Close()
+	if resetResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("reset session status = %d, want 200", resetResponse.StatusCode)
+	}
+	resetCookie := resetResponse.Header.Get(fiber.HeaderSetCookie)
+	if !strings.HasPrefix(resetCookie, "session_token=;") {
+		t.Fatalf("reset cookie = %q, want empty session cookie", resetCookie)
 	}
 }
 

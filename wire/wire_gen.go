@@ -35,7 +35,23 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	server, err := provideServer(config, zLogSvc, catalog, versionAPI)
+	nicknameSvc, err := provideNicknameSvc(gormDBSvc)
+	if err != nil {
+		return nil, err
+	}
+	sessionSvc, err := provideSessionSvc(config, gormDBSvc, nicknameSvc)
+	if err != nil {
+		return nil, err
+	}
+	sessionBiz, err := provideSessionBiz(sessionSvc, nicknameSvc)
+	if err != nil {
+		return nil, err
+	}
+	sessionAPI, err := provideSessionAPI(sessionBiz, config)
+	if err != nil {
+		return nil, err
+	}
+	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc)
 	if err != nil {
 		return nil, err
 	}

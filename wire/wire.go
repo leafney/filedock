@@ -17,6 +17,10 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		provideVersionSvc,
 		provideVersionBiz,
 		provideVersionAPI,
+		provideNicknameSvc,
+		provideSessionSvc,
+		provideSessionBiz,
+		provideSessionAPI,
 		provideServer,
 		provideApp,
 	)

@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/leafney/filedock/config"
 	"github.com/leafney/filedock/internal/api"
+	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/errc"
 	"github.com/leafney/filedock/pkg/i18n"
 	"github.com/leafney/filedock/pkg/response"
@@ -27,7 +28,7 @@ type Server struct {
 	app *fiber.App
 }
 
-func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI) (*Server, error) {
+func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("server config is required")
 	}
@@ -40,6 +41,15 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	if versionAPI == nil {
 		return nil, fmt.Errorf("version api is required")
 	}
+	if sessionAPI == nil {
+		return nil, fmt.Errorf("session api is required")
+	}
+	if sessionSvc == nil {
+		return nil, fmt.Errorf("session service is required")
+	}
+	if (cfg.HTTP.CertFile == "") != (cfg.HTTP.KeyFile == "") {
+		return nil, fmt.Errorf("tls certificate and key must be configured together")
+	}
 
 	requestLogger, err := NewRequestLogger(log)
 	if err != nil {
@@ -51,7 +61,8 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	app.Use(recover.New())
 	app.Use(requestLogger.Handle)
 	app.Use(localizationMiddleware(catalog))
-	registerRoutes(app, versionAPI)
+	app.Use(sessionMiddleware(sessionSvc, cfg.HTTP.CertFile != "" && cfg.HTTP.KeyFile != ""))
+	registerRoutes(app, versionAPI, sessionAPI)
 	if err := registerStatic(app); err != nil {
 		return nil, fmt.Errorf("register static resources: %w", err)
 	}
@@ -61,6 +72,9 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 func (s *Server) Run() error {
 	if s == nil {
 		return fmt.Errorf("server is nil")
+	}
+	if s.cfg.HTTP.CertFile != "" && s.cfg.HTTP.KeyFile != "" {
+		return s.app.ListenTLS(s.cfg.HTTP.Addr, s.cfg.HTTP.CertFile, s.cfg.HTTP.KeyFile)
 	}
 	return s.app.Listen(s.cfg.HTTP.Addr)
 }

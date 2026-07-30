@@ -30,7 +30,13 @@ type AppConfig struct {
 }
 
 type HTTPConfig struct {
-	Addr string `toml:"addr"`
+	Addr     string `toml:"addr"`
+	CertFile string `toml:"cert_file"`
+	KeyFile  string `toml:"key_file"`
+}
+
+func (c HTTPConfig) TLS() bool {
+	return strings.TrimSpace(c.CertFile) != "" || strings.TrimSpace(c.KeyFile) != ""
 }
 
 type LogConfig struct {

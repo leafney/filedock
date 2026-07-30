@@ -140,8 +140,33 @@ func provideVersionAPI(versionBiz *biz.VersionBiz) (*api.VersionAPI, error) {
 	return api.NewVersionAPI(versionBiz)
 }
 
-func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI) (*core.Server, error) {
-	return core.NewServer(cfg, log, catalog, versionAPI)
+func provideNicknameSvc(db *gormx.GormDBSvc) (*service.NicknameSvc, error) {
+	if db == nil {
+		return nil, fmt.Errorf("nickname database is required")
+	}
+	return service.NewNicknameSvc(db.DB)
+}
+
+func provideSessionSvc(cfg *config.Config, db *gormx.GormDBSvc, nickname *service.NicknameSvc) (*service.SessionSvc, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("session config is required")
+	}
+	if db == nil {
+		return nil, fmt.Errorf("session database is required")
+	}
+	return service.NewSessionSvc(db.DB, cfg.App.DataDir, nickname)
+}
+
+func provideSessionBiz(session *service.SessionSvc, nickname *service.NicknameSvc) (*biz.SessionBiz, error) {
+	return biz.NewSessionBiz(session, nickname)
+}
+
+func provideSessionAPI(sessionBiz *biz.SessionBiz, cfg *config.Config) (*api.SessionAPI, error) {
+	return api.NewSessionAPI(sessionBiz, cfg)
+}
+
+func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc) (*core.Server, error) {
+	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc)
 }
 
 func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *core.Server) (*core.App, error) {

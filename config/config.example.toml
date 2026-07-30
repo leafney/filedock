@@ -5,6 +5,8 @@ data_dir = "data"
 
 [http]
 addr = ":8195"
+cert_file = ""
+key_file = ""
 
 [log]
 enable = true
