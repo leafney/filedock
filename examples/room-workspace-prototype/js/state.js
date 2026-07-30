@@ -100,10 +100,20 @@ export function reduceState(state, action) {
             existingFileId: action.existingFileId ?? null,
           },
           selectedRecipientIds: action.recipientIds ?? [],
+          uploadReturnTab: action.returnTab ?? state.ui.activeFileTab,
         },
       };
     case "ui/close-composer":
-      return { ...state, ui: { ...state.ui, composer: null, selectedRecipientIds: [] } };
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          activeFileTab: state.ui.uploadReturnTab ?? state.ui.activeFileTab,
+          composer: null,
+          selectedRecipientIds: [],
+          uploadReturnTab: null,
+        },
+      };
     case "composer/add-files":
       return {
         ...state,

@@ -1,4 +1,5 @@
 import { canRestoreFile } from "./capacity.js";
+import { getDefaultComposerMode } from "./file-list.js";
 import { renderModel } from "./render.js";
 import { createStore } from "./state.js";
 
@@ -68,6 +69,7 @@ document.addEventListener("keydown", (event) => {
 
 document.addEventListener("change", (event) => {
   if (event.target.matches('[data-input="file-scope"]')) store.dispatch({ type: "ui/set-file-scope", value: event.target.value });
+  if (event.target.matches('[data-input="file-identity-filter"]')) store.dispatch({ type: "ui/set-file-identity-filter", value: event.target.value });
   if (event.target.matches('[data-input="file-sort"]')) store.dispatch({ type: "ui/set-file-sort", value: event.target.value });
   if (event.target.matches('[data-input="demo-role"]')) store.dispatch({ type: "ui/set-current-user", value: event.target.value });
   if (event.target.matches('[data-input="demo-language"]')) {
@@ -119,8 +121,10 @@ function handleAction(action, target) {
   const state = store.getState();
   const now = new Date().toISOString();
   const common = { actorId: state.ui.currentUserId, occurredAt: now, eventId: uniqueId("event") };
-  if (action === "open-upload") return openFilePicker("shared");
+  if (action === "open-upload") return openFilePicker(getDefaultComposerMode(state.ui.fileScopeView));
   if (action === "open-direct") return openFilePicker("direct");
+  if (action === "set-file-scope-view") return store.dispatch({ type: "ui/set-file-scope-view", value: target.dataset.scope });
+  if (action === "toggle-file-group") return store.dispatch({ type: "ui/toggle-file-group", value: target.dataset.scope });
   if (action === "add-files") return fileInput.click();
   if (action === "open-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: "choose" });
   if (action === "choose-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: target.dataset.fileId });
@@ -243,7 +247,8 @@ function addBrowserFiles(fileList) {
   }));
   if (!files.length) return;
   if (!store.getState().ui.composer || store.getState().ui.composer.existingFileId) {
-    store.dispatch({ type: "ui/open-composer", mode: "shared", files });
+    const state = store.getState();
+    store.dispatch({ type: "ui/open-composer", mode: getDefaultComposerMode(state.ui.fileScopeView), files, returnTab: state.ui.activeFileTab });
   } else {
     store.dispatch({ type: "composer/add-files", files });
   }

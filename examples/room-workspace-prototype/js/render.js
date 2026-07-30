@@ -1,4 +1,5 @@
 import { calculateCapacity } from "./capacity.js";
+import { deriveFileGroups } from "./file-list.js";
 import { translate } from "./i18n.js";
 import { getFilePermissions, projectEventsForUser, projectFilesForUser } from "./permissions.js";
 
@@ -193,47 +194,78 @@ function renderTabs(state, user) {
 function renderFileContent(state, user) {
   const container = document.querySelector(".file-content");
   if (!container) return;
+  let content;
   if (state.ui.activeFileTab === "timeline") {
-    container.innerHTML = renderTimeline(state, user);
-    return;
+    content = renderTimeline(state, user);
+  } else if (state.ui.activeFileTab === "recycle") {
+    content = renderRecycleBin(state, user);
+  } else {
+    content = renderFileList(state, user);
   }
-  if (state.ui.activeFileTab === "recycle") {
-    container.innerHTML = renderRecycleBin(state, user);
-    return;
-  }
-  container.innerHTML = renderFileList(state, user);
+  container.innerHTML = `<div class="workspace-drop-frame">${content}<div class="workspace-drop-overlay" aria-hidden="true"><strong>${t(state, "dropTitle")}</strong><span>${t(state, "dropText")}</span></div></div>`;
 }
 
 function renderFileList(state, user) {
-  const visibleFiles = state.ui.scenario === "empty-files" ? [] : filterAndSort(projectFilesForUser(state.files, user, state.room)
-    .filter((file) => file.status === "available" || file.status === "uploading"), state, user);
+  const projected = state.ui.scenario === "empty-files" ? [] : projectFilesForUser(state.files, user, state.room)
+    .filter((file) => file.status === "available" || file.status === "uploading");
+  const groups = deriveFileGroups({
+    files: projected,
+    search: state.ui.fileSearch,
+    scopeView: state.ui.fileScopeView,
+    identityFilter: state.ui.fileIdentityFilter,
+    sort: state.ui.fileSort,
+    userId: user.id,
+  });
   return `
     <div class="file-filter-bar">
+      <div class="file-scope-switch" role="radiogroup" aria-label="${t(state, "fileScope")}">
+        ${["all", "shared", "direct"].map((scope) => `<button class="${state.ui.fileScopeView === scope ? "is-active" : ""}" data-action="set-file-scope-view" data-scope="${scope}" type="button" role="radio" aria-checked="${state.ui.fileScopeView === scope}">${t(state, scope === "all" ? "all" : scope)}</button>`).join("")}
+      </div>
       <label class="search-box file-search">
         ${searchIcon()}<span class="visually-hidden">${t(state, "searchFiles")}</span>
         <input data-input="file-search" type="search" placeholder="${t(state, "searchFiles")}" value="${escapeHTML(state.ui.fileSearch)}" />
       </label>
-      <label class="select-shell"><span class="visually-hidden">${t(state, "allFiles")}</span>
-        <select data-input="file-scope">
-          ${option("all", t(state, "allFiles"), state.ui.fileScopeFilter)}${option("shared", t(state, "sharedFiles"), state.ui.fileScopeFilter)}
-          ${option("direct", t(state, "directFiles"), state.ui.fileScopeFilter)}${option("mine", t(state, "uploadedByMe"), state.ui.fileScopeFilter)}
-          ${option("sent-to-me", t(state, "sentToMe"), state.ui.fileScopeFilter)}
+      <label class="select-shell identity-filter"><span class="visually-hidden">${t(state, "identityFilter")}</span>
+        <select data-input="file-identity-filter">
+          ${option("all", t(state, "allMembers"), state.ui.fileIdentityFilter)}${option("mine", t(state, "uploadedByMe"), state.ui.fileIdentityFilter)}
+          ${option("sent-to-me", t(state, "sentToMe"), state.ui.fileIdentityFilter)}
         </select>${chevronIcon()}</label>
       <label class="select-shell"><span class="visually-hidden">${t(state, "newest")}</span>
         <select data-input="file-sort">
           ${option("newest", t(state, "newest"), state.ui.fileSort)}${option("oldest", t(state, "oldest"), state.ui.fileSort)}
           ${option("size-asc", t(state, "sizeAsc"), state.ui.fileSort)}${option("size-desc", t(state, "sizeDesc"), state.ui.fileSort)}
         </select>${chevronIcon()}</label>
-      <span class="file-result-count">${translate(state.ui.language, "filesCount", { count: visibleFiles.length })}</span>
+      <button class="button batch-entry" data-action="enter-batch-mode" type="button">${t(state, "batchSelect")}</button>
     </div>
-    <div class="drop-zone" data-drop-zone>
-      <div class="file-table" role="table" aria-label="当前房间文件 / Current room files">
-        ${renderTableHeader(state)}
-        ${visibleFiles.length ? visibleFiles.map((file) => renderFileRow(file, state, user)).join("") : renderEmptyRow(t(state, "noMatchingFiles"))}
-      </div>
-      <div class="drop-overlay" aria-hidden="true"><strong>${t(state, "dropTitle")}</strong><span>${t(state, "dropText")}</span></div>
-    </div>
-    <div class="file-list-footer"><span>${t(state, "shownFiles", { count: visibleFiles.length })}</span><span>${t(state, "dropHint")}</span></div>`;
+    <button class="file-drop-strip" data-action="open-upload" type="button">${uploadIcon()}<span>${t(state, "dropStrip")}</span></button>
+    <div class="file-groups">${renderFileGroups(groups, state, user)}</div>`;
+}
+
+function renderFileGroups(groups, state, user) {
+  if (state.ui.fileScopeView !== "all") {
+    const group = groups.orderedGroups[0];
+    return `<section class="file-group file-group--single" aria-label="${t(state, group.scope)}">
+      <div class="file-group__single-title"><strong>${t(state, group.scope)}</strong><span>${group.count}</span></div>
+      ${renderFileGroupTable(group.files, state, user)}
+    </section>`;
+  }
+  return groups.orderedGroups.map((group) => {
+    const collapsed = state.ui.collapsedFileGroups[group.scope];
+    return `<section class="file-group file-group--${group.scope}">
+      <button class="file-group__heading" data-action="toggle-file-group" data-scope="${group.scope}" type="button" aria-expanded="${!collapsed}">
+        <span class="file-group__icon" aria-hidden="true">${group.scope === "shared" ? sharedIcon() : lockIcon()}</span>
+        <strong>${t(state, group.scope)}</strong><span class="file-group__count">${group.count}</span><span class="file-group__chevron" aria-hidden="true">⌄</span>
+      </button>
+      ${collapsed ? "" : renderFileGroupTable(group.files, state, user)}
+    </section>`;
+  }).join("");
+}
+
+function renderFileGroupTable(files, state, user) {
+  return `<div class="file-table" role="table" aria-label="${t(state, "currentRoomFiles")}">
+    ${renderTableHeader(state)}
+    ${files.length ? files.map((file) => renderFileRow(file, state, user)).join("") : renderEmptyRow(t(state, "noMatchingFiles"))}
+  </div>`;
 }
 
 function renderTimeline(state, user) {
@@ -304,8 +336,7 @@ function renderCommonRow(file, state, permissions, actions) {
   const secondary = anonymous ? t(state, "privateAudit") : file.scope === "direct" ? translate(locale, "privateFile", { alias: file.alias }) : file.mimeLabel;
   const ownerLabel = anonymous ? `${uploader?.displayName ?? "-"} → ${recipients || "-"}` : uploader?.displayName ?? "-";
   return `<article class="file-row${anonymous ? " file-row--private-audit" : ""}" role="row" data-file-id="${escapeHTML(file.id)}">
-    <div class="file-cell file-cell--name" role="cell"><span class="file-icon file-icon--${escapeHTML(file.kind ?? "document")}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(displayName ?? "")}</strong><small>${escapeHTML(secondary ?? "")}</small></div></div>
-    <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--${anonymous ? "private" : file.scope}">${t(state, anonymous ? "privateAudit" : file.scope)}</span></div>
+    <div class="file-cell file-cell--name" role="cell"><span class="file-icon file-icon--${escapeHTML(file.kind ?? "document")}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(displayName ?? "")}</strong><small>${escapeHTML(secondary ?? "")}</small><span class="scope-tag mobile-scope-tag scope-tag--${anonymous ? "private" : file.scope}">${t(state, anonymous ? "privateAudit" : file.scope)}</span></div></div>
     <div class="file-cell file-cell--owner" role="cell">${escapeHTML(ownerLabel)}</div>
     <div class="file-cell file-cell--size" role="cell">${formatBytes(file.sizeBytes)}</div>
     <div class="file-cell file-cell--time" role="cell">${formatTimestamp(file.recycledAt ?? file.createdAt, locale)}</div>
@@ -377,27 +408,8 @@ function renderTasks(state) {
   bar.innerHTML = `<div class="transfer-bar__summary"><span class="transfer-indicator${active.length ? "" : " is-idle"}" aria-hidden="true"></span><strong>${title}</strong><span>${shown.map((task) => `${t(state, task.type === "upload" ? "upload" : "receive")} ${task.progress}%`).join(" · ")}</span></div><div class="transfer-progress" role="progressbar" aria-label="${t(state, "tasks")}" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><button class="button button--text" data-action="show-tasks" type="button">${t(state, "tasks")}</button>`;
 }
 
-function filterAndSort(files, state, user) {
-  const query = state.ui.fileSearch.trim().toLocaleLowerCase();
-  return files.filter((file) => {
-    const searchable = file.visibility === "anonymous" ? file.alias : `${file.name ?? ""} ${file.alias ?? ""}`;
-    if (query && !searchable.toLocaleLowerCase().includes(query)) return false;
-    const scope = state.ui.fileScopeFilter;
-    if (scope === "mine") return file.uploaderId === user.id;
-    if (scope === "sent-to-me") return file.recipientIds?.includes(user.id);
-    return scope === "all" || file.scope === scope;
-  }).sort((left, right) => sortFiles(left, right, state.ui.fileSort));
-}
-
-function sortFiles(left, right, sort) {
-  if (sort === "oldest") return Date.parse(left.createdAt) - Date.parse(right.createdAt);
-  if (sort === "size-asc") return left.sizeBytes - right.sizeBytes;
-  if (sort === "size-desc") return right.sizeBytes - left.sizeBytes;
-  return Date.parse(right.createdAt) - Date.parse(left.createdAt);
-}
-
 function renderTableHeader(state) {
-  const labels = state.ui.language === "en" ? ["File", "Scope", "Uploader", "Size", "Time", "Status", "Actions"] : ["文件名", "范围", "上传者", "大小", "时间", "状态", "操作"];
+  const labels = state.ui.language === "en" ? ["File", "Uploader", "Size", "Time", "Status", "Actions"] : ["文件名", "上传者", "大小", "时间", "状态", "操作"];
   return `<div class="file-table__header" role="row">${labels.map((label) => `<span role="columnheader">${label}</span>`).join("")}</div>`;
 }
 function renderEmptyRow(text) { return `<div class="table-empty">${escapeHTML(text)}</div>`; }
@@ -405,6 +417,9 @@ function renderEmptyState(title, text) { return `<div class="content-placeholder
 function option(value, label, selected) { return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`; }
 function searchIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`; }
 function chevronIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`; }
+function uploadIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>`; }
+function sharedIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6l2 2h8v10H4z"/></svg>`; }
+function lockIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`; }
 function isConversation(message, firstId, secondId) { return (message.fromId === firstId && message.toId === secondId) || (message.fromId === secondId && message.toId === firstId); }
 function presenceLabel(value, locale = "zh-CN") { return translate(locale, value); }
 function messageSummary(message, state) {
