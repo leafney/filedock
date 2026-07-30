@@ -13,7 +13,7 @@ const queryClient = new QueryClient();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ConfigProvider theme={{ token: { colorPrimary: "#0f766e", borderRadius: 10, colorLink: "#0f766e" } }}>
           <App />
         </ConfigProvider>
