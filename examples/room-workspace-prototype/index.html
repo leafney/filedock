@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="FileDock 房间工作区独立交互原型，不连接生产服务。"
+    />
+    <title>FileDock · 房间工作区原型</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230f766e'/%3E%3Cpath d='M18 17h29v9H28v8h16v9H28v12H18z' fill='white'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="prototype-notice" role="note">
+      <span class="prototype-notice__badge">仅原型</span>
+      <span>静态桌面布局骨架 · Prototype desktop shell</span>
+    </div>
+
+    <div class="room-shell">
+      <header class="room-header" aria-label="房间信息 / Room information">
+        <div class="room-header__leading">
+          <a class="icon-button" href="#" aria-label="返回首页 / Back to home">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </a>
+          <div class="brand-mark" aria-hidden="true">FD</div>
+          <div class="room-identity">
+            <div class="room-identity__line">
+              <strong>房间 1234</strong>
+              <span class="status-pill">进行中</span>
+            </div>
+            <span>设计协作间</span>
+          </div>
+        </div>
+
+        <dl class="room-header__summary">
+          <div>
+            <dt>成员</dt>
+            <dd>8 人</dd>
+          </div>
+          <div>
+            <dt>剩余时间</dt>
+            <dd>10:24:36</dd>
+          </div>
+          <div class="capacity-summary">
+            <dt>房间容量</dt>
+            <dd>620 MB / 2 GB</dd>
+            <span class="capacity-track" aria-hidden="true"><span></span></span>
+          </div>
+        </dl>
+
+        <nav class="room-header__actions" aria-label="房间操作 / Room actions">
+          <button class="icon-button" type="button" aria-label="显示二维码 / Show QR code">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2" />
+            </svg>
+          </button>
+          <button class="icon-button notification-button" type="button" aria-label="加入申请 / Join requests">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+            </svg>
+            <span class="notification-badge">2</span>
+          </button>
+          <button class="icon-button" type="button" aria-label="更多操作 / More actions">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="5" cy="12" r="1" />
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="12" r="1" />
+            </svg>
+          </button>
+        </nav>
+      </header>
+
+      <main class="room-workspace">
+        <aside class="member-panel" aria-labelledby="member-panel-title">
+          <div class="panel-heading member-panel__heading">
+            <div>
+              <p class="eyebrow">会话</p>
+              <h1 id="member-panel-title">房间成员</h1>
+            </div>
+            <span class="count-badge">8</span>
+          </div>
+
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-4-4" />
+            </svg>
+            <span class="visually-hidden">搜索成员 / Search members</span>
+            <input type="search" placeholder="搜索成员" disabled />
+          </label>
+
+          <div class="member-list" role="list" aria-label="成员列表 / Member list">
+            <article class="member-item is-active" role="listitem">
+              <div class="avatar avatar--teal">林</div>
+              <div class="member-item__body">
+                <div><strong>林小满</strong><span>14:32</span></div>
+                <p>文件已经收到，谢谢。</p>
+              </div>
+              <span class="presence presence--online" title="在线"></span>
+            </article>
+            <article class="member-item" role="listitem">
+              <div class="avatar avatar--blue">周</div>
+              <div class="member-item__body">
+                <div><strong>周远</strong><span>13:58</span></div>
+                <p>发来一个私密文件</p>
+              </div>
+              <span class="unread-badge">3</span>
+              <span class="presence presence--online" title="在线"></span>
+            </article>
+            <article class="member-item" role="listitem">
+              <div class="avatar avatar--amber">苏</div>
+              <div class="member-item__body">
+                <div><strong>苏禾</strong><span>昨天</span></div>
+                <p>暂时离开</p>
+              </div>
+              <span class="presence presence--away" title="暂离"></span>
+            </article>
+            <article class="member-item" role="listitem">
+              <div class="avatar avatar--slate">陈</div>
+              <div class="member-item__body">
+                <div><strong>陈墨</strong><span>周二</span></div>
+                <p>暂无消息</p>
+              </div>
+              <span class="presence presence--offline" title="离线"></span>
+            </article>
+          </div>
+        </aside>
+
+        <section class="file-panel" aria-labelledby="file-panel-title">
+          <div class="file-toolbar">
+            <div>
+              <p class="eyebrow">文件工作区</p>
+              <h2 id="file-panel-title">房间文件</h2>
+            </div>
+            <div class="file-toolbar__actions" aria-label="文件操作 / File actions">
+              <button class="button button--primary" type="button" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+                </svg>
+                上传共享文件
+              </button>
+              <button class="button" type="button" disabled>定向发送</button>
+              <button class="button button--text" type="button" disabled>选择已有文件</button>
+            </div>
+          </div>
+
+          <div class="file-tabs" role="tablist" aria-label="文件视图 / File views">
+            <button class="file-tab is-active" type="button" role="tab" aria-selected="true">文件列表</button>
+            <button class="file-tab" type="button" role="tab" aria-selected="false">文件动态</button>
+            <button class="file-tab" type="button" role="tab" aria-selected="false">
+              回收站 <span class="tab-count">4</span>
+            </button>
+          </div>
+
+          <div class="file-content" role="tabpanel">
+            <div class="content-placeholder">
+              <svg viewBox="0 0 48 48" aria-hidden="true">
+                <path d="M9 8h20l10 10v22H9z" />
+                <path d="M29 8v10h10M16 27h16M16 33h11" />
+              </svg>
+              <h3>文件列表区域</h3>
+              <p>下一阶段补充桌面表格、筛选、排序与文件状态视觉。</p>
+            </div>
+          </div>
+        </section>
+
+        <aside class="chat-panel" aria-labelledby="chat-panel-title">
+          <div class="chat-header">
+            <div class="avatar avatar--teal">林</div>
+            <div>
+              <h2 id="chat-panel-title">林小满</h2>
+              <p><span class="presence presence--online"></span> 在线</p>
+            </div>
+            <button class="icon-button" type="button" aria-label="聊天详情 / Chat details">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="5" cy="12" r="1" />
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="19" cy="12" r="1" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="chat-content" aria-label="聊天消息 / Chat messages">
+            <div class="chat-placeholder">
+              <span class="chat-date">今天 14:20</span>
+              <div class="message-bubble message-bubble--incoming">这里将展示一对一聊天和文件卡片。</div>
+              <div class="message-bubble message-bubble--outgoing">共享文件引用也会出现在这里。</div>
+              <span class="read-receipt">已读</span>
+            </div>
+          </div>
+
+          <div class="chat-composer" aria-label="消息输入 / Message composer">
+            <div class="chat-composer__tools">
+              <button class="icon-button" type="button" aria-label="表情 / Emoji" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" />
+                </svg>
+              </button>
+              <button class="icon-button" type="button" aria-label="发送文件 / Send file" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m20 11-8 8a6 6 0 0 1-8-8l9-9a4 4 0 0 1 6 6l-9 9a2 2 0 0 1-3-3l8-8" />
+                </svg>
+              </button>
+            </div>
+            <textarea aria-label="输入消息 / Enter message" placeholder="输入消息" disabled></textarea>
+            <button class="button button--primary" type="button" disabled>发送</button>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="transfer-bar" aria-label="传输任务 / Transfer tasks">
+        <div class="transfer-bar__summary">
+          <span class="transfer-indicator" aria-hidden="true"></span>
+          <strong>2 个传输任务</strong>
+          <span>上传 46% · 接收 72%</span>
+        </div>
+        <div class="transfer-progress" aria-hidden="true"><span></span></div>
+        <button class="button button--text" type="button" disabled>查看任务</button>
+      </footer>
+    </div>
+
+    <noscript>此原型后续交互阶段需要启用 JavaScript。JavaScript is required for later prototype interactions.</noscript>
+  </body>
+</html>
