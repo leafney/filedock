@@ -27,7 +27,7 @@ func (b *SessionBiz) Create(request dto.CreateSessionRequest) (service.SessionRe
 }
 
 func (b *SessionBiz) View(principal service.Principal) dto.SessionDTO {
-	return dto.SessionDTO{UserID: principal.UserID, DisplayName: principal.DisplayName, SessionExpiresAt: principal.SessionExpiresAt}
+	return dto.SessionDTO{UserID: principal.UserID, DisplayName: principal.DisplayName, CreatedAt: principal.CreatedAt, SessionExpiresAt: principal.SessionExpiresAt}
 }
 
 func (b *SessionBiz) UpdateName(userID string, request dto.UpdateSessionRequest) (service.Principal, error) {

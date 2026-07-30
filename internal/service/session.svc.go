@@ -36,6 +36,7 @@ type Principal struct {
 	UserID           string
 	SessionID        string
 	DisplayName      string
+	CreatedAt        int64
 	SessionExpiresAt int64
 	RefreshedToken   string
 }
@@ -201,7 +202,7 @@ func (s *SessionSvc) Create(displayName, deviceHint string) (SessionResult, erro
 	}); err != nil {
 		return SessionResult{}, err
 	}
-	return SessionResult{Principal: Principal{UserID: userID, SessionID: sessionID, DisplayName: displayName, SessionExpiresAt: expiresAt.Unix()}, Token: token}, nil
+	return SessionResult{Principal: Principal{UserID: userID, SessionID: sessionID, DisplayName: displayName, CreatedAt: now.Unix(), SessionExpiresAt: expiresAt.Unix()}, Token: token}, nil
 }
 
 func (s *SessionSvc) Authenticate(token string) (Principal, error) {
@@ -248,7 +249,7 @@ func (s *SessionSvc) Authenticate(token string) (Principal, error) {
 	if user.Status != model.UserStatusActive || user.IdentityExpiresAt <= now.Unix() {
 		return Principal{}, errx.New(errc.ErrAuthExpired, nil)
 	}
-	principal := Principal{UserID: user.ID, SessionID: session.ID, DisplayName: user.DisplayName, SessionExpiresAt: session.ExpiresAt}
+	principal := Principal{UserID: user.ID, SessionID: session.ID, DisplayName: user.DisplayName, CreatedAt: user.CreatedAt, SessionExpiresAt: session.ExpiresAt}
 	if time.Until(time.Unix(session.ExpiresAt, 0)) <= SessionRenewWindow {
 		if err := s.renew(&session, &principal, now); err != nil {
 			return Principal{}, err
@@ -320,7 +321,7 @@ func (s *SessionSvc) UpdateName(userID, displayName string) (Principal, error) {
 	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
 		return Principal{}, err
 	}
-	return Principal{UserID: user.ID, DisplayName: user.DisplayName, SessionExpiresAt: user.IdentityExpiresAt}, nil
+	return Principal{UserID: user.ID, DisplayName: user.DisplayName, CreatedAt: user.CreatedAt, SessionExpiresAt: user.IdentityExpiresAt}, nil
 }
 
 func (s *SessionSvc) Reset(userID string) error {

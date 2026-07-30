@@ -12,6 +12,7 @@ type UpdateSessionRequest struct {
 type SessionDTO struct {
 	UserID           string `json:"userId"`
 	DisplayName      string `json:"displayName"`
+	CreatedAt        int64  `json:"createdAt"`
 	SessionExpiresAt int64  `json:"sessionExpiresAt"`
 }
 

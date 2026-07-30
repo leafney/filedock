@@ -1,6 +1,7 @@
 export interface Session {
   userId: string;
   displayName: string;
+  createdAt: number;
   sessionExpiresAt: number;
 }
 

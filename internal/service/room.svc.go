@@ -243,7 +243,7 @@ func (s *RoomSvc) List(userID string) ([]RoomSummary, error) {
 		return nil, fmt.Errorf("room service is nil")
 	}
 	var memberships []model.RoomMember
-	if err := s.db.Where("user_id = ? AND status = ?", userID, model.MemberStatusActive).Find(&memberships).Error; err != nil {
+	if err := s.db.Where("user_id = ? AND status = ?", userID, model.MemberStatusActive).Order("joined_at DESC").Find(&memberships).Error; err != nil {
 		return nil, err
 	}
 	result := make([]RoomSummary, 0, len(memberships))

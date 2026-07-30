@@ -8,7 +8,7 @@ BIN := filedock
 BIN_LIN := $(BIN)_linux_amd64
 BIN_LIN_ARM := $(BIN)_linux_arm64
 
-VERSION ?= $(shell git describe --tags --always 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "dev")
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "dev")
 GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME ?= $(shell date +"%Y-%m-%d %H:%M:%S")
