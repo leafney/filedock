@@ -165,11 +165,11 @@ func provideSessionAPI(sessionBiz *biz.SessionBiz, cfg *config.Config) (*api.Ses
 	return api.NewSessionAPI(sessionBiz, cfg)
 }
 
-func provideRoomSvc(db *gormx.GormDBSvc) (*service.RoomSvc, error) {
+func provideRoomSvc(db *gormx.GormDBSvc, hub *service.StreamHub, presence *service.PresenceSvc) (*service.RoomSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("room database is required")
 	}
-	return service.NewRoomSvc(db.DB)
+	return service.NewRoomSvc(db.DB, hub, presence)
 }
 
 func provideRoomBiz(room *service.RoomSvc) (*biz.RoomBiz, error) {
@@ -180,8 +180,27 @@ func provideRoomAPI(roomBiz *biz.RoomBiz) (*api.RoomAPI, error) {
 	return api.NewRoomAPI(roomBiz)
 }
 
-func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI) (*core.Server, error) {
-	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI)
+func provideStreamHub() *service.StreamHub {
+	return service.NewStreamHub()
+}
+
+func providePresenceSvc(db *gormx.GormDBSvc, hub *service.StreamHub) (*service.PresenceSvc, error) {
+	if db == nil {
+		return nil, fmt.Errorf("presence database is required")
+	}
+	return service.NewPresenceSvc(db.DB, hub)
+}
+
+func provideStreamAPI(hub *service.StreamHub, presence *service.PresenceSvc) (*api.StreamAPI, error) {
+	return api.NewStreamAPI(hub, presence)
+}
+
+func provideRateLimiter() *service.RateLimiter {
+	return service.NewRateLimiter()
+}
+
+func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter) (*core.Server, error) {
+	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, streamAPI, limiter)
 }
 
 func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *core.Server) (*core.App, error) {

@@ -85,15 +85,21 @@ type JoinRequestView struct {
 }
 
 type RoomSvc struct {
-	db  *gorm.DB
-	now func() time.Time
+	db       *gorm.DB
+	now      func() time.Time
+	hub      *StreamHub
+	presence *PresenceSvc
 }
 
-func NewRoomSvc(db *gorm.DB) (*RoomSvc, error) {
+func NewRoomSvc(db *gorm.DB, hub *StreamHub, presences ...*PresenceSvc) (*RoomSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("room database is required")
 	}
-	return &RoomSvc{db: db, now: time.Now}, nil
+	var presence *PresenceSvc
+	if len(presences) > 0 {
+		presence = presences[0]
+	}
+	return &RoomSvc{db: db, now: time.Now, hub: hub, presence: presence}, nil
 }
 
 func (s *RoomSvc) Create(userID, joinMode, pin, pinConfirmation string) (RoomSnapshot, error) {
@@ -165,7 +171,11 @@ func (s *RoomSvc) Create(userID, joinMode, pin, pinConfirmation string) (RoomSna
 	}); err != nil {
 		return RoomSnapshot{}, err
 	}
-	return s.Snapshot(userID, roomCode)
+	snapshot, err := s.Snapshot(userID, roomCode)
+	if err == nil {
+		s.publishRoom(roomID, "room.member_joined", map[string]interface{}{"roomCode": roomCode, "userId": userID, "role": model.MemberRoleOwner})
+	}
+	return snapshot, err
 }
 
 func allocateRoomCode(tx *gorm.DB, now int64) (string, error) {
@@ -319,7 +329,11 @@ func (s *RoomSvc) Join(userID, code string, confirmed bool, pin string) (RoomSna
 	}); err != nil {
 		return RoomSnapshot{}, err
 	}
-	return s.Snapshot(userID, code)
+	snapshot, err := s.Snapshot(userID, code)
+	if err == nil {
+		s.publishRoom(room.ID, "room.member_joined", map[string]interface{}{"roomCode": code, "userId": userID, "role": model.MemberRoleMember})
+	}
+	return snapshot, err
 }
 
 func (s *RoomSvc) Snapshot(userID, code string) (RoomSnapshot, error) {
@@ -343,7 +357,11 @@ func (s *RoomSvc) Snapshot(userID, code string) (RoomSnapshot, error) {
 	}
 	views := make([]RoomMemberView, 0, len(members))
 	for _, member := range members {
-		views = append(views, RoomMemberView{UserID: member.UserID, DisplayName: member.DisplayName, Role: member.Role, Status: member.Status, JoinedAt: member.JoinedAt, OnlineStatus: "offline"})
+		onlineStatus := PresenceOffline
+		if s.presence != nil {
+			onlineStatus = s.presence.Status(member.UserID)
+		}
+		views = append(views, RoomMemberView{UserID: member.UserID, DisplayName: member.DisplayName, Role: member.Role, Status: member.Status, JoinedAt: member.JoinedAt, OnlineStatus: onlineStatus})
 	}
 	var pending int64
 	if current.Role == model.MemberRoleOwner {
@@ -379,7 +397,9 @@ func (s *RoomSvc) Extend(userID, code string) (int64, error) {
 		}
 		return 0, errx.New(errc.ErrRoomAlreadyExtended, nil)
 	}
-	return room.ExpiresAt + int64(RoomExtendTTL/time.Second), nil
+	expiresAt := room.ExpiresAt + int64(RoomExtendTTL/time.Second)
+	s.publishRoom(room.ID, "room.extended", map[string]interface{}{"roomCode": room.Code, "expiresAt": expiresAt, "extendedBy": userID})
+	return expiresAt, nil
 }
 
 func (s *RoomSvc) Leave(userID, code string) error {
@@ -395,7 +415,11 @@ func (s *RoomSvc) Leave(userID, code string) error {
 	if member.Role == model.MemberRoleOwner {
 		return errx.New(errc.ErrOwnerCannotLeave, nil)
 	}
-	return s.db.Model(&model.RoomMember{}).Where("id = ?", member.ID).Updates(map[string]interface{}{"status": model.MemberStatusLeft, "left_at": now, "last_seen_at": now}).Error
+	if err := s.db.Model(&model.RoomMember{}).Where("id = ?", member.ID).Updates(map[string]interface{}{"status": model.MemberStatusLeft, "left_at": now, "last_seen_at": now}).Error; err != nil {
+		return err
+	}
+	s.publishRoom(room.ID, "room.member_left", map[string]interface{}{"roomCode": room.Code, "userId": userID, "reason": "left"})
+	return nil
 }
 
 func (s *RoomSvc) Dissolve(userID, code string) error {
@@ -411,6 +435,7 @@ func (s *RoomSvc) Dissolve(userID, code string) error {
 	if result.RowsAffected == 0 {
 		return errx.New(errc.ErrOwnerRequired, nil)
 	}
+	s.publishRoom(room.ID, "room.destroying", map[string]interface{}{"roomCode": room.Code, "reason": "owner_dissolved", "destroyAt": now.Add(RoomDestroyDelay).Unix()})
 	return nil
 }
 
@@ -433,6 +458,8 @@ func (s *RoomSvc) Kick(ownerID, code, targetUserID string) error {
 	if result.RowsAffected == 0 {
 		return errx.New(errc.ErrMemberRequired, nil)
 	}
+	s.hub.PublishUser(targetUserID, "room.member_kicked", map[string]interface{}{"roomCode": room.Code, "reason": "kicked"})
+	s.publishRoom(room.ID, "room.member_left", map[string]interface{}{"roomCode": room.Code, "userId": targetUserID, "reason": "kicked"})
 	return nil
 }
 
@@ -491,7 +518,9 @@ func (s *RoomSvc) CreateJoinRequest(userID, code string) (JoinRequestView, error
 	}); err != nil {
 		return JoinRequestView{}, err
 	}
-	return JoinRequestView{RequestID: result.ID, RoomCode: room.Code, UserID: result.UserID, DisplayName: result.DisplayName, Status: result.Status, CreatedAt: result.CreatedAt, ExpiresAt: result.ExpiresAt}, nil
+	view := JoinRequestView{RequestID: result.ID, RoomCode: room.Code, UserID: result.UserID, DisplayName: result.DisplayName, Status: result.Status, CreatedAt: result.CreatedAt, ExpiresAt: result.ExpiresAt}
+	s.hub.PublishUser(room.OwnerUserID, "room.join_request_changed", map[string]interface{}{"roomCode": room.Code, "requestId": result.ID, "status": result.Status})
+	return view, nil
 }
 
 func (s *RoomSvc) ListJoinRequests(ownerID, code string) (int, []JoinRequestView, error) {
@@ -527,6 +556,7 @@ func (s *RoomSvc) CancelJoinRequest(userID, code string) error {
 	if result.RowsAffected == 0 {
 		return errx.New(errc.ErrJoinRequestNotFound, nil)
 	}
+	s.hub.PublishUsers([]string{userID, room.OwnerUserID}, "room.join_request_changed", map[string]interface{}{"roomCode": room.Code, "status": model.JoinRequestCancelled})
 	return nil
 }
 
@@ -547,7 +577,8 @@ func (s *RoomSvc) processJoinRequest(ownerID, code, requestID string, approve bo
 		return errx.New(errc.ErrOwnerRequired, nil)
 	}
 	now := s.now()
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	var targetUserID string
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var request model.JoinRequest
 		if err := tx.Where("id = ? AND room_id = ? AND status = ?", requestID, room.ID, model.JoinRequestPending).First(&request).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -555,6 +586,7 @@ func (s *RoomSvc) processJoinRequest(ownerID, code, requestID string, approve bo
 			}
 			return err
 		}
+		targetUserID = request.UserID
 		if request.ExpiresAt <= now.Unix() {
 			return errx.New(errc.ErrJoinRequestResolved, nil)
 		}
@@ -597,7 +629,32 @@ func (s *RoomSvc) processJoinRequest(ownerID, code, requestID string, approve bo
 			return memberErr
 		}
 		return tx.Model(&model.JoinRequest{}).Where("id = ? AND status = ?", requestID, model.JoinRequestPending).Updates(map[string]interface{}{"status": model.JoinRequestApproved, "processed_at": now.Unix(), "processed_by_user_id": ownerID}).Error
-	})
+	}); err != nil {
+		return err
+	}
+	status := model.JoinRequestRejected
+	if approve {
+		status = model.JoinRequestApproved
+		s.publishRoom(room.ID, "room.member_joined", map[string]interface{}{"roomCode": room.Code, "userId": targetUserID, "role": model.MemberRoleMember})
+	}
+	s.hub.PublishUser(targetUserID, "room.join_request_changed", map[string]interface{}{"roomCode": room.Code, "requestId": requestID, "status": status})
+	s.hub.PublishUser(ownerID, "room.join_request_changed", map[string]interface{}{"roomCode": room.Code, "requestId": requestID, "status": status})
+	return nil
+}
+
+func (s *RoomSvc) publishRoom(roomID, eventType string, payload interface{}) {
+	if s == nil || s.hub == nil || roomID == "" {
+		return
+	}
+	var members []model.RoomMember
+	if err := s.db.Where("room_id = ? AND status = ?", roomID, model.MemberStatusActive).Find(&members).Error; err != nil {
+		return
+	}
+	userIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		userIDs = append(userIDs, member.UserID)
+	}
+	s.hub.PublishUsers(userIDs, eventType, payload)
 }
 
 func (s *RoomSvc) findRoom(code string) (model.Room, error) {

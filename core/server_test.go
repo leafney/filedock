@@ -67,7 +67,16 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("NewSessionAPI() error = %v", err)
 	}
-	roomSvc, err := service.NewRoomSvc(db)
+	hub := service.NewStreamHub()
+	presence, err := service.NewPresenceSvc(db, hub)
+	if err != nil {
+		t.Fatalf("NewPresenceSvc() error = %v", err)
+	}
+	streamAPI, err := api.NewStreamAPI(hub, presence)
+	if err != nil {
+		t.Fatalf("NewStreamAPI() error = %v", err)
+	}
+	roomSvc, err := service.NewRoomSvc(db, hub, presence)
 	if err != nil {
 		t.Fatalf("NewRoomSvc() error = %v", err)
 	}
@@ -79,7 +88,7 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("NewRoomAPI() error = %v", err)
 	}
-	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI)
+	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, streamAPI, service.NewRateLimiter())
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}

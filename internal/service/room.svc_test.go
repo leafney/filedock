@@ -16,7 +16,7 @@ func TestRoomCreateAndOpenJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create guest: %v", err)
 	}
-	room, err := NewRoomSvc(session.db)
+	room, err := NewRoomSvc(session.db, nil)
 	if err != nil {
 		t.Fatalf("new room service: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestRoomPINAndApprovalModes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create guest: %v", err)
 	}
-	room, err := NewRoomSvc(session.db)
+	room, err := NewRoomSvc(session.db, nil)
 	if err != nil {
 		t.Fatalf("new room service: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRoomDissolveAndKick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create guest: %v", err)
 	}
-	room, err := NewRoomSvc(session.db)
+	room, err := NewRoomSvc(session.db, nil)
 	if err != nil {
 		t.Fatalf("new room service: %v", err)
 	}

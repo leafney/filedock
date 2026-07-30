@@ -24,6 +24,10 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		provideRoomSvc,
 		provideRoomBiz,
 		provideRoomAPI,
+		provideStreamHub,
+		providePresenceSvc,
+		provideStreamAPI,
+		provideRateLimiter,
 		provideServer,
 		provideApp,
 	)

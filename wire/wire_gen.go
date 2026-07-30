@@ -51,7 +51,12 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	roomSvc, err := provideRoomSvc(gormDBSvc)
+	streamHub := provideStreamHub()
+	presenceSvc, err := providePresenceSvc(gormDBSvc, streamHub)
+	if err != nil {
+		return nil, err
+	}
+	roomSvc, err := provideRoomSvc(gormDBSvc, streamHub, presenceSvc)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +68,12 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI)
+	streamAPI, err := provideStreamAPI(streamHub, presenceSvc)
+	if err != nil {
+		return nil, err
+	}
+	rateLimiter := provideRateLimiter()
+	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, streamAPI, rateLimiter)
 	if err != nil {
 		return nil, err
 	}
