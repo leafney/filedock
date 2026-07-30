@@ -31,6 +31,16 @@ export function useGlobalStream(session: Session | undefined) {
       if (event.type.startsWith("room.") || event.type === "user.profile_changed") {
         void queryClient.invalidateQueries({ queryKey: ["rooms"] });
         void queryClient.invalidateQueries({ queryKey: ["room"] });
+        if (event.type === "room.join_request_changed") {
+          void queryClient.invalidateQueries({ queryKey: ["join-requests"] });
+        }
+        return;
+      }
+      const known = new Set(["session.revoked", "user.profile_changed"]);
+      if (!known.has(event.type)) {
+        void queryClient.invalidateQueries({ queryKey: ["session"] });
+        void queryClient.invalidateQueries({ queryKey: ["rooms"] });
+        void queryClient.invalidateQueries({ queryKey: ["room"] });
       }
     };
 
