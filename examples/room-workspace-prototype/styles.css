@@ -786,6 +786,11 @@ dd {
   background: #fafdfc;
 }
 
+.file-row.is-selected {
+  background: #f0fdfa;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
 .file-row--private-audit {
   background: #fffbeb;
 }
@@ -807,6 +812,20 @@ dd {
 
 .file-cell--name {
   gap: 10px;
+}
+
+.file-select-checkbox,
+.batch-select-all input {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.batch-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .file-cell--name > div {
@@ -993,6 +1012,37 @@ dd {
 .file-drop-strip svg {
   width: 17px;
   height: 17px;
+}
+
+.batch-toolbar {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #99f6e4;
+  border-radius: 10px;
+  background: #f0fdfa;
+  margin-bottom: 14px;
+  padding: 7px 10px;
+}
+
+.batch-toolbar > strong {
+  min-width: 72px;
+  color: #115e59;
+  font-size: 11px;
+}
+
+.batch-toolbar .batch-reason {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-toolbar .button--text {
+  margin-left: auto;
 }
 
 .file-groups {
@@ -1540,6 +1590,46 @@ noscript {
   background: var(--color-panel);
   padding: 12px;
   text-align: left;
+}
+
+.existing-picker .existing-list button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.existing-picker .existing-list button.is-selected {
+  border-color: #5eead4;
+  background: #f0fdfa;
+}
+
+.mock-checkbox {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  color: var(--color-primary);
+  font-size: 11px;
+}
+
+.existing-picker .existing-list button.is-selected .mock-checkbox {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+}
+
+.existing-picker > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  margin-top: 14px;
+  padding-top: 14px;
 }
 
 .existing-list button:hover {
@@ -2435,6 +2525,21 @@ button.member-item.is-active {
 
   .batch-entry {
     min-width: 64px;
+  }
+
+  .batch-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .batch-toolbar > strong,
+  .batch-toolbar .batch-reason {
+    grid-column: 1 / -1;
+  }
+
+  .batch-toolbar .button--text {
+    grid-column: 1 / -1;
+    margin: 0;
   }
 
   .file-drop-strip {

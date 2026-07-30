@@ -11,6 +11,8 @@ export function reduceState(state, action) {
           openFileMenuId: null,
           actionSheetFileId: null,
           rejectFileId: null,
+          batchMode: action.value === "files" ? state.ui.batchMode : false,
+          selectedFileIds: action.value === "files" ? state.ui.selectedFileIds : [],
         },
       };
     case "ui/set-current-user":
@@ -98,6 +100,8 @@ export function reduceState(state, action) {
             mode: action.mode ?? "shared",
             pendingFiles: action.files ?? [],
             existingFileId: action.existingFileId ?? null,
+            existingFileIds: action.existingFileIds ?? (action.existingFileId && action.existingFileId !== "choose" ? [action.existingFileId] : []),
+            choosingExisting: action.choosingExisting ?? action.existingFileId === "choose",
           },
           selectedRecipientIds: action.recipientIds ?? [],
           uploadReturnTab: action.returnTab ?? state.ui.activeFileTab,
@@ -141,6 +145,23 @@ export function reduceState(state, action) {
         ...state,
         ui: { ...state.ui, composer: { ...state.ui.composer, mode: action.value }, selectedRecipientIds: [] },
       };
+    case "composer/toggle-existing-file": {
+      const selected = state.ui.composer.existingFileIds.includes(action.value);
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          composer: {
+            ...state.ui.composer,
+            existingFileIds: selected
+              ? state.ui.composer.existingFileIds.filter((id) => id !== action.value)
+              : [...state.ui.composer.existingFileIds, action.value],
+          },
+        },
+      };
+    }
+    case "composer/confirm-existing-files":
+      return { ...state, ui: { ...state.ui, composer: { ...state.ui.composer, choosingExisting: false } } };
     case "composer/toggle-recipient": {
       const selected = state.ui.selectedRecipientIds.includes(action.value);
       return {
@@ -159,6 +180,8 @@ export function reduceState(state, action) {
       return startUpload(state, action);
     case "files/send-existing":
       return sendExisting(state, action);
+    case "files/send-existing-many":
+      return sendExistingMany(state, action);
     case "files/recycle":
       return updateFileWithEvent(state, action.fileId, action, (file) => ({
         ...file,
@@ -322,6 +345,28 @@ function sendExisting(state, action) {
     } : item),
     events: [createEvent(action, "resent", file.id), ...state.events],
     ui: { ...state.ui, composer: null, selectedRecipientIds: [] },
+  };
+}
+
+function sendExistingMany(state, action) {
+  const fileIds = new Set(action.fileIds);
+  const events = [];
+  const files = state.files.map((file, index) => {
+    if (!fileIds.has(file.id)) return file;
+    const newRecipients = action.recipientIds.filter((id) => !file.recipientIds.includes(id));
+    if (!newRecipients.length) return file;
+    events.push(createEvent({ ...action, eventId: `${action.eventId}-${index}` }, "resent", file.id));
+    return {
+      ...file,
+      recipientIds: [...file.recipientIds, ...newRecipients],
+      receiverStates: { ...file.receiverStates, ...Object.fromEntries(newRecipients.map((id) => [id, "pending"])) },
+    };
+  });
+  return {
+    ...state,
+    files,
+    events: [...events, ...state.events],
+    ui: { ...state.ui, composer: null, selectedRecipientIds: [], selectedFileIds: [], batchMode: false },
   };
 }
 

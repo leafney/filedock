@@ -110,3 +110,26 @@ describe("拒绝私密文件", () => {
     expect(current.events.filter((event) => event.id === "event-decline-test")).toHaveLength(1);
   });
 });
+
+describe("历史私密文件多选复用", () => {
+  test("一次发送多个历史文件且不创建新文件", () => {
+    const beforeCount = state.files.length;
+    const current = reduceState(state, {
+      type: "files/send-existing-many",
+      fileIds: ["file-direct-budget"],
+      recipientIds: ["user-su"],
+      actorId: "user-owner",
+      eventId: "event-multi-send",
+      occurredAt: "2026-07-31T15:10:00+08:00",
+    });
+    expect(current.files).toHaveLength(beforeCount);
+    expect(current.files.find((file) => file.id === "file-direct-budget").recipientIds).toContain("user-su");
+    expect(current.events.some((event) => event.fileId === "file-direct-budget" && event.type === "resent")).toBeTrue();
+  });
+
+  test("退出批量模式会清空选择", () => {
+    const batch = reduceState({ ...state, ui: { ...state.ui, batchMode: true, selectedFileIds: ["file-shared-design"] } }, { type: "ui/exit-batch-mode" });
+    expect(batch.ui.batchMode).toBeFalse();
+    expect(batch.ui.selectedFileIds).toEqual([]);
+  });
+});

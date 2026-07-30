@@ -74,8 +74,18 @@ document.addEventListener("keydown", (event) => {
 
 document.addEventListener("change", (event) => {
   if (event.target.matches('[data-input="file-scope"]')) store.dispatch({ type: "ui/set-file-scope", value: event.target.value });
-  if (event.target.matches('[data-input="file-identity-filter"]')) store.dispatch({ type: "ui/set-file-identity-filter", value: event.target.value });
+  if (event.target.matches('[data-input="file-identity-filter"]')) {
+    resolveHiddenBatchSelection((file) => event.target.value === "all" || (event.target.value === "mine" ? file.uploaderId === store.getState().ui.currentUserId : file.recipientIds?.includes(store.getState().ui.currentUserId)));
+    store.dispatch({ type: "ui/set-file-identity-filter", value: event.target.value });
+  }
   if (event.target.matches('[data-input="file-sort"]')) store.dispatch({ type: "ui/set-file-sort", value: event.target.value });
+  if (event.target.matches('[data-input="file-selection"]')) store.dispatch({ type: "ui/toggle-file-selection", value: event.target.dataset.fileId });
+  if (event.target.matches('[data-input="batch-group-selection"]')) {
+    const ids = event.target.dataset.fileIds.split(",").filter(Boolean);
+    const selected = store.getState().ui.selectedFileIds;
+    const next = event.target.checked ? [...new Set([...selected, ...ids])] : selected.filter((id) => !ids.includes(id));
+    store.dispatch({ type: "ui/set-file-selection", value: next });
+  }
   if (event.target.matches('[data-input="demo-role"]')) store.dispatch({ type: "ui/set-current-user", value: event.target.value });
   if (event.target.matches('[data-input="demo-language"]')) {
     window.localStorage.setItem("filedock-prototype-language", event.target.value);
@@ -128,8 +138,29 @@ function handleAction(action, target) {
   const common = { actorId: state.ui.currentUserId, occurredAt: now, eventId: uniqueId("event") };
   if (action === "open-upload") return openFilePicker(getDefaultComposerMode(state.ui.fileScopeView));
   if (action === "open-direct") return openFilePicker("direct");
-  if (action === "set-file-scope-view") return store.dispatch({ type: "ui/set-file-scope-view", value: target.dataset.scope });
+  if (action === "set-file-scope-view") {
+    resolveHiddenBatchSelection((file) => target.dataset.scope === "all" || file.scope === target.dataset.scope);
+    return store.dispatch({ type: "ui/set-file-scope-view", value: target.dataset.scope });
+  }
   if (action === "toggle-file-group") return store.dispatch({ type: "ui/toggle-file-group", value: target.dataset.scope });
+  if (action === "enter-batch-mode") return store.dispatch({ type: "ui/enter-batch-mode" });
+  if (action === "exit-batch-mode") return store.dispatch({ type: "ui/exit-batch-mode" });
+  if (action === "batch-download") {
+    state.files.filter((file) => state.ui.selectedFileIds.includes(file.id)).forEach((file) => store.dispatch({
+      type: "tasks/start-download",
+      taskId: uniqueId("batch-download"),
+      fileId: file.id,
+      name: file.name ?? `私密文件#${file.alias}`,
+      sizeBytes: file.sizeBytes,
+      ...common,
+      eventId: uniqueId("event"),
+    }));
+    store.dispatch({ type: "ui/exit-batch-mode" });
+    return showToast(localized(state, "已开始批量接收", "Batch download started"));
+  }
+  if (action === "batch-private-send") {
+    return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileIds: [...state.ui.selectedFileIds] });
+  }
   if (action === "open-file-actions") {
     const value = state.ui.openFileMenuId === target.dataset.fileId ? null : target.dataset.fileId;
     return store.dispatch({ type: "ui/open-file-menu", value });
@@ -146,16 +177,17 @@ function handleAction(action, target) {
     return handleFileMenuAction(target.dataset.fileOperation, target, state);
   }
   if (action === "add-files") return fileInput.click();
-  if (action === "open-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: "choose" });
-  if (action === "choose-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: target.dataset.fileId });
+  if (action === "open-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", choosingExisting: true, existingFileIds: [] });
+  if (action === "toggle-existing-file") return store.dispatch({ type: "composer/toggle-existing-file", value: target.dataset.fileId });
+  if (action === "confirm-existing-files") return store.dispatch({ type: "composer/confirm-existing-files" });
   if (action === "reuse-file") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: target.dataset.fileId });
   if (action === "close-composer") return closeOverlay("ui/close-composer");
   if (action === "remove-pending") return store.dispatch({ type: "composer/remove-file", value: target.dataset.pendingId });
   if (action === "set-send-mode") return store.dispatch({ type: "composer/set-mode", value: target.dataset.mode });
   if (action === "toggle-recipient") return store.dispatch({ type: "composer/toggle-recipient", value: target.dataset.userId });
   if (action === "select-all-recipients") {
-    const existing = state.files.find((file) => file.id === state.ui.composer?.existingFileId);
-    const ids = state.users.filter((user) => user.id !== state.ui.currentUserId && user.presence === "online" && !existing?.recipientIds.includes(user.id)).map((user) => user.id);
+    const existingFiles = state.files.filter((file) => state.ui.composer?.existingFileIds?.includes(file.id));
+    const ids = state.users.filter((user) => user.id !== state.ui.currentUserId && user.presence === "online" && (!existingFiles.length || !existingFiles.every((file) => file.recipientIds.includes(user.id)))).map((user) => user.id);
     return store.dispatch({ type: "composer/select-all-recipients", value: ids });
   }
   if (action === "confirm-send") return confirmSend();
@@ -257,6 +289,15 @@ function openFilePicker(mode, recipientIds = []) {
   fileInput.click();
 }
 
+function resolveHiddenBatchSelection(isVisible) {
+  const state = store.getState();
+  if (!state.ui.batchMode || !state.ui.selectedFileIds.length) return;
+  const hidden = state.files.some((file) => state.ui.selectedFileIds.includes(file.id) && !isVisible(file));
+  if (!hidden) return;
+  const preserve = window.confirm(localized(state, "切换后部分已选文件会隐藏。确定保留隐藏选择；取消则清空选择。", "Some selected files will be hidden. OK keeps hidden selections; Cancel clears them."));
+  if (!preserve) store.dispatch({ type: "ui/set-file-selection", value: [] });
+}
+
 function handleFileMenuAction(operation, target, state) {
   const file = state.files.find((item) => item.id === target.dataset.fileId);
   if (!file) return;
@@ -279,7 +320,7 @@ function addBrowserFiles(fileList) {
     kind: inferKind(file),
   }));
   if (!files.length) return;
-  if (!store.getState().ui.composer || store.getState().ui.composer.existingFileId) {
+  if (!store.getState().ui.composer || store.getState().ui.composer.existingFileIds?.length) {
     const state = store.getState();
     store.dispatch({ type: "ui/open-composer", mode: getDefaultComposerMode(state.ui.fileScopeView), files, returnTab: state.ui.activeFileTab });
   } else {
@@ -292,8 +333,14 @@ function confirmSend() {
   const composer = state.ui.composer;
   if (!composer) return;
   const now = new Date().toISOString();
-  if (composer.existingFileId) {
-    store.dispatch({ type: "files/send-existing", fileId: composer.existingFileId, recipientIds: state.ui.selectedRecipientIds, actorId: state.ui.currentUserId, occurredAt: now, eventId: uniqueId("event") });
+  if (composer.existingFileIds?.length) {
+    const fileIds = [...composer.existingFileIds];
+    const recipients = [...state.ui.selectedRecipientIds];
+    store.dispatch({ type: "files/send-existing-many", fileIds, recipientIds: recipients, actorId: state.ui.currentUserId, occurredAt: now, eventId: uniqueId("event") });
+    fileIds.forEach((fileId) => recipients.forEach((recipientId) => {
+      const file = state.files.find((item) => item.id === fileId);
+      if (!file?.recipientIds.includes(recipientId)) store.dispatch({ type: "chat/send", message: { id: uniqueId("message"), fromId: state.ui.currentUserId, toId: recipientId, type: "direct_file", fileId, status: "delivered", createdAt: now } });
+    }));
     return showToast(localized(state, "已从服务端发送，无需再次上传", "Sent from server without another upload"));
   }
   const files = composer.pendingFiles.map((file) => ({ ...file, alias: randomAlias() }));

@@ -1,5 +1,5 @@
 import { calculateCapacity } from "./capacity.js";
-import { deriveFileActions, deriveFileGroups } from "./file-list.js";
+import { deriveBatchCapabilities, deriveFileActions, deriveFileGroups } from "./file-list.js";
 import { translate } from "./i18n.js";
 import { getFilePermissions, projectEventsForUser, projectFilesForUser } from "./permissions.js";
 
@@ -229,6 +229,8 @@ function renderFileList(state, user) {
     sort: state.ui.fileSort,
     userId: user.id,
   });
+  const selectedFiles = projected.filter((file) => state.ui.selectedFileIds.includes(file.id));
+  const batch = deriveBatchCapabilities(selectedFiles, user, state.room);
   return `
     <div class="file-filter-bar">
       <div class="file-scope-switch" role="radiogroup" aria-label="${t(state, "fileScope")}">
@@ -248,10 +250,22 @@ function renderFileList(state, user) {
           ${option("newest", t(state, "newest"), state.ui.fileSort)}${option("oldest", t(state, "oldest"), state.ui.fileSort)}
           ${option("size-asc", t(state, "sizeAsc"), state.ui.fileSort)}${option("size-desc", t(state, "sizeDesc"), state.ui.fileSort)}
         </select>${chevronIcon()}</label>
-      <button class="button batch-entry" data-action="enter-batch-mode" type="button">${t(state, "batchSelect")}</button>
+      ${state.ui.batchMode ? "" : `<button class="button batch-entry" data-action="enter-batch-mode" type="button">${t(state, "batchSelect")}</button>`}
     </div>
     <button class="file-drop-strip" data-action="open-upload" type="button">${uploadIcon()}<span>${t(state, "dropStrip")}</span></button>
+    ${state.ui.batchMode ? renderBatchToolbar(state, batch) : ""}
     <div class="file-groups">${renderFileGroups(groups, state, user)}</div>`;
+}
+
+function renderBatchToolbar(state, batch) {
+  const reason = !batch.download.enabled ? batch.download.reason : !batch.privateSend.enabled ? batch.privateSend.reason : null;
+  return `<div class="batch-toolbar" role="region" aria-label="${t(state, "batchActions")}">
+    <strong>${t(state, "selectedCount", { count: state.ui.selectedFileIds.length })}</strong>
+    <button class="button" data-action="batch-download" type="button" ${batch.download.enabled ? "" : "disabled"} title="${t(state, batch.download.reason ?? "batchDownload")}">${t(state, "batchDownload")}</button>
+    <button class="button" data-action="batch-private-send" type="button" ${batch.privateSend.enabled ? "" : "disabled"} title="${t(state, batch.privateSend.reason ?? "batchPrivateSend")}">${t(state, "batchPrivateSend")}</button>
+    ${reason ? `<span class="batch-reason">${t(state, reason)}</span>` : ""}
+    <button class="button button--text" data-action="exit-batch-mode" type="button">${t(state, "exitBatch")}</button>
+  </div>`;
 }
 
 function renderFileGroups(groups, state, user) {
@@ -276,7 +290,7 @@ function renderFileGroups(groups, state, user) {
 
 function renderFileGroupTable(files, state, user) {
   return `<div class="file-table" role="table" aria-label="${t(state, "currentRoomFiles")}">
-    ${renderTableHeader(state)}
+    ${renderTableHeader(state, files)}
     ${files.length ? files.map((file) => renderFileRow(file, state, user)).join("") : renderEmptyRow(t(state, "noMatchingFiles"))}
   </div>`;
 }
@@ -347,13 +361,15 @@ function renderCommonRow(file, state, permissions, actions) {
   const displayName = anonymous ? translate(locale, "privateFile", { alias: file.alias }) : file.name;
   const secondary = anonymous ? t(state, "privateAudit") : file.scope === "direct" ? translate(locale, "privateFile", { alias: file.alias }) : file.mimeLabel;
   const ownerLabel = anonymous ? `${uploader?.displayName ?? "-"} → ${recipients || "-"}` : uploader?.displayName ?? "-";
-  return `<article class="file-row${anonymous ? " file-row--private-audit" : ""}" role="row" data-file-id="${escapeHTML(file.id)}">
-    <div class="file-cell file-cell--name" role="cell"><span class="file-icon file-icon--${escapeHTML(file.kind ?? "document")}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(displayName ?? "")}</strong><small>${escapeHTML(secondary ?? "")}</small><span class="scope-tag mobile-scope-tag scope-tag--${anonymous ? "private" : file.scope}">${t(state, anonymous ? "privateAudit" : file.scope)}</span></div></div>
+  const selected = state.ui.selectedFileIds.includes(file.id);
+  const checkbox = state.ui.batchMode ? `<input class="file-select-checkbox" data-input="file-selection" data-file-id="${escapeHTML(file.id)}" type="checkbox" ${selected ? "checked" : ""} aria-label="${t(state, "selectFile", { name: displayName })}">` : "";
+  return `<article class="file-row${anonymous ? " file-row--private-audit" : ""}${selected ? " is-selected" : ""}" role="row" data-file-id="${escapeHTML(file.id)}">
+    <div class="file-cell file-cell--name" role="cell">${checkbox}<span class="file-icon file-icon--${escapeHTML(file.kind ?? "document")}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(displayName ?? "")}</strong><small>${escapeHTML(secondary ?? "")}</small><span class="scope-tag mobile-scope-tag scope-tag--${anonymous ? "private" : file.scope}">${t(state, anonymous ? "privateAudit" : file.scope)}</span></div></div>
     <div class="file-cell file-cell--owner" role="cell">${escapeHTML(ownerLabel)}</div>
     <div class="file-cell file-cell--size" role="cell">${formatBytes(file.sizeBytes)}</div>
     <div class="file-cell file-cell--time" role="cell">${formatTimestamp(file.recycledAt ?? file.createdAt, locale)}</div>
     <div class="file-cell file-cell--status" role="cell">${renderStatus(file, locale)}</div>
-    <div class="file-cell file-cell--actions" role="cell">${actions}</div></article>`;
+    <div class="file-cell file-cell--actions" role="cell">${state.ui.batchMode ? "" : actions}</div></article>`;
 }
 
 function renderFileActions(file, state, user) {
@@ -390,22 +406,22 @@ function renderComposer(state, user) {
   }
   const composer = state.ui.composer;
   if (!composer) { root.innerHTML = ""; return; }
-  if (composer.existingFileId === "choose") {
+  if (composer.choosingExisting) {
     const reusable = projectFilesForUser(state.files, user, state.room).filter((file) => file.scope === "direct" && file.uploaderId === user.id && file.status === "available");
-    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="existing-title"><header><div><p class="eyebrow">${t(state, "historyReuse")}</p><h2 id="existing-title">${t(state, "chooseUploaded")}</h2></div><button class="icon-button" data-action="close-composer" aria-label="${t(state, "close")}" type="button">×</button></header><div class="existing-list">${reusable.length ? reusable.map((file) => `<button data-action="choose-existing" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>${t(state, "privateFile", { alias: file.alias })} · ${formatBytes(file.sizeBytes)}</span></button>`).join("") : `<p>${t(state, "noReusable")}</p>`}</div></section></div>`;
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal existing-picker" role="dialog" aria-modal="true" aria-labelledby="existing-title"><header><div><p class="eyebrow">${t(state, "historyReuse")}</p><h2 id="existing-title">${t(state, "chooseUploaded")}</h2></div><button class="icon-button" data-action="close-composer" aria-label="${t(state, "close")}" type="button">×</button></header><div class="existing-list">${reusable.length ? reusable.map((file) => { const selected = composer.existingFileIds.includes(file.id); return `<button class="${selected ? "is-selected" : ""}" data-action="toggle-existing-file" data-file-id="${file.id}" type="button" aria-pressed="${selected}"><span class="mock-checkbox">${selected ? "✓" : ""}</span><strong>${escapeHTML(file.name)}</strong><span>${t(state, "privateFile", { alias: file.alias })} · ${formatBytes(file.sizeBytes)}</span></button>`; }).join("") : `<p>${t(state, "noReusable")}</p>`}</div><footer><span>${t(state, "selectedCount", { count: composer.existingFileIds.length })}</span><button class="button button--primary" data-action="confirm-existing-files" type="button" ${composer.existingFileIds.length ? "" : "disabled"}>${t(state, "nextSelectRecipients")}</button></footer></section></div>`;
     return;
   }
   const pending = composer.pendingFiles ?? [];
-  const existing = composer.existingFileId ? state.files.find((file) => file.id === composer.existingFileId) : null;
-  const total = existing?.sizeBytes ?? pending.reduce((sum, file) => sum + file.sizeBytes, 0);
+  const existingFiles = state.files.filter((file) => composer.existingFileIds?.includes(file.id));
+  const total = existingFiles.length ? existingFiles.reduce((sum, file) => sum + file.sizeBytes, 0) : pending.reduce((sum, file) => sum + file.sizeBytes, 0);
   const recipients = state.users.filter((member) => member.id !== user.id);
-  const submitDisabled = (!existing && pending.length === 0) || (composer.mode === "direct" && state.ui.selectedRecipientIds.length === 0);
+  const submitDisabled = (!existingFiles.length && pending.length === 0) || (composer.mode === "direct" && state.ui.selectedRecipientIds.length === 0);
   root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal send-modal" role="dialog" aria-modal="true" aria-labelledby="send-title">
     <header><div><p class="eyebrow">${t(state, "pendingConfirm")}</p><h2 id="send-title">${t(state, "pendingArea")}</h2></div><button class="icon-button" data-action="close-composer" aria-label="${t(state, "close")}" type="button">×</button></header>
     <div class="send-mode" role="radiogroup" aria-label="${t(state, "pendingConfirm")}"><button class="${composer.mode === "shared" ? "is-active" : ""}" data-action="set-send-mode" data-mode="shared" type="button">${t(state, "sharedToRoom")}</button><button class="${composer.mode === "direct" ? "is-active" : ""}" data-action="set-send-mode" data-mode="direct" type="button">${t(state, "directSend")}</button></div>
-    <div class="pending-list">${existing ? `<article><div><strong>${escapeHTML(existing.name)}</strong><span>${t(state, "reuseNoCapacity")}</span></div><b>${formatBytes(existing.sizeBytes)}</b></article>` : pending.map((file) => `<article><div><strong>${escapeHTML(file.name)}</strong><span>${escapeHTML(file.type || "-")}</span></div><b>${formatBytes(file.sizeBytes)}</b><button class="icon-button icon-button--small" data-action="remove-pending" data-pending-id="${file.id}" aria-label="${t(state, "close")} ${escapeHTML(file.name)}" type="button">×</button></article>`).join("") || `<div class="composer-drop-empty">${t(state, "dropTitle")} · ${t(state, "addFiles")}</div>`}</div>
-    ${composer.mode === "direct" ? `<div class="recipient-heading"><strong>${t(state, "selectRecipients")}</strong><button class="button button--text" data-action="select-all-recipients" type="button">${t(state, "selectOnline")}</button></div><div class="recipient-grid">${recipients.map((member) => { const already = existing?.recipientIds.includes(member.id); const selected = state.ui.selectedRecipientIds.includes(member.id); return `<button class="recipient-chip${selected ? " is-selected" : ""}" data-action="toggle-recipient" data-user-id="${member.id}" type="button" ${already ? "disabled" : ""}><span class="presence presence--${member.presence}"></span>${escapeHTML(member.displayName)}${already ? ` · ${t(state, "alreadySent")}` : ""}</button>`; }).join("")}</div>` : `<div class="shared-warning">${t(state, "sharedWarning")}</div>`}
-    <footer><div><strong>${translate(state.ui.language, "filesCount", { count: existing ? 1 : pending.length })} · ${formatBytes(total)}</strong><span>${t(state, existing ? "serverDirect" : "confirmUpload")}</span></div>${existing ? "" : `<button class="button" data-action="add-files" type="button">${t(state, "addFiles")}</button>`}<button class="button button--primary" data-action="confirm-send" type="button" ${submitDisabled ? "disabled" : ""}>${t(state, existing ? "sendRecipients" : "startUpload")}</button></footer>
+    <div class="pending-list">${existingFiles.length ? existingFiles.map((file) => `<article><div><strong>${escapeHTML(file.name)}</strong><span>${t(state, "reuseNoCapacity")}</span></div><b>${formatBytes(file.sizeBytes)}</b></article>`).join("") : pending.map((file) => `<article><div><strong>${escapeHTML(file.name)}</strong><span>${escapeHTML(file.type || "-")}</span></div><b>${formatBytes(file.sizeBytes)}</b><button class="icon-button icon-button--small" data-action="remove-pending" data-pending-id="${file.id}" aria-label="${t(state, "close")} ${escapeHTML(file.name)}" type="button">×</button></article>`).join("") || `<div class="composer-drop-empty">${t(state, "dropTitle")} · ${t(state, "addFiles")}</div>`}</div>
+    ${composer.mode === "direct" ? `<div class="recipient-heading"><strong>${t(state, "selectRecipients")}</strong><button class="button button--text" data-action="select-all-recipients" type="button">${t(state, "selectOnline")}</button></div><div class="recipient-grid">${recipients.map((member) => { const already = existingFiles.length > 0 && existingFiles.every((file) => file.recipientIds.includes(member.id)); const selected = state.ui.selectedRecipientIds.includes(member.id); return `<button class="recipient-chip${selected ? " is-selected" : ""}" data-action="toggle-recipient" data-user-id="${member.id}" type="button" ${already ? "disabled" : ""}><span class="presence presence--${member.presence}"></span>${escapeHTML(member.displayName)}${already ? ` · ${t(state, "alreadySent")}` : ""}</button>`; }).join("")}</div>` : `<div class="shared-warning">${t(state, "sharedWarning")}</div>`}
+    <footer><div><strong>${translate(state.ui.language, "filesCount", { count: existingFiles.length || pending.length })} · ${formatBytes(total)}</strong><span>${t(state, existingFiles.length ? "serverDirect" : "confirmUpload")}</span></div>${existingFiles.length ? "" : `<button class="button" data-action="add-files" type="button">${t(state, "addFiles")}</button>`}<button class="button button--primary" data-action="confirm-send" type="button" ${submitDisabled ? "disabled" : ""}>${t(state, existingFiles.length ? "sendRecipients" : "startUpload")}</button></footer>
   </section></div>`;
 }
 
@@ -421,9 +437,13 @@ function renderTasks(state) {
   bar.innerHTML = `<div class="transfer-bar__summary"><span class="transfer-indicator${active.length ? "" : " is-idle"}" aria-hidden="true"></span><strong>${title}</strong><span>${shown.map((task) => `${t(state, task.type === "upload" ? "upload" : "receive")} ${task.progress}%`).join(" · ")}</span></div><div class="transfer-progress" role="progressbar" aria-label="${t(state, "tasks")}" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><button class="button button--text" data-action="show-tasks" type="button">${t(state, "tasks")}</button>`;
 }
 
-function renderTableHeader(state) {
+function renderTableHeader(state, files = []) {
   const labels = state.ui.language === "en" ? ["File", "Uploader", "Size", "Time", "Status", "Actions"] : ["文件名", "上传者", "大小", "时间", "状态", "操作"];
-  return `<div class="file-table__header" role="row">${labels.map((label) => `<span role="columnheader">${label}</span>`).join("")}</div>`;
+  if (state.ui.batchMode) {
+    const allSelected = files.length > 0 && files.every((file) => state.ui.selectedFileIds.includes(file.id));
+    labels[0] = `<label class="batch-select-all"><input data-input="batch-group-selection" data-file-ids="${files.map((file) => file.id).join(",")}" type="checkbox" ${allSelected ? "checked" : ""}><span>${labels[0]}</span></label>`;
+  }
+  return `<div class="file-table__header" role="row">${labels.map((label, index) => `<span role="columnheader">${index === 0 && state.ui.batchMode ? label : escapeHTML(label)}</span>`).join("")}</div>`;
 }
 function renderEmptyRow(text) { return `<div class="table-empty">${escapeHTML(text)}</div>`; }
 function renderEmptyState(title, text) { return `<div class="content-placeholder"><h3>${escapeHTML(title)}</h3><p>${escapeHTML(text)}</p></div>`; }
