@@ -260,6 +260,7 @@ body {
 .home-profile-details { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.7rem; color: #64748b; font-size: 0.8rem; margin: 0 0 1rem; }
 .home-profile-details dt { color: #94a3b8; }
 .home-profile-details dd { margin: 0; color: #334155; }
+.home-profile-version-title { color: #334155; font-size: 0.8rem; margin: 1rem 0 0.55rem; }
 .home-notification-room { color: #64748b; font-family: ui-monospace, monospace; }
 .home-request-item { display: grid; gap: 0.4rem; border-bottom: 1px solid #f1f5f9; padding: 0.9rem 0; }
 .home-request-item strong { color: #0f172a; }

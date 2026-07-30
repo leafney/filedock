@@ -23,9 +23,11 @@ import {
   resetSession,
   updateSession,
 } from "../services/api";
+import { getVersion } from "../services/version";
 import { normalizeLanguage } from "../i18n";
 import type { JoinMode, JoinRequest, RoomSummary, Session } from "../types/domain";
 import { getAvatarInitial, getStableAvatarColor } from "../utils/avatar";
+import { getVersionDetails } from "../utils/version";
 
 type ModalKind = "create" | "join" | null;
 
@@ -114,11 +116,13 @@ function JoinRoomModal({ open, onClose, onJoined }: { open: boolean; onClose: ()
 function ProfileModal({ open, onClose, session, ownerRoom, onReset }: { open: boolean; onClose: () => void; session: Session; ownerRoom?: RoomSummary; onReset: () => void }) {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
+  const versionQuery = useQuery({ queryKey: ["version"], queryFn: getVersion, retry: false, staleTime: 5 * 60_000 });
   const [name, setName] = useState(session.displayName);
   useEffect(() => { if (open) setName(session.displayName); }, [open, session.displayName]);
   const update = useMutation({ mutationFn: () => updateSession(name.trim()), onSuccess: (next) => { queryClient.setQueryData(["session"], next); message.success(t("home.saveName")); } });
   const resetDisabled = Boolean(ownerRoom && (ownerRoom.status === "active" || ownerRoom.status === "destroying"));
-  return <Modal title={t("home.profile")} open={open} onCancel={onClose} footer={null} destroyOnHidden><div className="home-profile"><Avatar size={72} style={{ backgroundColor: getStableAvatarColor(session.displayName), fontSize: 28 }}>{getAvatarInitial(session.displayName)}</Avatar><Form layout="vertical" className="home-profile-form"><Form.Item label={t("session.displayName")}><Space.Compact block><Input value={name} maxLength={20} onChange={(event) => setName(event.target.value)} /><Button type="primary" icon={<EditOutlined />} loading={update.isPending} disabled={!name.trim()} onClick={() => update.mutate()}>{t("home.saveName")}</Button></Space.Compact></Form.Item><dl className="home-profile-details"><dt>{t("home.registeredAt")}</dt><dd>{formatRegistrationDate(session.createdAt, i18n.language)}</dd></dl>{update.isError && <ErrorAlert error={update.error} />}<Tooltip title={resetDisabled ? t("home.resetBlocked") : undefined}><Button danger block icon={<DeleteOutlined />} disabled={resetDisabled} onClick={onReset}>{t("session.reset")}</Button></Tooltip></Form></div></Modal>;
+  const version = versionQuery.data ? getVersionDetails(versionQuery.data) : undefined;
+  return <Modal title={t("home.profile")} open={open} onCancel={onClose} footer={null} destroyOnHidden><div className="home-profile"><Avatar size={72} style={{ backgroundColor: getStableAvatarColor(session.displayName), fontSize: 28 }}>{getAvatarInitial(session.displayName)}</Avatar><Form layout="vertical" className="home-profile-form"><Form.Item label={t("session.displayName")}><Space.Compact block><Input value={name} maxLength={20} onChange={(event) => setName(event.target.value)} /><Button type="primary" icon={<EditOutlined />} loading={update.isPending} disabled={!name.trim()} onClick={() => update.mutate()}>{t("home.saveName")}</Button></Space.Compact></Form.Item><dl className="home-profile-details"><dt>{t("home.registeredAt")}</dt><dd>{formatRegistrationDate(session.createdAt, i18n.language)}</dd></dl><h3 className="home-profile-version-title">{t("home.serviceInfo")}</h3><dl className="home-profile-details"><dt>{t("home.fields.status")}</dt><dd>{versionQuery.data?.status ?? "-"}</dd><dt>{t("home.fields.version")}</dt><dd>{version?.version ?? "-"}</dd><dt>{t("home.fields.branch")}</dt><dd>{version?.branch ?? "-"}</dd><dt>{t("home.fields.commit")}</dt><dd>{version?.commit ?? "-"}</dd><dt>{t("home.fields.buildTime")}</dt><dd>{version?.buildTime ?? "-"}</dd></dl>{update.isError && <ErrorAlert error={update.error} />}<Tooltip title={resetDisabled ? t("home.resetBlocked") : undefined}><Button danger block icon={<DeleteOutlined />} disabled={resetDisabled} onClick={onReset}>{t("session.reset")}</Button></Tooltip></Form></div></Modal>;
 }
 
 function NotificationPanel({ open, onClose, roomCode, requests, loading, error, processingId, onApprove, onReject }: { open: boolean; onClose: () => void; roomCode?: string; requests: JoinRequest[]; loading: boolean; error?: unknown; processingId?: string; onApprove: (request: JoinRequest) => void; onReject: (request: JoinRequest) => void }) {
