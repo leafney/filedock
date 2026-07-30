@@ -2,9 +2,28 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/leafney/filedock/internal/model"
 )
+
+func TestRoomCodeRemainsLockedWhenCleanupFails(t *testing.T) {
+	_, db, _ := newSessionTestService(t)
+	reusableAt := time.Now().Add(-time.Minute).Unix()
+	if err := db.Create(&model.Room{ID: "01ROOMFAILEDLOCK01", Code: "0001", Title: "房间 0001", OwnerUserID: "01USERFAILEDLOCK01", JoinMode: model.JoinModeOpen, Status: model.RoomStatusDestroyed, CreatedAt: 1, ExpiresAt: 2, CodeReusableAt: &reusableAt}).Error; err != nil {
+		t.Fatalf("create failed room: %v", err)
+	}
+	if err := db.Create(&model.CleanupJob{ID: "01JOBFAILEDLOCK001", RoomID: "01ROOMFAILEDLOCK01", Status: model.CleanupFailed, Phase: "failed", ScheduledAt: 1, AttemptCount: 2}).Error; err != nil {
+		t.Fatalf("create failed cleanup job: %v", err)
+	}
+	available, err := roomCodeAvailable(db, "0001", time.Now().Unix())
+	if err != nil {
+		t.Fatalf("roomCodeAvailable() error = %v", err)
+	}
+	if available {
+		t.Fatal("room code became available while cleanup failed")
+	}
+}
 
 func TestRoomCreateAndOpenJoin(t *testing.T) {
 	session, _, _ := newSessionTestService(t)
@@ -33,6 +52,9 @@ func TestRoomCreateAndOpenJoin(t *testing.T) {
 	joined, err := room.Join(guest.Principal.UserID, snapshot.RoomCode, true, "")
 	if err != nil {
 		t.Fatalf("open join: %v", err)
+	}
+	if repeated, err := room.Join(guest.Principal.UserID, snapshot.RoomCode, false, ""); err != nil || repeated.Role != model.MemberRoleMember {
+		t.Fatalf("repeated open join should be idempotent, snapshot=%+v error=%v", repeated, err)
 	}
 	if joined.Role != model.MemberRoleMember || len(joined.Members) != 2 {
 		t.Fatalf("unexpected joined snapshot: %+v", joined)

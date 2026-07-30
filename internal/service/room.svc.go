@@ -213,7 +213,7 @@ func allocateRoomCode(tx *gorm.DB, now int64) (string, error) {
 
 func roomCodeAvailable(tx *gorm.DB, code string, now int64) (bool, error) {
 	var count int64
-	if err := tx.Model(&model.Room{}).Where("code = ? AND (status IN ? OR (status = ? AND (code_reusable_at IS NULL OR code_reusable_at > ?)))", code, []string{model.RoomStatusActive, model.RoomStatusDestroying}, model.RoomStatusDestroyed, now).Count(&count).Error; err != nil {
+	if err := tx.Model(&model.Room{}).Where("code = ? AND (status IN ? OR (status = ? AND (code_reusable_at IS NULL OR code_reusable_at > ? OR NOT EXISTS (SELECT 1 FROM cleanup_jobs WHERE cleanup_jobs.room_id = rooms.id AND cleanup_jobs.status = ?))) )", code, []string{model.RoomStatusActive, model.RoomStatusDestroying}, model.RoomStatusDestroyed, now, model.CleanupSucceeded).Count(&count).Error; err != nil {
 		return false, fmt.Errorf("check room code: %w", err)
 	}
 	return count == 0, nil
@@ -264,6 +264,12 @@ func (s *RoomSvc) JoinInfo(userID, code string) (RoomJoinInfo, error) {
 func (s *RoomSvc) Join(userID, code string, confirmed bool, pin string) (RoomSnapshot, error) {
 	room, err := s.findActiveRoom(code)
 	if err != nil {
+		return RoomSnapshot{}, err
+	}
+	var existing model.RoomMember
+	if err := s.db.Where("room_id = ? AND user_id = ? AND status = ?", room.ID, userID, model.MemberStatusActive).First(&existing).Error; err == nil {
+		return s.Snapshot(userID, code)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return RoomSnapshot{}, err
 	}
 	if room.JoinMode == model.JoinModeOwnerApproval {
