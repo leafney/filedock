@@ -109,6 +109,9 @@ func (s *LifecycleSvc) Tick() error {
 		return fmt.Errorf("lifecycle service is nil")
 	}
 	now := s.now()
+	if err := s.expireSessions(now); err != nil {
+		return err
+	}
 	if err := s.expireJoinRequests(now); err != nil {
 		return err
 	}
@@ -122,6 +125,35 @@ func (s *LifecycleSvc) Tick() error {
 		return err
 	}
 	return s.releaseRooms(now)
+}
+
+func (s *LifecycleSvc) expireSessions(now time.Time) error {
+	var sessions []model.Session
+	if err := s.db.Where("revoked_at IS NULL AND expires_at <= ?", now.Unix()).Find(&sessions).Error; err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if err := s.db.Transaction(func(tx *gorm.DB) error {
+			result := tx.Model(&model.Session{}).Where("id = ? AND revoked_at IS NULL", session.ID).Updates(map[string]interface{}{"revoked_at": now.Unix(), "updated_at": now.Unix()})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return nil
+			}
+			var active int64
+			if err := tx.Model(&model.Session{}).Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", session.UserID, now.Unix()).Count(&active).Error; err != nil {
+				return err
+			}
+			if active > 0 {
+				return nil
+			}
+			return tx.Model(&model.User{}).Where("id = ? AND status = ?", session.UserID, model.UserStatusActive).Updates(map[string]interface{}{"status": model.UserStatusExpired, "display_name_key": "", "identity_expires_at": now.Unix(), "updated_at": now.Unix()}).Error
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // recoverCleanupJobs makes tasks interrupted during a previous process run

@@ -147,14 +147,14 @@ func provideNicknameSvc(db *gormx.GormDBSvc) (*service.NicknameSvc, error) {
 	return service.NewNicknameSvc(db.DB)
 }
 
-func provideSessionSvc(cfg *config.Config, db *gormx.GormDBSvc, nickname *service.NicknameSvc) (*service.SessionSvc, error) {
+func provideSessionSvc(cfg *config.Config, db *gormx.GormDBSvc, nickname *service.NicknameSvc, hub *service.StreamHub) (*service.SessionSvc, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("session config is required")
 	}
 	if db == nil {
 		return nil, fmt.Errorf("session database is required")
 	}
-	return service.NewSessionSvc(db.DB, cfg.App.DataDir, nickname)
+	return service.NewSessionSvc(db.DB, cfg.App.DataDir, nickname, hub)
 }
 
 func provideSessionBiz(session *service.SessionSvc, nickname *service.NicknameSvc) (*biz.SessionBiz, error) {

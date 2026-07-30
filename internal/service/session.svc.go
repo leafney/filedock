@@ -48,11 +48,12 @@ type SessionResult struct {
 type SessionSvc struct {
 	db       *gorm.DB
 	nickname *NicknameSvc
+	hub      *StreamHub
 	key      []byte
 	now      func() time.Time
 }
 
-func NewSessionSvc(db *gorm.DB, dataDir string, nickname *NicknameSvc) (*SessionSvc, error) {
+func NewSessionSvc(db *gorm.DB, dataDir string, nickname *NicknameSvc, hubs ...*StreamHub) (*SessionSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("session database is required")
 	}
@@ -64,7 +65,11 @@ func NewSessionSvc(db *gorm.DB, dataDir string, nickname *NicknameSvc) (*Session
 	if err != nil {
 		return nil, err
 	}
-	return &SessionSvc{db: db, nickname: nickname, key: key, now: now}, nil
+	var hub *StreamHub
+	if len(hubs) > 0 {
+		hub = hubs[0]
+	}
+	return &SessionSvc{db: db, nickname: nickname, hub: hub, key: key, now: now}, nil
 }
 
 func loadSigningKey(db *gorm.DB, dataDir string, now func() time.Time) ([]byte, error) {
@@ -308,6 +313,9 @@ func (s *SessionSvc) UpdateName(userID, displayName string) (Principal, error) {
 	}); err != nil {
 		return Principal{}, err
 	}
+	if s.hub != nil {
+		s.publishProfileChanged(userID, displayName)
+	}
 	var user model.User
 	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
 		return Principal{}, err
@@ -320,7 +328,7 @@ func (s *SessionSvc) Reset(userID string) error {
 		return fmt.Errorf("session service is nil")
 	}
 	now := s.now().Unix()
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var owned int64
 		if err := tx.Model(&model.Room{}).Where("owner_user_id = ? AND status IN ?", userID, []string{model.RoomStatusActive, model.RoomStatusDestroying}).Count(&owned).Error; err != nil {
 			return err
@@ -338,7 +346,32 @@ func (s *SessionSvc) Reset(userID string) error {
 			return err
 		}
 		return tx.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{"status": model.UserStatusRevoked, "display_name_key": "", "identity_expires_at": now, "updated_at": now}).Error
-	})
+	}); err != nil {
+		return err
+	}
+	if s.hub != nil {
+		s.hub.PublishUser(userID, "session.revoked", map[string]interface{}{"reason": "reset"})
+		s.hub.CloseUser(userID)
+	}
+	return nil
+}
+
+func (s *SessionSvc) publishProfileChanged(userID, displayName string) {
+	var memberships []model.RoomMember
+	if err := s.db.Where("user_id = ? AND status = ?", userID, model.MemberStatusActive).Find(&memberships).Error; err != nil {
+		return
+	}
+	for _, membership := range memberships {
+		var members []model.RoomMember
+		if err := s.db.Where("room_id = ? AND status = ?", membership.RoomID, model.MemberStatusActive).Find(&members).Error; err != nil {
+			continue
+		}
+		userIDs := make([]string, 0, len(members))
+		for _, member := range members {
+			userIDs = append(userIDs, member.UserID)
+		}
+		s.hub.PublishUsers(userIDs, "user.profile_changed", map[string]interface{}{"userId": userID, "displayName": displayName})
+	}
 }
 
 func (s *SessionSvc) claims(userID, sessionID, jwtID string, expiresAt time.Time) *sessionClaims {

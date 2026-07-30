@@ -171,3 +171,37 @@ func TestLifecycleExpiresJoinRequests(t *testing.T) {
 		t.Fatalf("unexpected expired request: %+v", request)
 	}
 }
+
+func TestLifecycleExpiresSessionsAndReleasesNickname(t *testing.T) {
+	session, db, _ := newSessionTestService(t)
+	created, err := session.Create("周瑜", "")
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	base := time.Unix(5_000_000, 0)
+	if err := db.Model(&model.Session{}).Where("id = ?", created.Principal.SessionID).Updates(map[string]interface{}{"expires_at": base.Add(-time.Second).Unix(), "revoked_at": nil}).Error; err != nil {
+		t.Fatalf("expire session: %v", err)
+	}
+	lifecycle, err := NewLifecycleSvc(db, NewStreamHub())
+	if err != nil {
+		t.Fatalf("NewLifecycleSvc() error = %v", err)
+	}
+	lifecycle.now = func() time.Time { return base }
+	if err := lifecycle.Tick(); err != nil {
+		t.Fatalf("expire session tick: %v", err)
+	}
+	var storedSession model.Session
+	if err := db.First(&storedSession, "id = ?", created.Principal.SessionID).Error; err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if storedSession.RevokedAt == nil {
+		t.Fatal("expired session was not revoked")
+	}
+	var user model.User
+	if err := db.First(&user, "id = ?", created.Principal.UserID).Error; err != nil {
+		t.Fatalf("load user: %v", err)
+	}
+	if user.Status != model.UserStatusExpired || user.DisplayNameKey != "" {
+		t.Fatalf("user after session expiry = %+v", user)
+	}
+}

@@ -44,7 +44,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	sessionSvc, err := provideSessionSvc(config, gormDBSvc, nicknameSvc)
+	sessionSvc, err := provideSessionSvc(config, gormDBSvc, nicknameSvc, streamHub)
 	if err != nil {
 		return nil, err
 	}

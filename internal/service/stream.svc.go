@@ -114,4 +114,23 @@ func (h *StreamHub) CountUserConnections(userID string) int {
 	return count
 }
 
+// CloseUser closes every active tab connection for a user. The stream handler
+// observes the closed channel and releases the corresponding presence state.
+func (h *StreamHub) CloseUser(userID string) {
+	if h == nil || userID == "" {
+		return
+	}
+	h.mu.RLock()
+	ids := make([]uint64, 0)
+	for id, subscriber := range h.subs {
+		if subscriber.userID == userID {
+			ids = append(ids, id)
+		}
+	}
+	h.mu.RUnlock()
+	for _, id := range ids {
+		h.remove(id)
+	}
+}
+
 func MarshalStreamEvent(event *StreamEvent) ([]byte, error) { return json.Marshal(event) }

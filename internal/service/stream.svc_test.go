@@ -44,3 +44,29 @@ func TestStreamHubClosesSlowSubscriber(t *testing.T) {
 		t.Fatal("slow subscriber was not removed")
 	}
 }
+
+func TestStreamHubClosesAllUserConnections(t *testing.T) {
+	hub := NewStreamHub()
+	first, _ := hub.Subscribe("user-a")
+	second, _ := hub.Subscribe("user-a")
+	_, unsubscribeOther := hub.Subscribe("user-b")
+	defer unsubscribeOther()
+
+	hub.CloseUser("user-a")
+	for name, channel := range map[string]<-chan *StreamEvent{"first": first, "second": second} {
+		select {
+		case _, open := <-channel:
+			if open {
+				t.Fatalf("%s channel is still open", name)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("%s channel did not close", name)
+		}
+	}
+	if hub.CountUserConnections("user-a") != 0 {
+		t.Fatal("user-a connections were not removed")
+	}
+	if hub.CountUserConnections("user-b") != 1 {
+		t.Fatal("user-b connection was unexpectedly removed")
+	}
+}
