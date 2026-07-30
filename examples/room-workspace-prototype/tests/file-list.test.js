@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { deriveBatchCapabilities, deriveFileActions, deriveFileGroups, getDefaultComposerMode } from "../js/file-list.js";
 import { createMockState } from "../js/mock-data.js";
 import { projectFilesForUser } from "../js/permissions.js";
+import { reduceState } from "../js/state.js";
 
 const state = createMockState();
 const user = (id) => state.users.find((item) => item.id === id);
@@ -92,5 +93,20 @@ describe("批量共同权限", () => {
       download: { enabled: false, reason: "no_selection" },
       privateSend: { enabled: false, reason: "no_selection" },
     });
+  });
+});
+
+describe("拒绝私密文件", () => {
+  test("确认拒绝只更新当前接收者并追加一次事件", () => {
+    const current = reduceState(state, {
+      type: "files/decline",
+      fileId: "file-direct-owner-copy",
+      actorId: "user-owner",
+      eventId: "event-decline-test",
+      occurredAt: "2026-07-31T15:00:00+08:00",
+    });
+    const file = current.files.find((item) => item.id === "file-direct-owner-copy");
+    expect(file.receiverStates).toEqual({ "user-owner": "declined" });
+    expect(current.events.filter((event) => event.id === "event-decline-test")).toHaveLength(1);
   });
 });

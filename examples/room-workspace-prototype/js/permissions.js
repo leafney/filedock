@@ -22,6 +22,7 @@ export function getFilePermissions(file, user, room) {
   const fullVisibility = file.scope === "shared" || participant;
   const anonymousVisibility = file.scope === "direct" && owner && !participant;
   const active = file.status === "available";
+  const recipientState = file.receiverStates?.[user.id];
   const recycled = file.status === "recycled";
   const forcedByOwner = file.removalKind === "owner_forced";
 
@@ -29,7 +30,7 @@ export function getFilePermissions(file, user, room) {
     fullVisibility,
     anonymousVisibility,
     visible: fullVisibility || anonymousVisibility,
-    canDownload: active && (file.scope === "shared" || participant),
+    canDownload: active && (file.scope === "shared" || (participant && (!recipient || recipientState !== "declined"))),
     canAccept: active && file.scope === "direct" && recipient && file.receiverStates?.[user.id] === "pending",
     canDecline: active && file.scope === "direct" && recipient && file.receiverStates?.[user.id] === "pending",
     canResend: active && file.scope === "direct" && uploader,

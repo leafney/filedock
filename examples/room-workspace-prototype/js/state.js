@@ -177,6 +177,11 @@ export function reduceState(state, action) {
       return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, status: "available", restoreRequested: false }), "restore_approved");
     case "files/publish-shared":
       return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, scope: "shared", recipientIds: [], receiverStates: {} }), "published_shared");
+    case "files/decline":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({
+        ...file,
+        receiverStates: { ...file.receiverStates, [state.ui.currentUserId]: "declined" },
+      }), "direct_declined");
     case "tasks/start-download": {
       const task = {
         id: action.taskId,

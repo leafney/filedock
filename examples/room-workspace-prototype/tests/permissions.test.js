@@ -61,4 +61,9 @@ describe("文件操作权限", () => {
     expect(permissions.canRestore).toBeTrue();
     expect(permissions.canRequestRestore).toBeFalse();
   });
+
+  test("接收者拒绝私密文件后不能下载", () => {
+    const file = { ...byId("file-direct-owner-copy"), receiverStates: { "user-owner": "declined" } };
+    expect(getFilePermissions(file, owner, state.room).canDownload).toBeFalse();
+  });
 });

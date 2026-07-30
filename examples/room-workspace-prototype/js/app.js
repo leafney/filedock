@@ -23,6 +23,10 @@ document.addEventListener("click", (event) => {
     store.dispatch({ type: "ui/set-tab", value: tab.dataset.tab });
     return;
   }
+  const currentState = store.getState();
+  if (currentState.ui.openFileMenuId && !event.target.closest(".file-action-menu") && !event.target.closest('[data-action="open-file-actions"]')) {
+    store.dispatch({ type: "ui/close-file-overlays" });
+  }
   const target = event.target.closest("[data-action]");
   if (!target || target.disabled) return;
   if (["open-upload", "open-direct", "open-existing", "open-members", "open-requests", "open-shared-reference", "show-capacity", "show-qr", "show-room-menu"].includes(target.dataset.action)) {
@@ -50,6 +54,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     const state = store.getState();
     if (state.ui.composer) store.dispatch({ type: "ui/close-composer" });
+    else if (state.ui.openFileMenuId || state.ui.actionSheetFileId || state.ui.rejectFileId) store.dispatch({ type: "ui/close-file-overlays" });
     else if (state.ui.modal) store.dispatch({ type: "ui/close-modal" });
     else if (state.ui.drawer) store.dispatch({ type: "ui/close-drawer" });
   }
@@ -125,6 +130,21 @@ function handleAction(action, target) {
   if (action === "open-direct") return openFilePicker("direct");
   if (action === "set-file-scope-view") return store.dispatch({ type: "ui/set-file-scope-view", value: target.dataset.scope });
   if (action === "toggle-file-group") return store.dispatch({ type: "ui/toggle-file-group", value: target.dataset.scope });
+  if (action === "open-file-actions") {
+    const value = state.ui.openFileMenuId === target.dataset.fileId ? null : target.dataset.fileId;
+    return store.dispatch({ type: "ui/open-file-menu", value });
+  }
+  if (action === "close-file-overlays") return closeOverlay("ui/close-file-overlays");
+  if (action === "open-reject-confirm") return store.dispatch({ type: "ui/open-reject-confirm", value: target.dataset.fileId });
+  if (action === "confirm-decline") {
+    store.dispatch({ type: "files/decline", fileId: target.dataset.fileId, ...common });
+    store.dispatch({ type: "ui/close-file-overlays" });
+    return showToast(localized(state, "已拒绝接收该私密文件", "Private file declined"));
+  }
+  if (action === "file-menu-action") {
+    store.dispatch({ type: "ui/close-file-overlays" });
+    return handleFileMenuAction(target.dataset.fileOperation, target, state);
+  }
   if (action === "add-files") return fileInput.click();
   if (action === "open-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: "choose" });
   if (action === "choose-existing") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: target.dataset.fileId });
@@ -235,6 +255,19 @@ function handleAction(action, target) {
 function openFilePicker(mode, recipientIds = []) {
   store.dispatch({ type: "ui/open-composer", mode, files: [], recipientIds });
   fileInput.click();
+}
+
+function handleFileMenuAction(operation, target, state) {
+  const file = state.files.find((item) => item.id === target.dataset.fileId);
+  if (!file) return;
+  if (operation === "view-details") return showToast(`${file.name} · ${formatCompactBytes(file.sizeBytes)}`);
+  if (operation === "view-anonymous-details") return showToast(`${localized(state, "私密文件", "Private file")}#${file.alias} · ${formatCompactBytes(file.sizeBytes)}`);
+  if (operation === "receiver-status") {
+    const accepted = Object.values(file.receiverStates ?? {}).filter((value) => value === "accepted" || value === "downloaded").length;
+    return showToast(localized(state, `${accepted} 人已接收`, `Received by ${accepted}`));
+  }
+  if (operation === "resend") return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileId: file.id });
+  return handleAction(operation, target);
 }
 
 function addBrowserFiles(fileList) {
@@ -362,6 +395,11 @@ function showToast(message, danger = false) {
 }
 
 function localized(state, zh, en) { return state.ui.language === "en" ? en : zh; }
+
+function formatCompactBytes(bytes) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1).replace(".0", "")} GB`;
+  return `${(bytes / 1024 ** 2).toFixed(1).replace(".0", "")} MB`;
+}
 
 function closeOverlay(type) {
   store.dispatch({ type });

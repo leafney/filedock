@@ -1,5 +1,5 @@
 import { calculateCapacity } from "./capacity.js";
-import { deriveFileGroups } from "./file-list.js";
+import { deriveFileActions, deriveFileGroups } from "./file-list.js";
 import { translate } from "./i18n.js";
 import { getFilePermissions, projectEventsForUser, projectFilesForUser } from "./permissions.js";
 
@@ -83,6 +83,19 @@ function renderMessageFile(file, label, action, direct) {
 function renderAuxiliary(state, currentUser) {
   let root = document.querySelector("#auxiliary-root");
   if (!root) { root = document.createElement("div"); root.id = "auxiliary-root"; document.body.append(root); }
+  if (state.ui.rejectFileId) {
+    const file = projectFilesForUser(state.files, currentUser, state.room).find((item) => item.id === state.ui.rejectFileId);
+    if (file?.permissions.canDecline) {
+      const sender = state.users.find((user) => user.id === file.uploaderId)?.displayName ?? "-";
+      root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal reject-modal" role="alertdialog" aria-modal="true" aria-labelledby="reject-file-title" aria-describedby="reject-file-description">
+        <header><div><p class="eyebrow">${t(state, "direct")}</p><h2 id="reject-file-title">${t(state, "rejectFileTitle")}</h2></div><button class="icon-button" data-action="close-file-overlays" aria-label="${t(state, "close")}" type="button">×</button></header>
+        <dl><div><dt>${t(state, "fileName")}</dt><dd>${escapeHTML(file.name)}</dd></div><div><dt>${t(state, "sender")}</dt><dd>${escapeHTML(sender)}</dd></div><div><dt>${t(state, "fileSize")}</dt><dd>${formatBytes(file.sizeBytes)}</dd></div></dl>
+        <p id="reject-file-description">${t(state, "rejectFileConsequence")}</p>
+        <footer><button class="button" data-action="close-file-overlays" type="button">${t(state, "cancel")}</button><button class="button button--danger" data-action="confirm-decline" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, "confirmReject")}</button></footer>
+      </section></div>`;
+      return;
+    }
+  }
   if (state.ui.modal?.type === "shared-reference") {
     const files = projectFilesForUser(state.files, currentUser, state.room).filter((file) => file.scope === "shared" && file.status === "available");
     root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="reference-title"><header><h2 id="reference-title">${t(state, "referenceTitle")}</h2><button class="icon-button" data-action="close-modal" aria-label="${t(state, "close")}" type="button">×</button></header><div class="existing-list">${files.map((file) => `<button data-action="send-shared-reference" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>${formatBytes(file.sizeBytes)} · ${t(state, "noCapacityIncrease")}</span></button>`).join("")}</div></section></div>`;
@@ -313,8 +326,7 @@ function renderRecycleBin(state, user) {
 }
 
 function renderFileRow(file, state, user) {
-  const permissions = getFilePermissions(file, user, state.room);
-  return renderCommonRow(file, state, permissions, renderFileActions(file, permissions, state));
+  return renderCommonRow(file, state, file.permissions, renderFileActions(file, state, user));
 }
 
 function renderRecycleRow(file, state, user) {
@@ -344,16 +356,17 @@ function renderCommonRow(file, state, permissions, actions) {
     <div class="file-cell file-cell--actions" role="cell">${actions}</div></article>`;
 }
 
-function renderFileActions(file, permissions, state) {
-  if (file.status === "uploading") return `<button class="mini-button" type="button" data-action="show-tasks">${t(state, "viewTask")}</button>`;
-  if (file.visibility === "anonymous") return permissions.canRecycle ? `<button class="mini-button mini-button--danger" data-action="recycle" data-file-id="${file.id}" type="button">${t(state, "recycle")}</button>` : "";
-  let actions = "";
-  const locale = state.ui.language;
-  if (permissions.canAccept || permissions.canDownload) actions += `<button class="mini-button mini-button--primary" data-action="download" data-file-id="${file.id}" type="button">${translate(locale, permissions.canAccept ? "acceptDownload" : "download")}</button>`;
-  if (permissions.canResend) actions += `<button class="mini-button" data-action="reuse-file" data-file-id="${file.id}" type="button">${translate(locale, "resend")}</button>`;
-  if (permissions.canPublishShared) actions += `<button class="mini-button" data-action="publish-shared" data-file-id="${file.id}" type="button">${translate(locale, "publish")}</button>`;
-  if (permissions.canRecycle) actions += `<button class="mini-button mini-button--danger" data-action="recycle" data-file-id="${file.id}" type="button">${translate(locale, "recycleBin")}</button>`;
-  return actions;
+function renderFileActions(file, state, user) {
+  const actions = deriveFileActions(file, user, state.room);
+  const primary = actions.primaryActions.map((item) => {
+    const mappedAction = item.id === "accept-download" ? "download" : item.id === "decline" ? "open-reject-confirm" : item.id === "view-task" ? "show-tasks" : item.id;
+    const tone = item.tone === "primary" ? " mini-button--primary" : item.tone === "danger-secondary" ? " mini-button--danger" : "";
+    return `<button class="mini-button${tone}" data-action="${mappedAction}" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, item.labelKey)}</button>`;
+  }).join("");
+  if (!actions.menuActions.length) return primary;
+  const menuOpen = state.ui.openFileMenuId === file.id;
+  const menu = menuOpen ? `<div class="file-action-menu" role="menu" aria-label="${t(state, "moreFileActions")}">${actions.menuActions.map((item) => `<button class="${item.tone === "danger" ? "is-danger" : ""}" data-action="file-menu-action" data-file-operation="${item.id}" data-file-id="${escapeHTML(file.id)}" type="button" role="menuitem">${t(state, item.labelKey)}</button>`).join("")}</div>` : "";
+  return `${primary}<button class="icon-button icon-button--small file-more-button" data-action="open-file-actions" data-file-id="${escapeHTML(file.id)}" type="button" aria-label="${t(state, "moreFileActions")}" aria-haspopup="menu" aria-expanded="${menuOpen}">${moreIcon()}</button>${menu}`;
 }
 
 function renderStatus(file, locale) {
@@ -417,6 +430,7 @@ function renderEmptyState(title, text) { return `<div class="content-placeholder
 function option(value, label, selected) { return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`; }
 function searchIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`; }
 function chevronIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`; }
+function moreIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>`; }
 function uploadIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>`; }
 function sharedIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6l2 2h8v10H4z"/></svg>`; }
 function lockIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`; }
