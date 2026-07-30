@@ -142,7 +142,12 @@ const events = [
 
 const messages = [
   { id: "message-1", fromId: "user-lin", toId: "user-owner", type: "text", text: "文件已经收到，谢谢。", status: "read", createdAt: "2026-07-31T14:20:00+08:00" },
-  { id: "message-2", fromId: "user-owner", toId: "user-lin", type: "text", text: "共享文件引用也会出现在这里。", status: "read", createdAt: "2026-07-31T14:21:00+08:00" },
+  { id: "message-2", fromId: "user-owner", toId: "user-lin", type: "shared_reference", fileId: "file-shared-design", status: "read", createdAt: "2026-07-31T14:21:00+08:00" },
+  { id: "message-3", fromId: "user-lin", toId: "user-owner", type: "image", text: "会议白板照片", status: "read", createdAt: "2026-07-31T14:24:00+08:00" },
+  { id: "message-4", fromId: "user-owner", toId: "user-lin", type: "text", text: "好的，预算表也发给你了。", status: "delivered", createdAt: "2026-07-31T14:26:00+08:00" },
+  { id: "message-5", fromId: "user-zhou", toId: "user-owner", type: "direct_file", fileId: "file-direct-owner-copy", status: "delivered", createdAt: "2026-07-31T13:58:00+08:00" },
+  { id: "message-6", fromId: "user-zhou", toId: "user-owner", type: "text", text: "设备清单请查收。", status: "delivered", createdAt: "2026-07-31T13:59:00+08:00" },
+  { id: "message-7", fromId: "user-su", toId: "user-owner", type: "text", text: "视频正在上传，我先离开一会。", status: "read", createdAt: "2026-07-30T18:10:00+08:00" },
 ];
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -178,6 +183,8 @@ export function createMockState() {
       fileScopeFilter: "all",
       fileSort: "newest",
       selectedChatUserId: "user-lin",
+      chatDraft: "",
+      mobilePage: "files",
       selectedFileIds: [],
       selectedRecipientIds: [],
       composer: null,

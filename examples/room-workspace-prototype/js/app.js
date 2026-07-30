@@ -5,7 +5,9 @@ import { createStore } from "./state.js";
 export const store = createStore();
 let dragDepth = 0;
 
-store.subscribe((state) => renderModel(state));
+store.subscribe((state, action) => {
+  if (action.type !== "chat/set-draft") renderModel(state);
+});
 renderModel(store.getState());
 
 document.addEventListener("click", (event) => {
@@ -22,6 +24,18 @@ document.addEventListener("click", (event) => {
 document.addEventListener("input", (event) => {
   if (event.target.matches('[data-input="file-search"]')) {
     store.dispatch({ type: "ui/set-file-search", value: event.target.value });
+  }
+  if (event.target.matches('[data-input="chat-draft"]')) {
+    store.dispatch({ type: "chat/set-draft", value: event.target.value });
+    const button = event.target.closest(".chat-composer")?.querySelector('[data-action="send-chat"]');
+    if (button) button.disabled = !event.target.value.trim();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.target.matches('[data-input="chat-draft"]') && event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    if (event.target.value.trim()) handleAction("send-chat", event.target);
   }
 });
 
@@ -54,6 +68,10 @@ document.addEventListener("drop", (event) => {
   dragDepth = 0;
   document.body.classList.remove("is-dragging-files");
   addBrowserFiles(event.dataTransfer.files);
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") markCurrentConversationRead();
 });
 
 setInterval(() => {
@@ -116,10 +134,45 @@ function handleAction(action, target) {
     const summary = state.tasks.length ? state.tasks.map((task) => `${task.name}：${task.progress}%`).join("；") : "暂无传输任务";
     return showToast(summary);
   }
+  if (action === "select-member") {
+    store.dispatch({ type: "ui/select-chat", value: target.dataset.userId, mobile: window.innerWidth < 768 });
+    markCurrentConversationRead();
+    return;
+  }
+  if (action === "open-mobile-chat") {
+    store.dispatch({ type: "ui/set-mobile-page", value: "chat" });
+    markCurrentConversationRead();
+    return;
+  }
+  if (action === "close-mobile-chat") return store.dispatch({ type: "ui/set-mobile-page", value: "files" });
+  if (action === "open-members") return store.dispatch({ type: "ui/open-drawer", value: "members" });
+  if (action === "open-requests") return store.dispatch({ type: "ui/open-drawer", value: "requests" });
+  if (action === "close-drawer") return store.dispatch({ type: "ui/close-drawer" });
+  if (action === "close-modal") return store.dispatch({ type: "ui/close-modal" });
+  if (action === "open-shared-reference") return store.dispatch({ type: "ui/open-modal", value: { type: "shared-reference" } });
+  if (action === "append-emoji") {
+    store.dispatch({ type: "chat/append-draft", value: "🙂" });
+    return;
+  }
+  if (action === "send-chat") return sendChatMessage("text", { text: state.ui.chatDraft.trim() });
+  if (action === "send-shared-reference") return sendChatMessage("shared_reference", { fileId: target.dataset.fileId });
+  if (action === "chat-direct-file") return openFilePicker("direct", [state.ui.selectedChatUserId]);
+  if (action === "recall-message") {
+    store.dispatch({ type: "chat/recall", messageId: target.dataset.messageId });
+    return showToast("消息已撤回");
+  }
+  if (action === "show-shared-file") {
+    store.dispatch({ type: "ui/set-tab", value: "files" });
+    store.dispatch({ type: "ui/set-file-search", value: state.files.find((file) => file.id === target.dataset.fileId)?.name ?? "" });
+    store.dispatch({ type: "ui/set-mobile-page", value: "files" });
+    return showToast("已定位共享文件");
+  }
+  if (action === "resolve-request") return showToast(`${target.textContent}加入申请（原型模拟）`);
+  if (action === "set-scenario") return store.dispatch({ type: "ui/set-scenario", value: target.dataset.scenario });
 }
 
-function openFilePicker(mode) {
-  store.dispatch({ type: "ui/open-composer", mode, files: [] });
+function openFilePicker(mode, recipientIds = []) {
+  store.dispatch({ type: "ui/open-composer", mode, files: [], recipientIds });
   fileInput.click();
 }
 
@@ -149,8 +202,50 @@ function confirmSend() {
     return showToast("已从服务端发送，无需再次上传");
   }
   const files = composer.pendingFiles.map((file) => ({ ...file, alias: randomAlias() }));
-  store.dispatch({ type: "files/start-upload", batchId: uniqueId("batch"), files, mode: composer.mode, recipientIds: state.ui.selectedRecipientIds, occurredAt: now });
+  const batchId = uniqueId("batch");
+  const recipients = [...state.ui.selectedRecipientIds];
+  store.dispatch({ type: "files/start-upload", batchId, files, mode: composer.mode, recipientIds: recipients, occurredAt: now });
+  if (composer.mode === "direct") {
+    files.forEach((file, index) => recipients.forEach((recipientId) => store.dispatch({
+      type: "chat/send",
+      message: {
+        id: uniqueId("message"),
+        fromId: state.ui.currentUserId,
+        toId: recipientId,
+        type: "direct_file",
+        fileId: `${batchId}-file-${index}`,
+        status: "delivered",
+        createdAt: now,
+      },
+    })));
+  }
   showToast("模拟上传已开始");
+}
+
+function sendChatMessage(type, payload) {
+  const state = store.getState();
+  const peerId = state.ui.selectedChatUserId;
+  if (!peerId) return;
+  const id = uniqueId("message");
+  store.dispatch({
+    type: "chat/send",
+    message: {
+      id,
+      fromId: state.ui.currentUserId,
+      toId: peerId,
+      type,
+      ...payload,
+      status: "sending",
+      createdAt: new Date().toISOString(),
+    },
+  });
+  window.setTimeout(() => store.dispatch({ type: "chat/set-status", messageId: id, value: "delivered" }), 650);
+}
+
+function markCurrentConversationRead() {
+  if (document.visibilityState !== "visible") return;
+  const peerId = store.getState().ui.selectedChatUserId;
+  if (peerId) store.dispatch({ type: "chat/mark-read", peerId });
 }
 
 function inferKind(file) {

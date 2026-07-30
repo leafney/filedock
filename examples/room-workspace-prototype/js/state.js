@@ -17,7 +17,7 @@ export function reduceState(state, action) {
     case "ui/set-language":
       return { ...state, ui: { ...state.ui, language: action.value } };
     case "ui/set-scenario":
-      return { ...state, ui: { ...state.ui, scenario: action.value } };
+      return { ...state, ui: { ...state.ui, scenario: action.value, drawer: null, modal: null } };
     case "ui/set-file-search":
       return { ...state, ui: { ...state.ui, fileSearch: action.value } };
     case "ui/set-file-scope":
@@ -123,7 +123,39 @@ export function reduceState(state, action) {
     case "tasks/tick":
       return tickTasks(state, action.step ?? 8);
     case "ui/select-chat":
-      return { ...state, ui: { ...state.ui, selectedChatUserId: action.value } };
+      return { ...state, ui: { ...state.ui, selectedChatUserId: action.value, mobilePage: action.mobile ? "chat" : state.ui.mobilePage, drawer: null } };
+    case "ui/set-mobile-page":
+      return { ...state, ui: { ...state.ui, mobilePage: action.value } };
+    case "ui/open-drawer":
+      return { ...state, ui: { ...state.ui, drawer: action.value } };
+    case "ui/close-drawer":
+      return { ...state, ui: { ...state.ui, drawer: null } };
+    case "ui/open-modal":
+      return { ...state, ui: { ...state.ui, modal: action.value } };
+    case "ui/close-modal":
+      return { ...state, ui: { ...state.ui, modal: null } };
+    case "chat/set-draft":
+      return { ...state, ui: { ...state.ui, chatDraft: action.value } };
+    case "chat/append-draft":
+      return { ...state, ui: { ...state.ui, chatDraft: `${state.ui.chatDraft}${action.value}` } };
+    case "chat/send":
+      return {
+        ...state,
+        messages: [...state.messages, action.message],
+        ui: { ...state.ui, chatDraft: "", modal: null },
+      };
+    case "chat/set-status":
+      return { ...state, messages: state.messages.map((message) => message.id === action.messageId ? { ...message, status: action.value } : message) };
+    case "chat/mark-read": {
+      const lastIncoming = [...state.messages].reverse().find((message) => message.fromId === action.peerId && message.toId === state.ui.currentUserId);
+      return {
+        ...state,
+        messages: state.messages.map((message) => message.fromId === action.peerId && message.toId === state.ui.currentUserId && message.status !== "recalled" ? { ...message, status: "read" } : message),
+        readCursors: lastIncoming ? { ...state.readCursors, [`${state.ui.currentUserId}:${action.peerId}`]: lastIncoming.id } : state.readCursors,
+      };
+    }
+    case "chat/recall":
+      return { ...state, messages: state.messages.map((message) => message.id === action.messageId && message.fromId === state.ui.currentUserId ? { ...message, status: "recalled", text: "" } : message) };
     case "recycle/set-count-toward-capacity":
       return {
         ...state,

@@ -6,11 +6,105 @@ export function renderModel(state) {
   const user = state.users.find((item) => item.id === state.ui.currentUserId);
   if (!user) return;
   document.documentElement.lang = state.ui.language;
+  document.body.classList.toggle("is-mobile-chat", state.ui.mobilePage === "chat");
   renderCapacity(state);
+  renderMembers(state, user);
   renderTabs(state, user);
   renderFileContent(state, user);
+  renderChat(state, user);
   renderComposer(state, user);
   renderTasks(state);
+  renderAuxiliary(state, user);
+  renderScenario(state);
+}
+
+function renderMembers(state, currentUser) {
+  const panel = document.querySelector(".member-panel");
+  if (!panel) return;
+  const peers = state.users.filter((user) => user.id !== currentUser.id);
+  panel.innerHTML = `<div class="panel-heading member-panel__heading"><div><p class="eyebrow">会话</p><h1 id="member-panel-title">房间成员</h1></div><span class="count-badge">${state.room.memberCount}</span></div>
+    <label class="search-box">${searchIcon()}<span class="visually-hidden">搜索成员 / Search members</span><input type="search" placeholder="搜索成员" /></label>
+    <div class="member-list" role="list" aria-label="成员列表 / Member list">${renderMemberItems(peers, state)}</div>`;
+}
+
+function renderMemberItems(peers, state) {
+  return peers.map((member) => {
+    const conversation = state.messages.filter((message) => isConversation(message, state.ui.currentUserId, member.id));
+    const last = conversation.at(-1);
+    const unread = conversation.filter((message) => message.fromId === member.id && message.toId === state.ui.currentUserId && message.status !== "read" && message.status !== "recalled").length;
+    return `<div role="listitem"><button class="member-item${member.id === state.ui.selectedChatUserId ? " is-active" : ""}" data-action="select-member" data-user-id="${member.id}" type="button">
+      <span class="avatar avatar--${member.color}">${escapeHTML(member.avatar)}</span><span class="member-item__body"><span><strong>${escapeHTML(member.displayName)}</strong><time>${last ? formatTimestamp(last.createdAt, state.ui.language).split(" ").at(-1) : ""}</time></span><span>${escapeHTML(messageSummary(last, state))}</span></span>
+      ${unread ? `<span class="unread-badge">${unread}</span>` : ""}<span class="presence presence--${member.presence}" title="${presenceLabel(member.presence)}"></span></button></div>`;
+  }).join("");
+}
+
+function renderChat(state, currentUser) {
+  const panel = document.querySelector(".chat-panel");
+  if (!panel) return;
+  const peer = state.users.find((user) => user.id === state.ui.selectedChatUserId && user.id !== currentUser.id);
+  if (!peer) {
+    panel.innerHTML = `<div class="content-placeholder"><h3>选择一名成员</h3><p>这里只支持房间内一对一聊天，不提供群聊。</p></div>`;
+    return;
+  }
+  const messages = state.ui.scenario === "empty-chat" ? [] : state.messages.filter((message) => isConversation(message, currentUser.id, peer.id));
+  const lastOutgoingId = [...messages].reverse().find((message) => message.fromId === currentUser.id && message.status !== "recalled")?.id;
+  panel.innerHTML = `<div class="chat-header"><button class="icon-button mobile-chat-back" data-action="close-mobile-chat" type="button" aria-label="返回文件">←</button><span class="avatar avatar--${peer.color}">${escapeHTML(peer.avatar)}</span><div><h2 id="chat-panel-title">${escapeHTML(peer.displayName)}</h2><p><span class="presence presence--${peer.presence}"></span>${presenceLabel(peer.presence)} · 一对一聊天</p></div><button class="icon-button" data-action="open-members" type="button" aria-label="切换成员">•••</button></div>
+    <div class="chat-content" aria-label="聊天消息 / Chat messages">${messages.length ? `<div class="chat-message-list">${messages.map((message) => renderMessage(message, state, currentUser, lastOutgoingId)).join("")}</div>` : `<div class="chat-empty"><strong>暂无消息</strong><span>发送文字或引用共享文件开始对话。</span></div>`}</div>
+    <div class="chat-composer" aria-label="消息输入 / Message composer"><div class="chat-composer__tools"><button class="icon-button" data-action="append-emoji" type="button" aria-label="添加表情"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></button><button class="icon-button" data-action="chat-direct-file" type="button" aria-label="发送私密文件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8 8a6 6 0 0 1-8-8l9-9a4 4 0 0 1 6 6l-9 9a2 2 0 0 1-3-3l8-8"/></svg></button><button class="icon-button" data-action="open-shared-reference" type="button" aria-label="引用共享文件"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14 21 3M15 3h6v6M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/></svg></button></div><textarea data-input="chat-draft" aria-label="输入消息 / Enter message" placeholder="输入消息，Enter 发送" maxlength="500">${escapeHTML(state.ui.chatDraft)}</textarea><button class="button button--primary" data-action="send-chat" type="button" ${state.ui.chatDraft.trim() ? "" : "disabled"}>发送</button></div>`;
+}
+
+function renderMessage(message, state, currentUser, lastOutgoingId) {
+  const outgoing = message.fromId === currentUser.id;
+  if (message.status === "recalled") return `<article class="chat-message chat-message--system">${outgoing ? "你" : "对方"}撤回了一条消息</article>`;
+  const file = message.fileId ? state.files.find((item) => item.id === message.fileId) : null;
+  let content = escapeHTML(message.text ?? "");
+  if (message.type === "image") content = `<div class="message-image" role="img" aria-label="${escapeHTML(message.text ?? "聊天图片")}"><span>图片预览</span></div>`;
+  if (message.type === "shared_reference" && file) content = renderMessageFile(file, "共享文件引用", "查看共享文件", false);
+  if (message.type === "direct_file" && file) content = renderMessageFile(file, `私密文件#${file.alias}`, file.receiverStates?.[currentUser.id] === "pending" ? "接受并下载" : "下载", true);
+  const receipt = outgoing && message.id === lastOutgoingId ? `<span class="read-receipt">${message.status === "read" ? "已读" : message.status === "failed" ? "发送失败" : message.status === "sending" ? "发送中" : "已送达"}</span>` : "";
+  return `<article class="chat-message ${outgoing ? "chat-message--outgoing" : "chat-message--incoming"}" data-message-id="${message.id}"><div class="message-bubble ${outgoing ? "message-bubble--outgoing" : ""}">${content}</div><time>${formatTimestamp(message.createdAt, state.ui.language).split(" ").at(-1)}</time>${outgoing ? `<button class="recall-button" data-action="recall-message" data-message-id="${message.id}" type="button">撤回</button>` : ""}${receipt}</article>`;
+}
+
+function renderMessageFile(file, label, action, direct) {
+  return `<div class="message-file-card"><span class="file-icon file-icon--${file.kind}">${fileIcon(file.kind)}</span><div><strong>${escapeHTML(file.name)}</strong><small>${escapeHTML(label)} · ${formatBytes(file.sizeBytes)}</small></div><button class="mini-button mini-button--primary" data-action="${direct ? "download" : "show-shared-file"}" data-file-id="${file.id}" type="button">${action}</button></div>`;
+}
+
+function renderAuxiliary(state, currentUser) {
+  let root = document.querySelector("#auxiliary-root");
+  if (!root) { root = document.createElement("div"); root.id = "auxiliary-root"; document.body.append(root); }
+  if (state.ui.modal?.type === "shared-reference") {
+    const files = projectFilesForUser(state.files, currentUser, state.room).filter((file) => file.scope === "shared" && file.status === "available");
+    root.innerHTML = `<div class="modal-backdrop"><section class="prototype-modal" role="dialog" aria-modal="true" aria-labelledby="reference-title"><header><h2 id="reference-title">引用共享文件</h2><button class="icon-button" data-action="close-modal" aria-label="关闭" type="button">×</button></header><div class="existing-list">${files.map((file) => `<button data-action="send-shared-reference" data-file-id="${file.id}" type="button"><strong>${escapeHTML(file.name)}</strong><span>${formatBytes(file.sizeBytes)} · 只发送引用，不增加容量</span></button>`).join("")}</div></section></div>`;
+    return;
+  }
+  if (state.ui.drawer === "members" || state.ui.drawer === "requests") {
+    const members = state.users.filter((user) => user.id !== currentUser.id);
+    root.innerHTML = `<div class="drawer-backdrop" data-action="close-drawer"><aside class="prototype-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" onclick="event.stopPropagation()"><header><div><p class="eyebrow">${state.ui.drawer === "requests" ? "房主管理" : "一对一会话"}</p><h2 id="drawer-title">${state.ui.drawer === "requests" ? "加入申请" : "房间成员"}</h2></div><button class="icon-button" data-action="close-drawer" type="button" aria-label="关闭">×</button></header>${state.ui.drawer === "requests" ? renderRequests() : `<div class="drawer-member-list">${renderMemberItems(members, state)}</div>`}</aside></div>`;
+    return;
+  }
+  root.innerHTML = "";
+}
+
+function renderRequests() {
+  return `<div class="join-request-list"><article><span class="avatar avatar--blue">许</span><div><strong>许知夏</strong><small>申请剩余 01:42</small></div><button class="mini-button mini-button--primary" data-action="resolve-request" type="button">同意</button><button class="mini-button" data-action="resolve-request" type="button">拒绝</button></article><article><span class="avatar avatar--amber">韩</span><div><strong>韩川</strong><small>申请剩余 03:18</small></div><button class="mini-button mini-button--primary" data-action="resolve-request" type="button">同意</button><button class="mini-button" data-action="resolve-request" type="button">拒绝</button></article></div>`;
+}
+
+function renderScenario(state) {
+  let root = document.querySelector("#scenario-root");
+  if (!root) { root = document.createElement("div"); root.id = "scenario-root"; document.body.append(root); }
+  const scenario = state.ui.scenario;
+  const scenes = {
+    "join-free": ["加入房间 1234", "该房间无需验证，可直接加入。", "立即加入", "workspace"],
+    pin: ["输入房间密码", "请输入房主提供的 4 位数字密码。", "验证并加入", "pending"],
+    pending: ["等待房主审批", "申请已发送，批准后自动进入房间。", "返回首页", "workspace"],
+    dissolved: ["房间已解散", "所有文件和回收站内容将被清理。", "返回首页", "workspace"],
+    kicked: ["你已被移出房间", "房主结束了你的本次房间访问。", "返回首页", "workspace"],
+    "not-found": ["房间不存在", "房间号无效、已过期或已被解散。", "返回首页", "workspace"],
+    "load-error": ["加载失败", "无法加载房间数据，请检查局域网连接。", "重试", "workspace"],
+  };
+  if (!scenes[scenario]) { root.innerHTML = ""; return; }
+  const [title, text, button, next] = scenes[scenario];
+  root.innerHTML = `<div class="scenario-screen" role="alertdialog" aria-modal="true"><section><div class="brand-mark">FD</div><p class="eyebrow">FileDock 房间</p><h1>${title}</h1><p>${text}</p>${scenario === "pin" ? `<div class="pin-inputs" aria-label="四位房间密码"><input inputmode="numeric" maxlength="1" value="1"><input inputmode="numeric" maxlength="1" value="2"><input inputmode="numeric" maxlength="1"><input inputmode="numeric" maxlength="1"></div>` : ""}<button class="button button--primary" data-action="set-scenario" data-scenario="${next}" type="button">${button}</button></section></div>`;
 }
 
 function renderCapacity(state) {
@@ -49,7 +143,7 @@ function renderFileContent(state, user) {
 }
 
 function renderFileList(state, user) {
-  const visibleFiles = filterAndSort(projectFilesForUser(state.files, user, state.room)
+  const visibleFiles = state.ui.scenario === "empty-files" ? [] : filterAndSort(projectFilesForUser(state.files, user, state.room)
     .filter((file) => file.status === "available" || file.status === "uploading"), state, user);
   return `
     <div class="file-filter-bar">
@@ -110,7 +204,7 @@ function renderTimelineEvent(event, state) {
 }
 
 function renderRecycleBin(state, user) {
-  const files = projectFilesForUser(state.files, user, state.room).filter((file) => file.status === "recycled");
+  const files = state.ui.scenario === "empty-recycle" ? [] : projectFilesForUser(state.files, user, state.room).filter((file) => file.status === "recycled");
   const capacity = calculateCapacity({ files: state.files, roomCapacityBytes: state.room.capacityBytes, recycleConfig: state.recycleConfig });
   return `<div class="recycle-summary"><div><strong>回收站</strong><span>文件保留至房间销毁</span></div><div><span>实际大小 ${formatBytes(capacity.recycledBytes)}</span><span>计费 ${formatBytes(capacity.recycledChargedBytes)}</span></div></div>
     <div class="file-table" role="table" aria-label="回收站文件 / Recycled files">
@@ -240,6 +334,16 @@ function renderEmptyState(title, text) { return `<div class="content-placeholder
 function option(value, label, selected) { return `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`; }
 function searchIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>`; }
 function chevronIcon() { return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>`; }
+function isConversation(message, firstId, secondId) { return (message.fromId === firstId && message.toId === secondId) || (message.fromId === secondId && message.toId === firstId); }
+function presenceLabel(value) { return ({ online: "在线", away: "暂离", offline: "离线" })[value] ?? value; }
+function messageSummary(message, state) {
+  if (!message) return "暂无消息";
+  if (message.status === "recalled") return "消息已撤回";
+  if (message.type === "image") return "[图片]";
+  if (message.type === "direct_file") return "发来一个私密文件";
+  if (message.type === "shared_reference") return `引用：${state.files.find((file) => file.id === message.fileId)?.name ?? "共享文件"}`;
+  return message.text ?? "";
+}
 
 export function formatBytes(value) {
   const bytes = Math.max(0, Number(value) || 0);
