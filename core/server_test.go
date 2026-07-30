@@ -134,9 +134,9 @@ func TestServerLocalizesAndSanitizesErrors(t *testing.T) {
 		wantCode    int
 		wantMessage string
 	}{
-		{name: "English not found", method: fiber.MethodGet, path: "/api/missing", language: "en", wantStatus: 404, wantCode: 4009, wantMessage: "The requested resource does not exist or is unavailable"},
-		{name: "English method not allowed", method: fiber.MethodPost, path: "/version", language: "en", wantStatus: 405, wantCode: 4010, wantMessage: "The request method is not supported"},
-		{name: "Chinese internal", method: fiber.MethodGet, path: "/api/internal-test", language: "zh-CN", wantStatus: 500, wantCode: 5000, wantMessage: "服务器繁忙，请稍后重试"},
+		{name: "English not found", method: fiber.MethodGet, path: "/api/missing", language: "en", wantStatus: 404, wantCode: 40401, wantMessage: "The requested resource does not exist or is unavailable"},
+		{name: "English method not allowed", method: fiber.MethodPost, path: "/version", language: "en", wantStatus: 405, wantCode: 40501, wantMessage: "The request method is not supported"},
+		{name: "Chinese internal", method: fiber.MethodGet, path: "/api/internal-test", language: "zh-CN", wantStatus: 500, wantCode: 50000, wantMessage: "服务器繁忙，请稍后重试"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

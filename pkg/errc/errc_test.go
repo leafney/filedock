@@ -29,6 +29,12 @@ func TestDefinitionsAreValid(t *testing.T) {
 		if definition.HTTPStatus < 100 || definition.HTTPStatus > 599 {
 			t.Fatalf("code %d has invalid HTTP status %d", definition.Code, definition.HTTPStatus)
 		}
+		if definition.Code != Success && (definition.Code < 10000 || definition.Code > 99999) {
+			t.Fatalf("code %d is not a five-digit error code", definition.Code)
+		}
+		if definition.Code != Success && definition.Code/100 != definition.HTTPStatus {
+			t.Fatalf("code %d does not map to HTTP status %d", definition.Code, definition.HTTPStatus)
+		}
 	}
 }
 
