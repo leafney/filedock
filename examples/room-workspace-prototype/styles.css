@@ -783,6 +783,7 @@ dd {
 .file-icon--sheet { background: #f0fdf4; color: #15803d; }
 .file-icon--private { background: #fef3c7; color: #a16207; }
 .file-icon--video { background: #eff6ff; color: #2563eb; }
+.file-icon--document { background: #f3e8ff; color: #7c3aed; }
 
 .scope-tag,
 .file-status {
