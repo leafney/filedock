@@ -30,3 +30,4 @@ static/dist/*
 .env
 .playwright-cli/
 .DS_Store
+artifacts/
