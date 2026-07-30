@@ -269,6 +269,7 @@ body {
 .home-loading { flex: 1; display: grid; place-items: center; color: #64748b; }
 .home-profile { flex-direction: column; gap: 1.1rem; }
 .home-profile-form { width: 100%; }
+.home-profile-name-editor { display: grid; gap: 0.65rem; }
 .home-profile-details { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.7rem; color: #64748b; font-size: 0.8rem; margin: 0 0 1rem; }
 .home-profile-details dt { color: #94a3b8; }
 .home-profile-details dd { margin: 0; color: #334155; }

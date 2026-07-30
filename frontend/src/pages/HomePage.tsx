@@ -1,6 +1,7 @@
-import { BellOutlined, CloseOutlined, DeleteOutlined, DownOutlined, EditOutlined, GlobalOutlined, LoginOutlined, PlusOutlined, ReloadOutlined, SettingOutlined } from "@ant-design/icons";
+import { BellOutlined, CloseOutlined, DeleteOutlined, DownOutlined, EditOutlined, GlobalOutlined, LoginOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { Alert, Avatar, Badge, Button, Divider, Drawer, Dropdown, Empty, Form, Input, Modal, Radio, Space, Tag, Tooltip, message } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Dices } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -31,9 +32,12 @@ import { getVersionDetails } from "../utils/version";
 
 type ModalKind = "create" | "join" | null;
 
-function formatRegistrationDate(timestamp: number, language: string) {
+function formatRegistrationDate(timestamp: number) {
   if (!timestamp) return "-";
-  return new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(new Date(timestamp * 1000));
+  const date = new Date(timestamp * 1000);
+  if (!Number.isFinite(date.getTime())) return "-";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function ErrorAlert({ error }: { error: unknown }) {
@@ -83,7 +87,7 @@ function HomeHeader({ session, draftName, canNotify, pendingCount, onOpenProfile
 
 function NicknamePanel({ name, setName, onRandomize, onSubmit, pending, error }: { name: string; setName: (value: string) => void; onRandomize: () => void; onSubmit: (event: FormEvent) => void; pending: boolean; error?: unknown }) {
   const { t } = useTranslation();
-  return <section className="home-onboarding home-sidebar-card"><div className="home-eyebrow">{t("home.identitySetup")}</div><h1>{t("home.welcome")}</h1><p>{t("home.intro")}</p><form className="home-name-form" onSubmit={onSubmit}><label htmlFor="home-display-name">{t("session.displayName")}</label><Space.Compact block><Input id="home-display-name" value={name} maxLength={20} placeholder={t("session.displayNamePlaceholder")} onChange={(event) => setName(event.target.value)} autoComplete="nickname" /><Button aria-label={t("session.randomize")} icon={<ReloadOutlined />} onClick={onRandomize} /></Space.Compact><span className="home-form-hint">{t("session.nameHint")}</span>{error ? <ErrorAlert error={error} /> : null}<Button type="primary" htmlType="submit" block loading={pending} disabled={!name.trim()} icon={<LoginOutlined />}>{t("session.create")}</Button></form></section>;
+  return <section className="home-onboarding home-sidebar-card"><div className="home-eyebrow">{t("home.identitySetup")}</div><h1>{t("home.welcome")}</h1><p>{t("home.intro")}</p><form className="home-name-form" onSubmit={onSubmit}><label htmlFor="home-display-name">{t("session.displayName")}</label><Space.Compact block><Input id="home-display-name" value={name} maxLength={20} placeholder={t("session.displayNamePlaceholder")} onChange={(event) => setName(event.target.value)} autoComplete="nickname" /><Button aria-label={t("session.randomize")} icon={<Dices aria-hidden="true" size={16} />} onClick={onRandomize} /></Space.Compact><span className="home-form-hint">{t("session.nameHint")}</span>{error ? <ErrorAlert error={error} /> : null}<Button type="primary" htmlType="submit" block loading={pending} disabled={!name.trim()} icon={<LoginOutlined />}>{t("session.create")}</Button></form></section>;
 }
 
 function RoomCard({ room, onEnter, onAction }: { room: RoomSummary; onEnter: () => void; onAction: (action: "enter" | "leave" | "dissolve") => void }) {
@@ -114,15 +118,17 @@ function JoinRoomModal({ open, onClose, onJoined }: { open: boolean; onClose: ()
 }
 
 function ProfileModal({ open, onClose, session, ownerRoom, onReset }: { open: boolean; onClose: () => void; session: Session; ownerRoom?: RoomSummary; onReset: () => void }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const versionQuery = useQuery({ queryKey: ["version"], queryFn: getVersion, retry: false, staleTime: 5 * 60_000 });
   const [name, setName] = useState(session.displayName);
-  useEffect(() => { if (open) setName(session.displayName); }, [open, session.displayName]);
   const update = useMutation({ mutationFn: () => updateSession(name.trim()), onSuccess: (next) => { queryClient.setQueryData(["session"], next); message.success(t("home.saveName")); } });
+  const randomNickname = useMutation({ mutationFn: getRandomNickname, onMutate: () => update.reset(), onSuccess: (candidate) => setName(candidate.displayName) });
+  useEffect(() => { if (open) { setName(session.displayName); update.reset(); randomNickname.reset(); } }, [open, session.displayName]);
   const resetDisabled = Boolean(ownerRoom && (ownerRoom.status === "active" || ownerRoom.status === "destroying"));
   const version = versionQuery.data ? getVersionDetails(versionQuery.data) : undefined;
-  return <Modal title={t("home.profile")} open={open} onCancel={onClose} footer={null} destroyOnHidden><div className="home-profile"><Avatar size={72} style={{ backgroundColor: getStableAvatarColor(session.displayName), fontSize: 28 }}>{getAvatarInitial(session.displayName)}</Avatar><Form layout="vertical" className="home-profile-form"><Form.Item label={t("session.displayName")}><Space.Compact block><Input value={name} maxLength={20} onChange={(event) => setName(event.target.value)} /><Button type="primary" icon={<EditOutlined />} loading={update.isPending} disabled={!name.trim()} onClick={() => update.mutate()}>{t("home.saveName")}</Button></Space.Compact></Form.Item><dl className="home-profile-details"><dt>{t("home.registeredAt")}</dt><dd>{formatRegistrationDate(session.createdAt, i18n.language)}</dd></dl><h3 className="home-profile-version-title">{t("home.serviceInfo")}</h3><dl className="home-profile-details"><dt>{t("home.fields.status")}</dt><dd>{versionQuery.data?.status ?? "-"}</dd><dt>{t("home.fields.version")}</dt><dd>{version?.version ?? "-"}</dd><dt>{t("home.fields.branch")}</dt><dd>{version?.branch ?? "-"}</dd><dt>{t("home.fields.commit")}</dt><dd>{version?.commit ?? "-"}</dd><dt>{t("home.fields.buildTime")}</dt><dd>{version?.buildTime ?? "-"}</dd></dl>{update.isError && <ErrorAlert error={update.error} />}<Tooltip title={resetDisabled ? t("home.resetBlocked") : undefined}><Button danger block icon={<DeleteOutlined />} disabled={resetDisabled} onClick={onReset}>{t("session.reset")}</Button></Tooltip></Form></div></Modal>;
+  const profileError = randomNickname.error ?? update.error;
+  return <Modal title={t("home.profile")} open={open} onCancel={onClose} footer={null} destroyOnHidden><div className="home-profile"><Avatar size={72} style={{ backgroundColor: getStableAvatarColor(session.displayName), fontSize: 28 }}>{getAvatarInitial(session.displayName)}</Avatar><Form layout="vertical" className="home-profile-form"><Form.Item label={t("session.displayName")}><div className="home-profile-name-editor"><Space.Compact block><Input value={name} maxLength={20} onChange={(event) => { setName(event.target.value); update.reset(); randomNickname.reset(); }} /><Tooltip title={t("session.randomize")}><Button aria-label={t("session.randomize")} icon={<Dices aria-hidden="true" size={16} />} loading={randomNickname.isPending} onClick={() => randomNickname.mutate()} /></Tooltip></Space.Compact><Button type="primary" block icon={<EditOutlined />} loading={update.isPending} disabled={!name.trim()} onClick={() => { randomNickname.reset(); update.mutate(); }}>{t("home.saveName")}</Button></div></Form.Item>{profileError && <ErrorAlert error={profileError} />}<dl className="home-profile-details"><dt>{t("home.registeredAt")}</dt><dd>{formatRegistrationDate(session.createdAt)}</dd></dl><h3 className="home-profile-version-title">{t("home.serviceInfo")}</h3><dl className="home-profile-details"><dt>{t("home.fields.status")}</dt><dd>{versionQuery.data?.status ?? "-"}</dd><dt>{t("home.fields.version")}</dt><dd>{version?.version ?? "-"}</dd><dt>{t("home.fields.branch")}</dt><dd>{version?.branch ?? "-"}</dd><dt>{t("home.fields.commit")}</dt><dd>{version?.commit ?? "-"}</dd><dt>{t("home.fields.buildTime")}</dt><dd>{version?.buildTime ?? "-"}</dd></dl><Tooltip title={resetDisabled ? t("home.resetBlocked") : undefined}><Button danger block icon={<DeleteOutlined />} disabled={resetDisabled} onClick={onReset}>{t("session.reset")}</Button></Tooltip></Form></div></Modal>;
 }
 
 function NotificationPanel({ open, onClose, roomCode, requests, loading, error, processingId, onApprove, onReject }: { open: boolean; onClose: () => void; roomCode?: string; requests: JoinRequest[]; loading: boolean; error?: unknown; processingId?: string; onApprove: (request: JoinRequest) => void; onReject: (request: JoinRequest) => void }) {
