@@ -55,6 +55,12 @@ body {
   outline: none;
 }
 
+.app-footer-text {
+  color: #64748b;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.6rem;
+}
+
 .app-footer-tooltip {
   line-height: 1.6;
   white-space: nowrap;
@@ -209,7 +215,6 @@ body {
 .home-brand,
 .home-header-actions,
 .home-user-button,
-.home-primary-actions,
 .home-section-heading,
 .home-profile,
 .home-mobile-actions {
@@ -241,22 +246,22 @@ body {
 .home-name-form label { color: #334155; font-size: 0.8rem; font-weight: 650; }
 .home-form-hint { color: #94a3b8; font-size: 0.7rem; }
 .home-name-form .home-alert { margin: 0.25rem 0; }
-.home-primary-actions { gap: 0.6rem; }
-.home-primary-actions .ant-btn { flex: 1; }
 .home-section-heading { justify-content: space-between; color: #334155; font-size: 0.8rem; font-weight: 750; }
 .home-owner-slot { min-height: 4.8rem; margin-top: 0.7rem; }
 .home-empty-owner { width: 100%; min-height: 4.8rem; border: 1px dashed #cbd5e1; border-radius: 0.85rem; background: #f8fafc; color: #94a3b8; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; font-size: 0.72rem; }
 .home-empty-owner:hover, .home-empty-owner:focus-visible { color: #0f766e; border-color: #5eead4; outline: none; background: #f0fdfa; }
-.home-room-card { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.1rem 0.5rem; min-height: 4.8rem; border: 1px solid #e2e8f0; border-radius: 0.85rem; background: #fff; cursor: pointer; overflow: hidden; padding: 0.8rem 0.9rem; transition: border-color 180ms ease, box-shadow 180ms ease; }
+.home-room-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 7.5rem); align-items: center; gap: 0.1rem 0.5rem; min-height: 4.8rem; border: 1px solid #e2e8f0; border-radius: 0.85rem; background: #fff; cursor: pointer; overflow: hidden; padding: 0.8rem 0.9rem; transition: border-color 180ms ease, box-shadow 180ms ease; }
 .home-room-card:hover, .home-room-card:focus-visible { border-color: #5eead4; box-shadow: 0 5px 18px rgb(15 118 110 / 10%); outline: none; }
 .home-room-card.is-destroying { background: #fffbeb; cursor: not-allowed; opacity: 0.75; }
 .home-room-code { color: #0f766e; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.5rem; font-weight: 750; letter-spacing: 0.12em; }
-.home-room-role { color: #64748b; font-size: 0.72rem; }
+.home-room-title { min-width: 0; overflow: hidden; color: #64748b; font-size: 0.72rem; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .home-room-card > .ant-tag { grid-column: 1 / -1; width: fit-content; margin: 0; }
 .home-room-actions { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem; background: rgb(255 255 255 / 94%); opacity: 0; padding: 0.5rem 0.65rem; pointer-events: none; transition: opacity 180ms ease; }
 .home-room-card:hover .home-room-actions, .home-room-card:focus-within .home-room-actions { opacity: 1; pointer-events: auto; }
 .home-room-card.is-destroying .home-room-actions { display: none; }
-.home-rooms-section .ant-divider { color: #94a3b8; font-size: 0.7rem; margin: 1rem 0 0.6rem; }
+.home-rooms-section .ant-divider { margin: 1rem 0 0.6rem; }
+.home-participating-heading { margin-bottom: 0.55rem; }
+.home-participating-heading .ant-btn { height: auto; padding: 0; font-size: 0.72rem; }
 .home-member-list { display: grid; gap: 0.55rem; max-height: 16rem; overflow: auto; padding-right: 0.1rem; }
 .home-empty-members { margin: 0; }
 .home-alert { border-radius: 0.75rem !important; }
@@ -285,6 +290,5 @@ body {
   .home-brand-subtitle, .home-user-name, .home-user-chevron { display: none; }
   .home-header { min-height: 3rem; }
   .home-radar-panel .radar-canvas { min-height: 43vh; }
-  .home-primary-actions .ant-btn { padding-inline: 0.6rem; }
   .home-room-actions { display: none; }
 }
