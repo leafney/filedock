@@ -23,6 +23,7 @@ const zhCN = {
     saveName: "保存名称",
     resetConfirm: "重置后当前身份和成员关系将被清除，确定继续吗？",
     serviceInfo: "服务信息",
+    versionDetails: "查看完整版本信息",
     createSuccess: "房间创建成功",
     joinSuccess: "已加入房间",
     signedOut: "匿名身份已重置",

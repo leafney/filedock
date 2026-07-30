@@ -29,6 +29,7 @@ const en = {
     saveName: "Save name",
     resetConfirm: "This clears the identity and its memberships. Continue?",
     serviceInfo: "Service information",
+    versionDetails: "View full version information",
     createSuccess: "Room created",
     joinSuccess: "Joined room",
     signedOut: "Anonymous identity reset",

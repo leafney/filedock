@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { normalizeLanguage } from "../i18n";
 import { getApiErrorMessage } from "../lib/api-error";
 import { getVersion } from "../services/version";
+import { AppFooter } from "./AppFooter";
 
 export function LanguageSelector() {
   const { t, i18n } = useTranslation();
@@ -32,6 +33,7 @@ export function PageFrame({ children }: { children: ReactNode }) {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#12304a_0,_#07111f_42%,_#020617_100%)] px-4 py-20 text-slate-100 sm:px-8">
       <LanguageSelector />
       <div className="mx-auto w-full max-w-6xl">{children}</div>
+      <AppFooter />
     </main>
   );
 }
