@@ -16,6 +16,7 @@ export function renderModel(state) {
   renderChat(state, user);
   renderComposer(state, user);
   renderTasks(state);
+  renderMobileFileActions(state, user);
   renderAuxiliary(state, user);
   renderScenario(state);
   renderController(state, user);
@@ -92,6 +93,20 @@ function renderAuxiliary(state, currentUser) {
         <dl><div><dt>${t(state, "fileName")}</dt><dd>${escapeHTML(file.name)}</dd></div><div><dt>${t(state, "sender")}</dt><dd>${escapeHTML(sender)}</dd></div><div><dt>${t(state, "fileSize")}</dt><dd>${formatBytes(file.sizeBytes)}</dd></div></dl>
         <p id="reject-file-description">${t(state, "rejectFileConsequence")}</p>
         <footer><button class="button" data-action="close-file-overlays" type="button">${t(state, "cancel")}</button><button class="button button--danger" data-action="confirm-decline" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, "confirmReject")}</button></footer>
+      </section></div>`;
+      return;
+    }
+  }
+  if (state.ui.actionSheetFileId) {
+    const file = projectFilesForUser(state.files, currentUser, state.room).find((item) => item.id === state.ui.actionSheetFileId);
+    const actions = deriveFileActions(file, currentUser, state.room).menuActions;
+    if (file && actions.length) {
+      const name = file.visibility === "anonymous" ? t(state, "privateFile", { alias: file.alias }) : file.name;
+      root.innerHTML = `<div class="action-sheet-backdrop" data-action="close-file-overlays"><section class="file-action-sheet" role="dialog" aria-modal="true" aria-labelledby="file-action-sheet-title">
+        <div class="action-sheet-handle" aria-hidden="true"></div>
+        <header><div><h2 id="file-action-sheet-title">${escapeHTML(name)}</h2><p><span class="scope-tag scope-tag--${file.visibility === "anonymous" ? "private" : file.scope}">${t(state, file.visibility === "anonymous" ? "privateAudit" : file.scope)}</span>${formatBytes(file.sizeBytes)}</p></div><button class="icon-button" data-action="close-file-overlays" type="button" aria-label="${t(state, "close")}">×</button></header>
+        <div class="action-sheet-list">${actions.map((item) => `<button class="${item.tone === "danger" ? "is-danger" : ""}" data-action="file-menu-action" data-file-operation="${item.id}" data-file-id="${escapeHTML(file.id)}" type="button">${t(state, item.labelKey)}<span aria-hidden="true">›</span></button>`).join("")}</div>
+        <button class="action-sheet-cancel" data-action="close-file-overlays" type="button">${t(state, "cancel")}</button>
       </section></div>`;
       return;
     }
@@ -435,6 +450,21 @@ function renderTasks(state) {
   const progress = totalBytes ? Math.round(sentBytes / totalBytes * 100) : 0;
   const title = active.length ? t(state, "tasksCount", { count: active.length }) : state.tasks.length ? t(state, "tasksDone") : t(state, "noTasks");
   bar.innerHTML = `<div class="transfer-bar__summary"><span class="transfer-indicator${active.length ? "" : " is-idle"}" aria-hidden="true"></span><strong>${title}</strong><span>${shown.map((task) => `${t(state, task.type === "upload" ? "upload" : "receive")} ${task.progress}%`).join(" · ")}</span></div><div class="transfer-progress" role="progressbar" aria-label="${t(state, "tasks")}" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100"><span style="width:${progress}%"></span></div><button class="button button--text" data-action="show-tasks" type="button">${t(state, "tasks")}</button>`;
+}
+
+function renderMobileFileActions(state, user) {
+  const root = document.querySelector(".mobile-file-actions");
+  if (!root) return;
+  if (state.ui.batchMode && state.ui.activeFileTab === "files") {
+    const projected = projectFilesForUser(state.files, user, state.room);
+    const selected = projected.filter((file) => state.ui.selectedFileIds.includes(file.id));
+    const batch = deriveBatchCapabilities(selected, user, state.room);
+    root.classList.add("is-batch");
+    root.innerHTML = `<span>${t(state, "selectedCount", { count: selected.length })}</span><button class="button" data-action="batch-download" type="button" ${batch.download.enabled ? "" : "disabled"}>${t(state, "download")}</button><button class="button button--primary" data-action="batch-private-send" type="button" ${batch.privateSend.enabled ? "" : "disabled"}>${t(state, "batchPrivateSend")}</button><button class="icon-button" data-action="exit-batch-mode" type="button" aria-label="${t(state, "exitBatch")}">×</button>`;
+    return;
+  }
+  root.classList.remove("is-batch");
+  root.innerHTML = `<button class="button button--primary" data-action="open-upload" type="button">${t(state, "addFile")}</button><button class="button" data-action="open-existing" type="button">${t(state, "sendExistingPrivate")}</button>`;
 }
 
 function renderTableHeader(state, files = []) {

@@ -29,7 +29,7 @@ document.addEventListener("click", (event) => {
   }
   const target = event.target.closest("[data-action]");
   if (!target || target.disabled) return;
-  if (["open-upload", "open-direct", "open-existing", "open-members", "open-requests", "open-shared-reference", "show-capacity", "show-qr", "show-room-menu"].includes(target.dataset.action)) {
+  if (["open-upload", "open-direct", "open-existing", "open-file-actions", "open-members", "open-requests", "open-shared-reference", "show-capacity", "show-qr", "show-room-menu"].includes(target.dataset.action)) {
     lastOverlayTrigger = target;
   }
   handleAction(target.dataset.action, target);
@@ -162,6 +162,7 @@ function handleAction(action, target) {
     return store.dispatch({ type: "ui/open-composer", mode: "direct", existingFileIds: [...state.ui.selectedFileIds] });
   }
   if (action === "open-file-actions") {
+    if (window.innerWidth < 768) return store.dispatch({ type: "ui/open-action-sheet", value: target.dataset.fileId });
     const value = state.ui.openFileMenuId === target.dataset.fileId ? null : target.dataset.fileId;
     return store.dispatch({ type: "ui/open-file-menu", value });
   }
