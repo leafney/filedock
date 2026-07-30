@@ -28,7 +28,7 @@ type Server struct {
 	app *fiber.App
 }
 
-func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc) (*Server, error) {
+func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("server config is required")
 	}
@@ -47,6 +47,9 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	if sessionSvc == nil {
 		return nil, fmt.Errorf("session service is required")
 	}
+	if roomAPI == nil {
+		return nil, fmt.Errorf("room api is required")
+	}
 	if (cfg.HTTP.CertFile == "") != (cfg.HTTP.KeyFile == "") {
 		return nil, fmt.Errorf("tls certificate and key must be configured together")
 	}
@@ -62,7 +65,7 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	app.Use(requestLogger.Handle)
 	app.Use(localizationMiddleware(catalog))
 	app.Use(sessionMiddleware(sessionSvc, cfg.HTTP.CertFile != "" && cfg.HTTP.KeyFile != ""))
-	registerRoutes(app, versionAPI, sessionAPI)
+	registerRoutes(app, versionAPI, sessionAPI, roomAPI)
 	if err := registerStatic(app); err != nil {
 		return nil, fmt.Errorf("register static resources: %w", err)
 	}

@@ -165,8 +165,23 @@ func provideSessionAPI(sessionBiz *biz.SessionBiz, cfg *config.Config) (*api.Ses
 	return api.NewSessionAPI(sessionBiz, cfg)
 }
 
-func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc) (*core.Server, error) {
-	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc)
+func provideRoomSvc(db *gormx.GormDBSvc) (*service.RoomSvc, error) {
+	if db == nil {
+		return nil, fmt.Errorf("room database is required")
+	}
+	return service.NewRoomSvc(db.DB)
+}
+
+func provideRoomBiz(room *service.RoomSvc) (*biz.RoomBiz, error) {
+	return biz.NewRoomBiz(room)
+}
+
+func provideRoomAPI(roomBiz *biz.RoomBiz) (*api.RoomAPI, error) {
+	return api.NewRoomAPI(roomBiz)
+}
+
+func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI) (*core.Server, error) {
+	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI)
 }
 
 func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, server *core.Server) (*core.App, error) {

@@ -18,9 +18,11 @@ require (
 	github.com/libtnb/sqlite v1.2.1
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/mojocn/base64Captcha v1.3.8
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/pflag v1.0.10
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.54.0
+	golang.org/x/text v0.40.0
 	gorm.io/gorm v1.31.2
 )
 
@@ -70,7 +72,6 @@ require (
 	golang.org/x/image v0.23.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/ini.v1 v1.67.2 // indirect
 	modernc.org/libc v1.74.1 // indirect

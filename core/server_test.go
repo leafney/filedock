@@ -67,7 +67,19 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("NewSessionAPI() error = %v", err)
 	}
-	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc)
+	roomSvc, err := service.NewRoomSvc(db)
+	if err != nil {
+		t.Fatalf("NewRoomSvc() error = %v", err)
+	}
+	roomBiz, err := biz.NewRoomBiz(roomSvc)
+	if err != nil {
+		t.Fatalf("NewRoomBiz() error = %v", err)
+	}
+	roomAPI, err := api.NewRoomAPI(roomBiz)
+	if err != nil {
+		t.Fatalf("NewRoomAPI() error = %v", err)
+	}
+	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI)
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}

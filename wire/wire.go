@@ -21,6 +21,9 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		provideSessionSvc,
 		provideSessionBiz,
 		provideSessionAPI,
+		provideRoomSvc,
+		provideRoomBiz,
+		provideRoomAPI,
 		provideServer,
 		provideApp,
 	)
