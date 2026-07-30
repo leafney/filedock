@@ -179,6 +179,9 @@ func (s *RoomSvc) Create(userID, joinMode, pin, pinConfirmation string) (RoomSna
 }
 
 func allocateRoomCode(tx *gorm.DB, now int64) (string, error) {
+	if err := releaseReusableRoomRecords(tx, now); err != nil {
+		return "", err
+	}
 	for attempt := 0; attempt < 20; attempt++ {
 		value, err := rand.Int(rand.Reader, big.NewInt(RoomCodeMax))
 		if err != nil {
@@ -209,6 +212,22 @@ func allocateRoomCode(tx *gorm.DB, now int64) (string, error) {
 		}
 	}
 	return "", errx.New(errc.ErrRoomCodeExhausted, nil)
+}
+
+func releaseReusableRoomRecords(tx *gorm.DB, now int64) error {
+	var rooms []model.Room
+	if err := tx.Where("status = ? AND code_reusable_at IS NOT NULL AND code_reusable_at <= ? AND EXISTS (SELECT 1 FROM cleanup_jobs WHERE cleanup_jobs.room_id = rooms.id AND cleanup_jobs.status = ?)", model.RoomStatusDestroyed, now, model.CleanupSucceeded).Find(&rooms).Error; err != nil {
+		return err
+	}
+	for _, room := range rooms {
+		if err := tx.Where("room_id = ?", room.ID).Delete(&model.CleanupJob{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&model.Room{}, "id = ? AND status = ?", room.ID, model.RoomStatusDestroyed).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func roomCodeAvailable(tx *gorm.DB, code string, now int64) (bool, error) {
