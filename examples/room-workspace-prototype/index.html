@@ -55,12 +55,23 @@
         </dl>
 
         <nav class="room-header__actions" aria-label="房间操作 / Room actions">
-          <button class="icon-button" type="button" aria-label="显示二维码 / Show QR code">
+          <button class="icon-button mobile-member-button" type="button" aria-label="房间成员 / Room members">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </button>
+          <button class="icon-button mobile-chat-button" type="button" aria-label="聊天 / Chat">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+            </svg>
+            <span class="notification-badge">3</span>
+          </button>
+          <button class="icon-button desktop-room-action" type="button" aria-label="显示二维码 / Show QR code">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM15 14h2v2h-2zM19 14h1v3h-3v3h-3v-2" />
             </svg>
           </button>
-          <button class="icon-button notification-button" type="button" aria-label="加入申请 / Join requests">
+          <button class="icon-button notification-button desktop-room-action" type="button" aria-label="加入申请 / Join requests">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
             </svg>
@@ -158,14 +169,122 @@
             </button>
           </div>
 
-          <div class="file-content" role="tabpanel">
-            <div class="content-placeholder">
-              <svg viewBox="0 0 48 48" aria-hidden="true">
-                <path d="M9 8h20l10 10v22H9z" />
-                <path d="M29 8v10h10M16 27h16M16 33h11" />
-              </svg>
-              <h3>文件列表区域</h3>
-              <p>下一阶段补充桌面表格、筛选、排序与文件状态视觉。</p>
+          <div class="file-content" role="tabpanel" aria-label="文件列表 / File list">
+            <div class="file-filter-bar">
+              <label class="search-box file-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-4-4" />
+                </svg>
+                <span class="visually-hidden">搜索文件 / Search files</span>
+                <input type="search" placeholder="搜索文件名" disabled />
+              </label>
+              <label class="select-shell">
+                <span class="visually-hidden">文件范围 / File scope</span>
+                <select disabled>
+                  <option>全部文件</option>
+                </select>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+              </label>
+              <label class="select-shell">
+                <span class="visually-hidden">文件排序 / File sorting</span>
+                <select disabled>
+                  <option>最新上传</option>
+                </select>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+              </label>
+              <span class="file-result-count">共 12 个文件</span>
+            </div>
+
+            <div class="file-table" role="table" aria-label="当前房间文件 / Current room files">
+              <div class="file-table__header" role="row">
+                <span role="columnheader">文件名</span>
+                <span role="columnheader">范围</span>
+                <span role="columnheader">上传者</span>
+                <span role="columnheader">大小</span>
+                <span role="columnheader">上传时间</span>
+                <span role="columnheader">状态</span>
+                <span role="columnheader">操作</span>
+              </div>
+
+              <article class="file-row" role="row">
+                <div class="file-cell file-cell--name" role="cell">
+                  <span class="file-icon file-icon--archive">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM3 3h18v4H3zM10 11h4" /></svg>
+                  </span>
+                  <div><strong>设计稿最终版.zip</strong><small>ZIP 压缩文件</small></div>
+                </div>
+                <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--shared">公共</span></div>
+                <div class="file-cell file-cell--owner" role="cell">码头</div>
+                <div class="file-cell file-cell--size" role="cell">128 MB</div>
+                <div class="file-cell file-cell--time" role="cell">今天 14:18</div>
+                <div class="file-cell file-cell--status" role="cell"><span class="file-status file-status--ready">可下载</span></div>
+                <div class="file-cell file-cell--actions" role="cell">
+                  <button class="mini-button mini-button--primary" type="button" disabled>下载</button>
+                  <button class="icon-button icon-button--small" type="button" aria-label="更多文件操作 / More file actions" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
+                  </button>
+                </div>
+              </article>
+
+              <article class="file-row" role="row">
+                <div class="file-cell file-cell--name" role="cell">
+                  <span class="file-icon file-icon--sheet">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l4 4v16H6zM15 2v5h4M9 12h7M9 16h7" /></svg>
+                  </span>
+                  <div><strong>项目预算明细.xlsx</strong><small>私密文件#7K2M-A9Q4</small></div>
+                </div>
+                <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--direct">定向</span></div>
+                <div class="file-cell file-cell--owner" role="cell">码头</div>
+                <div class="file-cell file-cell--size" role="cell">8.4 MB</div>
+                <div class="file-cell file-cell--time" role="cell">今天 13:46</div>
+                <div class="file-cell file-cell--status" role="cell"><span class="file-status file-status--accepted">2 人已接收</span></div>
+                <div class="file-cell file-cell--actions" role="cell">
+                  <button class="mini-button" type="button" disabled>再次发送</button>
+                  <button class="icon-button icon-button--small" type="button" aria-label="更多文件操作 / More file actions" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
+                  </button>
+                </div>
+              </article>
+
+              <article class="file-row file-row--private-audit" role="row">
+                <div class="file-cell file-cell--name" role="cell">
+                  <span class="file-icon file-icon--private">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+                  </span>
+                  <div><strong>私密文件#2PX8-L6RD</strong><small>房主匿名审计视图</small></div>
+                </div>
+                <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--private">私密审计</span></div>
+                <div class="file-cell file-cell--owner" role="cell">周远 → 林小满</div>
+                <div class="file-cell file-cell--size" role="cell">56 MB</div>
+                <div class="file-cell file-cell--time" role="cell">今天 12:30</div>
+                <div class="file-cell file-cell--status" role="cell"><span class="file-status">传输完成</span></div>
+                <div class="file-cell file-cell--actions" role="cell">
+                  <button class="mini-button mini-button--danger" type="button" disabled>移入回收站</button>
+                </div>
+              </article>
+
+              <article class="file-row" role="row">
+                <div class="file-cell file-cell--name" role="cell">
+                  <span class="file-icon file-icon--video">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="14" height="14" rx="2" /><path d="m17 10 4-2v8l-4-2" /></svg>
+                  </span>
+                  <div><strong>产品演示视频.mp4</strong><small>MP4 视频</small></div>
+                </div>
+                <div class="file-cell file-cell--scope" role="cell"><span class="scope-tag scope-tag--shared">公共</span></div>
+                <div class="file-cell file-cell--owner" role="cell">苏禾</div>
+                <div class="file-cell file-cell--size" role="cell">240 MB</div>
+                <div class="file-cell file-cell--time" role="cell">上传中</div>
+                <div class="file-cell file-cell--status" role="cell">
+                  <div class="row-progress"><span style="width: 46%"></span></div><small>46%</small>
+                </div>
+                <div class="file-cell file-cell--actions" role="cell"><button class="mini-button" type="button" disabled>查看任务</button></div>
+              </article>
+            </div>
+
+            <div class="file-list-footer">
+              <span>已显示 4 / 12</span>
+              <button class="button" type="button" disabled>加载更多</button>
             </div>
           </div>
         </section>
@@ -214,6 +333,11 @@
           </div>
         </aside>
       </main>
+
+      <nav class="mobile-file-actions" aria-label="移动端文件操作 / Mobile file actions">
+        <button class="button button--primary" type="button" disabled>上传共享文件</button>
+        <button class="button" type="button" disabled>定向发送</button>
+      </nav>
 
       <footer class="transfer-bar" aria-label="传输任务 / Transfer tasks">
         <div class="transfer-bar__summary">
