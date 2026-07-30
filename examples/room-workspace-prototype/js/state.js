@@ -3,7 +3,16 @@ import { createMockState } from "./mock-data.js";
 export function reduceState(state, action) {
   switch (action.type) {
     case "ui/set-tab":
-      return { ...state, ui: { ...state.ui, activeFileTab: action.value } };
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          activeFileTab: action.value,
+          openFileMenuId: null,
+          actionSheetFileId: null,
+          rejectFileId: null,
+        },
+      };
     case "ui/set-current-user":
       return {
         ...state,
@@ -13,6 +22,10 @@ export function reduceState(state, action) {
           selectedChatUserId: state.ui.selectedChatUserId === action.value ? state.room.ownerId : state.ui.selectedChatUserId,
           selectedFileIds: [],
           selectedRecipientIds: [],
+          batchMode: false,
+          openFileMenuId: null,
+          actionSheetFileId: null,
+          rejectFileId: null,
         },
       };
     case "ui/set-language":
@@ -23,6 +36,57 @@ export function reduceState(state, action) {
       return { ...state, ui: { ...state.ui, fileSearch: action.value } };
     case "ui/set-file-scope":
       return { ...state, ui: { ...state.ui, fileScopeFilter: action.value } };
+    case "ui/set-file-scope-view":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          fileScopeView: action.value,
+          openFileMenuId: null,
+          actionSheetFileId: null,
+          rejectFileId: null,
+        },
+      };
+    case "ui/set-file-identity-filter":
+      return { ...state, ui: { ...state.ui, fileIdentityFilter: action.value } };
+    case "ui/toggle-file-group":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          collapsedFileGroups: {
+            ...state.ui.collapsedFileGroups,
+            [action.value]: !state.ui.collapsedFileGroups[action.value],
+          },
+        },
+      };
+    case "ui/enter-batch-mode":
+      return { ...state, ui: { ...state.ui, batchMode: true, openFileMenuId: null, actionSheetFileId: null } };
+    case "ui/exit-batch-mode":
+      return { ...state, ui: { ...state.ui, batchMode: false, selectedFileIds: [] } };
+    case "ui/toggle-file-selection": {
+      if (!state.ui.batchMode) return state;
+      const selected = state.ui.selectedFileIds.includes(action.value);
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          selectedFileIds: selected
+            ? state.ui.selectedFileIds.filter((id) => id !== action.value)
+            : [...state.ui.selectedFileIds, action.value],
+        },
+      };
+    }
+    case "ui/set-file-selection":
+      return { ...state, ui: { ...state.ui, selectedFileIds: state.ui.batchMode ? [...action.value] : [] } };
+    case "ui/open-file-menu":
+      return { ...state, ui: { ...state.ui, openFileMenuId: action.value, actionSheetFileId: null, rejectFileId: null } };
+    case "ui/open-action-sheet":
+      return { ...state, ui: { ...state.ui, actionSheetFileId: action.value, openFileMenuId: null, rejectFileId: null } };
+    case "ui/open-reject-confirm":
+      return { ...state, ui: { ...state.ui, rejectFileId: action.value, openFileMenuId: null, actionSheetFileId: null } };
+    case "ui/close-file-overlays":
+      return { ...state, ui: { ...state.ui, openFileMenuId: null, actionSheetFileId: null, rejectFileId: null } };
     case "ui/set-file-sort":
       return { ...state, ui: { ...state.ui, fileSort: action.value } };
     case "ui/open-composer":
