@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, Check, ChevronRight, Dice5, DoorOpen, LogOut, RefreshCw, Shield, Trash2, UserRound, Users, X } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import axios from "axios";
@@ -298,8 +298,17 @@ function CreateRoomCard({ joinMode, setJoinMode, pin, setPin, pinConfirmation, s
   );
 }
 
-function PinInput({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="block text-sm text-slate-400" htmlFor={id}>{label}<input id={id} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-center font-mono text-xl tracking-[0.65em] outline-none focus:border-cyan-400" value={value} onChange={(event) => onChange(event.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" maxLength={4} autoComplete="off" /></label>;
+function PinInput({ id, label, value, onChange, onComplete, disabled = false }: { id: string; label: string; value: string; onChange: (value: string) => void; onComplete?: (value: string) => void; disabled?: boolean }) {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const completed = useRef(false);
+  useEffect(() => {
+    if (value.length === 4 && !completed.current) {
+      completed.current = true;
+      onComplete?.(value);
+    }
+    if (value.length < 4) completed.current = false;
+  }, [onComplete, value]);
+  return <fieldset className="block text-sm text-slate-400"><legend>{label}</legend><div className="mt-2 grid grid-cols-4 gap-2">{Array.from({ length: 4 }, (_, index) => <input key={`${id}-${index}`} ref={(element) => { refs.current[index] = element; }} id={`${id}-${index}`} aria-label={`${label} ${index + 1}`} className="h-14 w-full rounded-xl border border-slate-700 bg-slate-950 text-center font-mono text-2xl outline-none focus:border-cyan-400 disabled:opacity-50" value={value[index] ?? ""} disabled={disabled} onChange={(event) => { const digit = event.target.value.replace(/\D/g, "").slice(-1); const next = value.split(""); next[index] = digit; onChange(next.join("")); if (digit && index < 3) refs.current[index + 1]?.focus(); }} onKeyDown={(event) => { if (event.key === "Backspace" && !value[index] && index > 0) refs.current[index - 1]?.focus(); }} inputMode="numeric" maxLength={1} autoComplete="one-time-code" />)}</div></fieldset>;
 }
 
 function ServiceInfo() {
@@ -371,6 +380,14 @@ function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSession
 function JoinPanel({ info, onJoin, onRequest, onCancelRequest, loading, error }: { info: { title: string; roomCode: string; joinMode: JoinMode; pendingRequest: boolean }; onJoin: (confirmed: boolean, pin?: string) => void; onRequest: () => void; onCancelRequest: () => void; loading: boolean; error?: unknown }) {
   const { t } = useTranslation();
   const [pin, setPin] = useState("");
+  const autoSubmitted = useRef(false);
+  useEffect(() => {
+    if (pin.length === 4 && !autoSubmitted.current) {
+      autoSubmitted.current = true;
+      onJoin(true, pin);
+    }
+    if (pin.length < 4) autoSubmitted.current = false;
+  }, [pin]);
   return <PageFrame><section className="mx-auto max-w-xl rounded-[2rem] border border-slate-800 bg-slate-900/80 p-7 shadow-2xl sm:p-10"><Link className="text-sm text-slate-500 hover:text-cyan-300" to="/">← {t("room.backHome")}</Link><p className="mt-8 text-sm uppercase tracking-[0.25em] text-cyan-300">{t("room.code")} {info.roomCode}</p><h1 className="mt-2 text-3xl font-semibold">{info.title}</h1><p className="mt-3 text-slate-400">{info.joinMode === "open" ? t("room.confirmJoin") : info.joinMode === "password" ? t("room.pinHint") : t("room.approvalHint")}</p>{error != null && <div className="mt-5"><ErrorNotice error={error} /></div>}{info.joinMode === "open" && <button className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50" disabled={loading} type="button" onClick={() => onJoin(true)}><Check size={18} aria-hidden="true" />{t("room.confirm")}</button>}{info.joinMode === "password" && <div className="mt-8 space-y-4"><PinInput id="join-pin" label={t("room.pin")} value={pin} onChange={setPin} /><button className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50" disabled={loading || pin.length !== 4} type="button" onClick={() => onJoin(true, pin)}><Shield size={18} aria-hidden="true" />{t("room.submitPIN")}</button></div>}{info.joinMode === "owner_approval" && (info.pendingRequest ? <button className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 px-4 py-3 font-medium text-slate-200 disabled:opacity-50" disabled={loading} type="button" onClick={onCancelRequest}><X size={18} aria-hidden="true" />{t("room.cancelRequest")}</button> : <button className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50" disabled={loading} type="button" onClick={onRequest}><Check size={18} aria-hidden="true" />{t("room.requestApproval")}</button>)}</section></PageFrame>;
 }
 
