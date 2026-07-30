@@ -150,21 +150,21 @@
               <h2 id="file-panel-title">房间文件</h2>
             </div>
             <div class="file-toolbar__actions" aria-label="文件操作 / File actions">
-              <button class="button button--primary" type="button" disabled>
+              <button class="button button--primary" data-action="open-upload" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
                 </svg>
                 上传共享文件
               </button>
-              <button class="button" type="button" disabled>定向发送</button>
-              <button class="button button--text" type="button" disabled>选择已有文件</button>
+              <button class="button" data-action="open-direct" type="button">定向发送</button>
+              <button class="button button--text" data-action="open-existing" type="button">选择已有文件</button>
             </div>
           </div>
 
           <div class="file-tabs" role="tablist" aria-label="文件视图 / File views">
-            <button class="file-tab is-active" type="button" role="tab" aria-selected="true">文件列表</button>
-            <button class="file-tab" type="button" role="tab" aria-selected="false">文件动态</button>
-            <button class="file-tab" type="button" role="tab" aria-selected="false">
+            <button class="file-tab is-active" data-tab="files" type="button" role="tab" aria-selected="true">文件列表</button>
+            <button class="file-tab" data-tab="timeline" type="button" role="tab" aria-selected="false">文件动态</button>
+            <button class="file-tab" data-tab="recycle" type="button" role="tab" aria-selected="false">
               回收站 <span class="tab-count">4</span>
             </button>
           </div>
@@ -335,8 +335,8 @@
       </main>
 
       <nav class="mobile-file-actions" aria-label="移动端文件操作 / Mobile file actions">
-        <button class="button button--primary" type="button" disabled>上传共享文件</button>
-        <button class="button" type="button" disabled>定向发送</button>
+        <button class="button button--primary" data-action="open-upload" type="button">上传共享文件</button>
+        <button class="button" data-action="open-direct" type="button">定向发送</button>
       </nav>
 
       <footer class="transfer-bar" aria-label="传输任务 / Transfer tasks">
@@ -350,6 +350,8 @@
       </footer>
     </div>
 
+    <input id="prototype-file-input" class="visually-hidden" type="file" multiple tabindex="-1" />
+    <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
     <noscript>此原型后续交互阶段需要启用 JavaScript。JavaScript is required for later prototype interactions.</noscript>
     <script type="module" src="./js/app.js"></script>
   </body>

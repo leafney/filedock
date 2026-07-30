@@ -24,6 +24,104 @@ export function reduceState(state, action) {
       return { ...state, ui: { ...state.ui, fileScopeFilter: action.value } };
     case "ui/set-file-sort":
       return { ...state, ui: { ...state.ui, fileSort: action.value } };
+    case "ui/open-composer":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          composer: {
+            mode: action.mode ?? "shared",
+            pendingFiles: action.files ?? [],
+            existingFileId: action.existingFileId ?? null,
+          },
+          selectedRecipientIds: action.recipientIds ?? [],
+        },
+      };
+    case "ui/close-composer":
+      return { ...state, ui: { ...state.ui, composer: null, selectedRecipientIds: [] } };
+    case "composer/add-files":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          composer: {
+            ...(state.ui.composer ?? { mode: "shared", existingFileId: null }),
+            pendingFiles: [...(state.ui.composer?.pendingFiles ?? []), ...action.files],
+          },
+        },
+      };
+    case "composer/remove-file":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          composer: {
+            ...state.ui.composer,
+            pendingFiles: state.ui.composer.pendingFiles.filter((file) => file.id !== action.value),
+          },
+        },
+      };
+    case "composer/set-mode":
+      return {
+        ...state,
+        ui: { ...state.ui, composer: { ...state.ui.composer, mode: action.value }, selectedRecipientIds: [] },
+      };
+    case "composer/toggle-recipient": {
+      const selected = state.ui.selectedRecipientIds.includes(action.value);
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          selectedRecipientIds: selected
+            ? state.ui.selectedRecipientIds.filter((id) => id !== action.value)
+            : [...state.ui.selectedRecipientIds, action.value],
+        },
+      };
+    }
+    case "composer/select-all-recipients":
+      return { ...state, ui: { ...state.ui, selectedRecipientIds: action.value } };
+    case "files/start-upload":
+      return startUpload(state, action);
+    case "files/send-existing":
+      return sendExisting(state, action);
+    case "files/recycle":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({
+        ...file,
+        status: "recycled",
+        removedById: state.ui.currentUserId,
+        removalKind: file.uploaderId === state.ui.currentUserId ? "self" : "owner_forced",
+        recycledAt: action.occurredAt,
+      }), "recycled");
+    case "files/permanent-delete":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, status: "deleted" }), "permanently_deleted");
+    case "files/restore":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, status: "available", restoreRequested: false }), "restored");
+    case "files/request-restore":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, restoreRequested: true }), "restore_requested");
+    case "files/approve-restore":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, status: "available", restoreRequested: false }), "restore_approved");
+    case "files/publish-shared":
+      return updateFileWithEvent(state, action.fileId, action, (file) => ({ ...file, scope: "shared", recipientIds: [], receiverStates: {} }), "published_shared");
+    case "tasks/start-download": {
+      const task = {
+        id: action.taskId,
+        fileId: action.fileId,
+        type: "download",
+        name: action.name,
+        sizeBytes: action.sizeBytes,
+        transferredBytes: 0,
+        progress: 0,
+        speedBytes: 5 * 1024 * 1024,
+        status: "active",
+      };
+      return {
+        ...state,
+        tasks: [...state.tasks, task],
+        events: [createEvent(action, "download_started"), ...state.events],
+      };
+    }
+    case "tasks/tick":
+      return tickTasks(state, action.step ?? 8);
     case "ui/select-chat":
       return { ...state, ui: { ...state.ui, selectedChatUserId: action.value } };
     case "recycle/set-count-toward-capacity":
@@ -41,6 +139,139 @@ export function reduceState(state, action) {
     default:
       return state;
   }
+}
+
+function startUpload(state, action) {
+  const files = action.files.map((pending, index) => ({
+    id: `${action.batchId}-file-${index}`,
+    scope: action.mode,
+    name: pending.name,
+    alias: action.mode === "direct" ? pending.alias : null,
+    mimeLabel: pending.type || "未知类型",
+    kind: pending.kind,
+    sizeBytes: pending.sizeBytes,
+    uploaderId: state.ui.currentUserId,
+    recipientIds: action.mode === "direct" ? [...action.recipientIds] : [],
+    receiverStates: action.mode === "direct"
+      ? Object.fromEntries(action.recipientIds.map((id) => [id, "pending"]))
+      : {},
+    status: "uploading",
+    uploadProgress: 0,
+    createdAt: action.occurredAt,
+  }));
+  const tasks = files.map((file, index) => ({
+    id: `${action.batchId}-task-${index}`,
+    batchId: action.batchId,
+    fileId: file.id,
+    type: "upload",
+    name: file.name,
+    sizeBytes: file.sizeBytes,
+    transferredBytes: 0,
+    progress: 0,
+    speedBytes: (3 + index) * 1024 * 1024,
+    status: "active",
+  }));
+  const events = files.map((file, index) => ({
+    id: `${action.batchId}-event-${index}`,
+    type: "upload_started",
+    fileId: file.id,
+    actorId: state.ui.currentUserId,
+    occurredAt: action.occurredAt,
+    progress: 0,
+  }));
+  return {
+    ...state,
+    files: [...files, ...state.files],
+    tasks: [...tasks, ...state.tasks],
+    events: [...events, ...state.events],
+    ui: { ...state.ui, composer: null, selectedRecipientIds: [], activeFileTab: "files" },
+  };
+}
+
+function sendExisting(state, action) {
+  const file = state.files.find((item) => item.id === action.fileId);
+  if (!file) return state;
+  const newRecipients = action.recipientIds.filter((id) => !file.recipientIds.includes(id));
+  if (newRecipients.length === 0) return { ...state, ui: { ...state.ui, composer: null, selectedRecipientIds: [] } };
+  return {
+    ...state,
+    files: state.files.map((item) => item.id === file.id ? {
+      ...item,
+      recipientIds: [...item.recipientIds, ...newRecipients],
+      receiverStates: { ...item.receiverStates, ...Object.fromEntries(newRecipients.map((id) => [id, "pending"])) },
+    } : item),
+    events: [createEvent(action, "resent", file.id), ...state.events],
+    ui: { ...state.ui, composer: null, selectedRecipientIds: [] },
+  };
+}
+
+function updateFileWithEvent(state, fileId, action, update, type) {
+  const file = state.files.find((item) => item.id === fileId);
+  if (!file) return state;
+  return {
+    ...state,
+    files: state.files.map((item) => item.id === fileId ? update(item) : item),
+    events: [createEvent(action, type, fileId), ...state.events],
+  };
+}
+
+function createEvent(action, type, fileId = action.fileId) {
+  return {
+    id: action.eventId ?? `event-${Date.now()}`,
+    type,
+    fileId,
+    actorId: action.actorId,
+    occurredAt: action.occurredAt,
+  };
+}
+
+function tickTasks(state, step) {
+  const completedFileIds = [];
+  const tasks = state.tasks.map((task) => {
+    if (task.status !== "active") return task;
+    const progress = Math.min(100, task.progress + step);
+    if (progress === 100) completedFileIds.push(task.fileId);
+    return {
+      ...task,
+      progress,
+      transferredBytes: Math.round(task.sizeBytes * progress / 100),
+      status: progress === 100 ? "completed" : "active",
+    };
+  });
+  if (completedFileIds.length === 0) {
+    return { ...state, tasks };
+  }
+  const now = new Date().toISOString();
+  const completedUploads = tasks.filter((task) => task.type === "upload" && completedFileIds.includes(task.fileId));
+  const files = state.files.map((file) => {
+    const uploadTask = tasks.find((task) => task.fileId === file.id && task.type === "upload");
+    if (!uploadTask || file.status !== "uploading") return file;
+    return {
+      ...file,
+      status: uploadTask.status === "completed" ? "available" : "uploading",
+      uploadProgress: uploadTask.progress,
+    };
+  });
+  const events = state.events.map((event) => {
+    const task = tasks.find((item) => item.fileId === event.fileId);
+    if (event.type === "upload_started" && task) return { ...event, type: "upload_completed", progress: 100, occurredAt: now };
+    return event;
+  });
+  return {
+    ...state,
+    tasks,
+    files,
+    events: [
+      ...completedFileIds.filter((id) => !completedUploads.some((task) => task.fileId === id)).map((id) => ({
+        id: `event-download-${id}-${Date.now()}`,
+        type: "download_completed",
+        fileId: id,
+        actorId: state.ui.currentUserId,
+        occurredAt: now,
+      })),
+      ...events,
+    ],
+  };
 }
 
 export function createStore(initialState = createMockState()) {
