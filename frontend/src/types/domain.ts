@@ -38,6 +38,15 @@ export interface RoomSnapshot {
   destroyAt?: number;
   members: RoomMember[];
   pendingRequestCount?: number;
+  capacity: RoomCapacity;
+}
+
+export interface RoomCapacity {
+  capacityBytes: number;
+  usedBytes: number;
+  sharedBytes?: number;
+  directBytes?: number;
+  reservedBytes?: number;
 }
 
 export interface RoomJoinInfo {
