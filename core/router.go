@@ -34,5 +34,12 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.
 	app.Post("/api/v1/rooms/:code/file-upload-batches", fileAPI.HandleCreateUploadBatch)
 	app.Put("/api/v1/rooms/:code/files/:fileId/content", fileAPI.HandleUploadContent)
 	app.Delete("/api/v1/rooms/:code/files/:fileId/upload", fileAPI.HandleCancelUpload)
+	app.Get("/api/v1/rooms/:code/files", fileAPI.HandleList)
+	app.Get("/api/v1/rooms/:code/file-events", fileAPI.HandleEvents)
+	app.Get("/api/v1/rooms/:code/private-files/reusable", fileAPI.HandleReusable)
+	app.Post("/api/v1/rooms/:code/files/:fileId/accept", fileAPI.HandleAccept)
+	app.Post("/api/v1/rooms/:code/files/:fileId/decline", fileAPI.HandleDecline)
+	app.Post("/api/v1/rooms/:code/private-files/reuse", fileAPI.HandleReuse)
+	app.Post("/api/v1/rooms/:code/files/:fileId/publish-shared", fileAPI.HandlePublishShared)
 	app.Get("/api/v1/stream", streamAPI.Handle)
 }

@@ -43,3 +43,31 @@ func (b *FileBiz) UploadContent(ctx context.Context, userID, roomCode, fileID st
 func (b *FileBiz) CancelUpload(userID, roomCode, fileID string) error {
 	return b.files.CancelUpload(userID, roomCode, fileID)
 }
+
+func (b *FileBiz) List(userID, roomCode string, query service.FileListQuery) (service.FileListResult, error) {
+	return b.files.ListFiles(userID, roomCode, query)
+}
+
+func (b *FileBiz) Events(userID, roomCode, cursor string, limit int) (service.FileEventPage, error) {
+	return b.files.ListFileEvents(userID, roomCode, cursor, limit)
+}
+
+func (b *FileBiz) Reusable(userID, roomCode string) ([]service.FileProjection, error) {
+	return b.files.ReusableFiles(userID, roomCode)
+}
+
+func (b *FileBiz) Accept(userID, roomCode, fileID string) error {
+	return b.files.AcceptFile(userID, roomCode, fileID)
+}
+
+func (b *FileBiz) Decline(userID, roomCode, fileID string) error {
+	return b.files.DeclineFile(userID, roomCode, fileID)
+}
+
+func (b *FileBiz) Reuse(userID, roomCode string, request dto.ReusePrivateFilesRequest) (service.ReuseResult, error) {
+	return b.files.ReusePrivateFiles(userID, roomCode, request.FileIDs, request.RecipientIDs)
+}
+
+func (b *FileBiz) PublishShared(userID, roomCode, fileID string) error {
+	return b.files.PublishShared(userID, roomCode, fileID)
+}

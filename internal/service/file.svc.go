@@ -207,6 +207,11 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 					return err
 				}
 			}
+			if scope == model.FileScopeDirect {
+				if err := createFileEvent(tx, room.ID, file.ID, batchID, userID, FileEventDirectSent, now); err != nil {
+					return err
+				}
+			}
 			files = append(files, file)
 		}
 		eventID, err := ulidx.New()
@@ -224,14 +229,20 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 
 func (s *FileSvc) MarkUploading(userID, fileID string) error {
 	now := s.now().Unix()
-	result := s.db.Model(&model.RoomFile{}).Where("id = ? AND uploader_user_id = ? AND status = ?", fileID, userID, model.FileStatusReserved).Updates(map[string]interface{}{"status": model.FileStatusUploading, "started_at": now})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
-		return errx.New(errc.ErrFileState, nil)
-	}
-	return nil
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var file model.RoomFile
+		if err := tx.Where("id = ? AND uploader_user_id = ? AND status = ?", fileID, userID, model.FileStatusReserved).First(&file).Error; err != nil {
+			return fileNotFound(err)
+		}
+		result := tx.Model(&model.RoomFile{}).Where("id = ? AND status = ?", fileID, model.FileStatusReserved).Updates(map[string]interface{}{"status": model.FileStatusUploading, "started_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errx.New(errc.ErrFileState, nil)
+		}
+		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventUploadStarted, now)
+	})
 }
 
 func (s *FileSvc) UploadContent(ctx context.Context, userID, roomCode, fileID string, contentLength int64, source interface{ Read([]byte) (int, error) }) error {
@@ -481,7 +492,7 @@ func ProjectFile(file model.RoomFile, uploader model.RoomMember, recipients []mo
 	}
 	name := file.OriginalName
 	if level == ProjectionAnonymous {
-		name = "private#" + file.PrivateCode
+		name = file.PrivateCode
 	}
 	projection := FileProjection{Level: level, FileID: file.ID, DisplayName: name, PrivateCode: file.PrivateCode, Scope: file.Scope, Size: file.DeclaredSize, Status: file.Status, Progress: file.Progress, UploaderUserID: file.UploaderUserID, UploaderName: uploader.DisplayName, CreatedAt: file.CreatedAt, CompletedAt: file.CompletedAt}
 	for _, recipient := range recipients {

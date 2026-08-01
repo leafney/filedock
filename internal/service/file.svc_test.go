@@ -287,7 +287,7 @@ func TestProjectFileProtectsUnrelatedPrivateMetadata(t *testing.T) {
 		t.Fatalf("unexpected recipient projection: %+v", recipient)
 	}
 	owner := ProjectFile(file, fixture.uploader, recipients, members, fixture.owner)
-	if owner.Level != ProjectionAnonymous || owner.OriginalName != "" || owner.DeclaredMIME != "" || owner.DetectedMIME != "" || owner.Capabilities.CanDownload || owner.DisplayName != "private#7K2M-A9Q4" {
+	if owner.Level != ProjectionAnonymous || owner.OriginalName != "" || owner.DeclaredMIME != "" || owner.DetectedMIME != "" || owner.Capabilities.CanDownload || owner.DisplayName != "7K2M-A9Q4" {
 		t.Fatalf("private metadata leaked to owner: %+v", owner)
 	}
 	outsider := ProjectFile(file, fixture.uploader, recipients, members, fixture.outsider)

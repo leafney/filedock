@@ -284,6 +284,20 @@ func TestServerFileUploadBatchAndStreamingContent(t *testing.T) {
 		body, _ := io.ReadAll(uploadResponse.Body)
 		t.Fatalf("upload status=%d body=%s", uploadResponse.StatusCode, body)
 	}
+	for _, path := range []string{"/api/v1/rooms/" + roomBody.Data.RoomCode + "/files", "/api/v1/rooms/" + roomBody.Data.RoomCode + "/file-events"} {
+		request := httptest.NewRequest(fiber.MethodGet, path, nil)
+		request.Header.Set(fiber.HeaderCookie, cookie)
+		result, err := server.App().Test(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.StatusCode != fiber.StatusOK {
+			body, _ := io.ReadAll(result.Body)
+			_ = result.Body.Close()
+			t.Fatalf("GET %s status=%d body=%s", path, result.StatusCode, body)
+		}
+		_ = result.Body.Close()
+	}
 }
 
 func TestServerLocalizesAndSanitizesErrors(t *testing.T) {

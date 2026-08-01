@@ -29,3 +29,8 @@ type UploadFileDTO struct {
 	Status       string `json:"status"`
 	UploadURL    string `json:"uploadUrl"`
 }
+
+type ReusePrivateFilesRequest struct {
+	FileIDs      []string `json:"fileIds"`
+	RecipientIDs []string `json:"recipientIds"`
+}
