@@ -1,5 +1,5 @@
 import { ChevronUp, CircleCheck, CircleX, Download, RefreshCw, Trash2, Upload, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cancelUploadTransfer, retryUploadTransfer, useTransferStore, type UploadTransferTask } from "../../stores/transfer-store";
@@ -8,12 +8,14 @@ import { formatBytes } from "../../utils/format";
 export function TransferBar({ roomCode }: { roomCode: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const uploads = useTransferStore((state) => state.uploads.filter((task) => task.roomCode === roomCode));
-  const downloads = useTransferStore((state) => state.downloads.filter((task) => task.roomCode === roomCode));
+  const uploads = useTransferStore((state) => state.uploads);
+  const downloads = useTransferStore((state) => state.downloads);
+  const roomUploads = useMemo(() => uploads.filter((task) => task.roomCode === roomCode), [uploads, roomCode]);
+  const roomDownloads = useMemo(() => downloads.filter((task) => task.roomCode === roomCode), [downloads, roomCode]);
   const clearFinished = useTransferStore((state) => state.clearFinished);
-  const active = uploads.filter((task) => task.status === "queued" || task.status === "uploading").length + downloads.filter((task) => task.status === "queued" || task.status === "starting" || task.status === "downloading").length;
-  const failed = uploads.filter((task) => task.status === "failed").length + downloads.filter((task) => task.status === "failed").length;
-  const latest = uploads.find((task) => task.status === "uploading") ?? uploads.find((task) => task.status === "queued");
+  const active = roomUploads.filter((task) => task.status === "queued" || task.status === "uploading").length + roomDownloads.filter((task) => task.status === "queued" || task.status === "starting" || task.status === "downloading").length;
+  const failed = roomUploads.filter((task) => task.status === "failed").length + roomDownloads.filter((task) => task.status === "failed").length;
+  const latest = roomUploads.find((task) => task.status === "uploading") ?? roomUploads.find((task) => task.status === "queued");
 
   return <footer className="room-transfer-bar">
     <button className="transfer-summary" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -25,15 +27,15 @@ export function TransferBar({ roomCode }: { roomCode: string }) {
     {open && <section className="transfer-panel">
       <header><strong>{t("room.files.transferTasks")}</strong><button type="button" onClick={clearFinished}><Trash2 aria-hidden="true" />{t("room.files.clearFinished")}</button></header>
       <div className="transfer-task-list">
-        {uploads.map((task) => <article key={task.clientId}>
+        {roomUploads.map((task) => <article key={task.clientId}>
           <Upload aria-hidden="true" /><div><strong>{task.file.name}</strong><span>{uploadStatusLabel(task, t)} · {formatBytes(task.loaded)} / {formatBytes(task.total)}{task.speed > 0 ? ` · ${formatBytes(task.speed)}/s` : ""}</span><progress max={100} value={task.progress} aria-label={t("room.files.uploadProgress", { percent: String(task.progress) })} /></div>
           {(task.status === "queued" || task.status === "uploading") && <button type="button" aria-label={t("room.files.cancelTransfer")} onClick={() => cancelUploadTransfer(task.clientId)}><X aria-hidden="true" /></button>}
           {task.status === "failed" && <button type="button" onClick={() => void retryUploadTransfer(task)}>{t("room.files.retry")}</button>}
         </article>)}
-        {downloads.map((task) => <article key={task.taskId}>
+        {roomDownloads.map((task) => <article key={task.taskId}>
           <Download aria-hidden="true" /><div><strong>{task.fileName}</strong><span>{t(`room.files.downloadStatus.${task.status}`)} · {formatBytes(task.transferred)} / {formatBytes(task.total)}</span><progress max={100} value={task.progress} aria-label={t("room.files.downloadProgress", { percent: String(task.progress) })} /></div>
         </article>)}
-        {uploads.length === 0 && downloads.length === 0 && <p>{t("room.workspace.transferIdle")}</p>}
+        {roomUploads.length === 0 && roomDownloads.length === 0 && <p>{t("room.workspace.transferIdle")}</p>}
       </div>
     </section>}
   </footer>;
