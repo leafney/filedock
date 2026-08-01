@@ -27,6 +27,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		provideStreamHub,
 		providePresenceSvc,
 		provideStreamAPI,
+		provideFileStorage,
 		provideLifecycleSvc,
 		provideRateLimiter,
 		provideServer,

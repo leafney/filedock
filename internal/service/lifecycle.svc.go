@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/leafney/filedock/internal/model"
+	"github.com/leafney/filedock/pkg/errc"
 	"github.com/leafney/filedock/pkg/ulidx"
 	"gorm.io/gorm"
 )
@@ -20,9 +21,10 @@ const (
 )
 
 type LifecycleSvc struct {
-	db  *gorm.DB
-	hub *StreamHub
-	now func() time.Time
+	db      *gorm.DB
+	hub     *StreamHub
+	storage *FileStorage
+	now     func() time.Time
 
 	mu      sync.Mutex
 	started bool
@@ -31,14 +33,18 @@ type LifecycleSvc struct {
 	cleanup func(roomID, jobID string, now time.Time) error
 }
 
-func NewLifecycleSvc(db *gorm.DB, hub *StreamHub) (*LifecycleSvc, error) {
+func NewLifecycleSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*LifecycleSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("lifecycle database is required")
 	}
 	if hub == nil {
 		return nil, fmt.Errorf("lifecycle stream hub is required")
 	}
-	service := &LifecycleSvc{db: db, hub: hub, now: time.Now}
+	var storage *FileStorage
+	if len(storages) > 0 {
+		storage = storages[0]
+	}
+	service := &LifecycleSvc{db: db, hub: hub, storage: storage, now: time.Now}
 	service.cleanup = service.runCleanup
 	return service, nil
 }
@@ -80,6 +86,10 @@ func (s *LifecycleSvc) Start(ctx context.Context) error {
 		_ = s.Stop()
 		return err
 	}
+	if err := s.recoverInFlightUploads(); err != nil {
+		_ = s.Stop()
+		return err
+	}
 	if err := s.Tick(); err != nil {
 		_ = s.Stop()
 		return err
@@ -113,6 +123,9 @@ func (s *LifecycleSvc) Tick() error {
 		return err
 	}
 	if err := s.expireJoinRequests(now); err != nil {
+		return err
+	}
+	if err := s.expireReservedUploads(now); err != nil {
 		return err
 	}
 	if err := s.startExpiredRooms(now); err != nil {
@@ -309,6 +322,11 @@ func (s *LifecycleSvc) processCleanupJobs(now time.Time) error {
 }
 
 func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
+	if s.storage != nil {
+		if err := s.storage.DeleteRoom(roomID); err != nil {
+			return fmt.Errorf("delete room file storage: %w", err)
+		}
+	}
 	var members int64
 	if err := s.db.Model(&model.RoomMember{}).Where("room_id = ?", roomID).Count(&members).Error; err != nil {
 		return err
@@ -318,6 +336,21 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 		return err
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.DownloadTask{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.FileEvent{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("file_id IN (?)", tx.Model(&model.RoomFile{}).Select("id").Where("room_id = ?", roomID)).Delete(&model.FileRecipient{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.RoomFile{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.UploadBatch{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("room_id = ?", roomID).Delete(&model.RoomMember{}).Error; err != nil {
 			return err
 		}
@@ -327,6 +360,61 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 		return tx.Model(&model.CleanupJob{}).Where("id = ?", jobID).Updates(map[string]interface{}{"phase": "relations_deleted", "total_members": members, "cleaned_members": members, "total_join_requests": requests, "cleaned_join_requests": requests, "last_error": "", "started_at": now.Unix()}).Error
 	}); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *LifecycleSvc) recoverInFlightUploads() error {
+	now := s.now()
+	if err := s.failAbandonedUploads([]string{model.FileStatusUploading}, nil, now); err != nil {
+		return err
+	}
+	if s.storage != nil {
+		return s.storage.CleanupTemporaryFiles(now)
+	}
+	return nil
+}
+
+func (s *LifecycleSvc) expireReservedUploads(now time.Time) error {
+	before := now.Add(-UploadStartTTL).Unix()
+	if err := s.failAbandonedUploads([]string{model.FileStatusReserved}, &before, now); err != nil {
+		return err
+	}
+	if s.storage != nil {
+		return s.storage.CleanupTemporaryFiles(now.Add(-UploadStartTTL))
+	}
+	return nil
+}
+
+func (s *LifecycleSvc) failAbandonedUploads(statuses []string, createdBefore *int64, now time.Time) error {
+	query := s.db.Where("status IN ?", statuses)
+	if createdBefore != nil {
+		query = query.Where("created_at <= ?", *createdBefore)
+	}
+	var files []model.RoomFile
+	if err := query.Find(&files).Error; err != nil {
+		return err
+	}
+	for _, file := range files {
+		if err := s.db.Transaction(func(tx *gorm.DB) error {
+			result := tx.Model(&model.RoomFile{}).Where("id = ? AND status IN ?", file.ID, statuses).Updates(map[string]interface{}{"status": model.FileStatusFailed, "failure_code": errc.ErrUploadExpired, "failed_at": now.Unix()})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return nil
+			}
+			result = tx.Model(&model.Room{}).Where("id = ? AND reserved_bytes >= ?", file.RoomID, file.DeclaredSize).UpdateColumn("reserved_bytes", gorm.Expr("reserved_bytes - ?", file.DeclaredSize))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("release abandoned upload reservation")
+			}
+			return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, file.UploaderUserID, FileEventUploadFailed, now.Unix())
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

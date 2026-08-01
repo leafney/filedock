@@ -23,7 +23,11 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		return nil, err
 	}
 	streamHub := provideStreamHub()
-	lifecycleSvc, err := provideLifecycleSvc(gormDBSvc, streamHub)
+	fileStorage, err := provideFileStorage(config)
+	if err != nil {
+		return nil, err
+	}
+	lifecycleSvc, err := provideLifecycleSvc(gormDBSvc, streamHub, fileStorage)
 	if err != nil {
 		return nil, err
 	}

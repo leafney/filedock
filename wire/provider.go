@@ -195,11 +195,18 @@ func provideStreamAPI(hub *service.StreamHub, presence *service.PresenceSvc) (*a
 	return api.NewStreamAPI(hub, presence)
 }
 
-func provideLifecycleSvc(db *gormx.GormDBSvc, hub *service.StreamHub) (*service.LifecycleSvc, error) {
+func provideFileStorage(cfg *config.Config) (*service.FileStorage, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("file storage config is required")
+	}
+	return service.NewFileStorage(cfg.App.DataDir)
+}
+
+func provideLifecycleSvc(db *gormx.GormDBSvc, hub *service.StreamHub, storage *service.FileStorage) (*service.LifecycleSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("lifecycle database is required")
 	}
-	return service.NewLifecycleSvc(db.DB, hub)
+	return service.NewLifecycleSvc(db.DB, hub, storage)
 }
 
 func provideRateLimiter() *service.RateLimiter {
