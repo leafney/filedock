@@ -298,6 +298,32 @@ func TestServerFileUploadBatchAndStreamingContent(t *testing.T) {
 		}
 		_ = result.Body.Close()
 	}
+	createDownload := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/files/"+batchBody.Data.Files[0].FileID+"/downloads", nil)
+	createDownload.Header.Set(fiber.HeaderCookie, cookie)
+	downloadTaskResponse, err := server.App().Test(createDownload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer downloadTaskResponse.Body.Close()
+	var downloadTaskBody struct {
+		Data struct {
+			DownloadURL string `json:"downloadUrl"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(downloadTaskResponse.Body).Decode(&downloadTaskBody); err != nil || downloadTaskBody.Data.DownloadURL == "" {
+		t.Fatalf("decode download task: %+v error=%v", downloadTaskBody, err)
+	}
+	download := httptest.NewRequest(fiber.MethodGet, downloadTaskBody.Data.DownloadURL, nil)
+	download.Header.Set(fiber.HeaderCookie, cookie)
+	downloadResponse, err := server.App().Test(download, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer downloadResponse.Body.Close()
+	downloaded, err := io.ReadAll(downloadResponse.Body)
+	if err != nil || string(downloaded) != "hello" || downloadResponse.Header.Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(downloadResponse.Header.Get(fiber.HeaderContentDisposition), "attachment") {
+		t.Fatalf("download body=%q headers=%v error=%v", downloaded, downloadResponse.Header, err)
+	}
 }
 
 func TestServerLocalizesAndSanitizesErrors(t *testing.T) {

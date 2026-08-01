@@ -94,11 +94,12 @@ type FileProjection struct {
 }
 
 type FileSvc struct {
-	db      *gorm.DB
-	hub     *StreamHub
-	storage *FileStorage
-	uploads *uploadRegistry
-	now     func() time.Time
+	db        *gorm.DB
+	hub       *StreamHub
+	storage   *FileStorage
+	uploads   *uploadRegistry
+	downloads *downloadRegistry
+	now       func() time.Time
 }
 
 type uploadRegistry struct {
@@ -116,7 +117,7 @@ func NewFileSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*FileSvc
 	if len(storages) > 0 {
 		storage = storages[0]
 	}
-	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]context.CancelFunc), rooms: make(map[string]int), users: make(map[string]int)}, now: time.Now}, nil
+	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]context.CancelFunc), rooms: make(map[string]int), users: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]struct{}), rooms: make(map[string]int), users: make(map[string]int)}, now: time.Now}, nil
 }
 
 // CreateUploadBatch validates and reserves the complete batch atomically.

@@ -128,6 +128,9 @@ func (s *LifecycleSvc) Tick() error {
 	if err := s.expireReservedUploads(now); err != nil {
 		return err
 	}
+	if err := s.expireDownloadTasks(now); err != nil {
+		return err
+	}
 	if err := s.startExpiredRooms(now); err != nil {
 		return err
 	}
@@ -384,6 +387,10 @@ func (s *LifecycleSvc) expireReservedUploads(now time.Time) error {
 		return s.storage.CleanupTemporaryFiles(now.Add(-UploadStartTTL))
 	}
 	return nil
+}
+
+func (s *LifecycleSvc) expireDownloadTasks(now time.Time) error {
+	return s.db.Model(&model.DownloadTask{}).Where("status = ? AND expires_at <= ?", model.DownloadTaskPending, now.Unix()).Update("status", model.DownloadTaskExpired).Error
 }
 
 func (s *LifecycleSvc) failAbandonedUploads(statuses []string, createdBefore *int64, now time.Time) error {

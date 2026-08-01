@@ -1,10 +1,13 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
+	"mime"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/leafney/filedock/internal/biz"
@@ -111,10 +114,11 @@ func (a *FileAPI) HandleAccept(c *fiber.Ctx) error {
 	if !ok {
 		return response.Error(c, errc.ErrUnAuthorized, nil)
 	}
-	if err := a.biz.Accept(principal.UserID, c.Params("code"), c.Params("fileId")); err != nil {
+	result, err := a.biz.AcceptAndDownload(principal.UserID, c.Params("code"), c.Params("fileId"))
+	if err != nil {
 		return response.Failed(c, err)
 	}
-	return response.Success(c, nil)
+	return response.Success(c, result)
 }
 
 func (a *FileAPI) HandleDecline(c *fiber.Ctx) error {
@@ -153,4 +157,41 @@ func (a *FileAPI) HandlePublishShared(c *fiber.Ctx) error {
 		return response.Failed(c, err)
 	}
 	return response.Success(c, nil)
+}
+
+func (a *FileAPI) HandleCreateDownload(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	result, err := a.biz.CreateDownload(principal.UserID, c.Params("code"), c.Params("fileId"))
+	if err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, result)
+}
+
+func (a *FileAPI) HandleDownload(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	stream, err := a.biz.BeginDownload(principal.UserID, c.Params("code"), c.Params("taskId"))
+	if err != nil {
+		return response.Failed(c, err)
+	}
+	fileName := strings.ReplaceAll(strings.ReplaceAll(stream.FileName(), "\r", ""), "\n", "")
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
+	if disposition == "" {
+		disposition = "attachment"
+	}
+	c.Set(fiber.HeaderContentDisposition, disposition)
+	c.Set(fiber.HeaderContentType, stream.MIME())
+	c.Set(fiber.HeaderContentLength, strconv.FormatInt(stream.Size(), 10))
+	c.Set("X-Content-Type-Options", "nosniff")
+	ctx := c.UserContext()
+	c.Context().SetBodyStreamWriter(func(writer *bufio.Writer) {
+		_ = stream.WriteTo(ctx, writer)
+	})
+	return nil
 }

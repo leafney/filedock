@@ -71,3 +71,15 @@ func (b *FileBiz) Reuse(userID, roomCode string, request dto.ReusePrivateFilesRe
 func (b *FileBiz) PublishShared(userID, roomCode, fileID string) error {
 	return b.files.PublishShared(userID, roomCode, fileID)
 }
+
+func (b *FileBiz) CreateDownload(userID, roomCode, fileID string) (service.DownloadTaskResult, error) {
+	return b.files.CreateDownloadTask(userID, roomCode, fileID)
+}
+
+func (b *FileBiz) AcceptAndDownload(userID, roomCode, fileID string) (service.DownloadTaskResult, error) {
+	return b.files.AcceptAndCreateDownload(userID, roomCode, fileID)
+}
+
+func (b *FileBiz) BeginDownload(userID, roomCode, taskID string) (*service.DownloadStream, error) {
+	return b.files.BeginDownload(userID, roomCode, taskID)
+}

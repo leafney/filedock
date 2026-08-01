@@ -41,5 +41,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.
 	app.Post("/api/v1/rooms/:code/files/:fileId/decline", fileAPI.HandleDecline)
 	app.Post("/api/v1/rooms/:code/private-files/reuse", fileAPI.HandleReuse)
 	app.Post("/api/v1/rooms/:code/files/:fileId/publish-shared", fileAPI.HandlePublishShared)
+	app.Post("/api/v1/rooms/:code/files/:fileId/downloads", fileAPI.HandleCreateDownload)
+	app.Get("/api/v1/rooms/:code/downloads/:taskId", fileAPI.HandleDownload)
 	app.Get("/api/v1/stream", streamAPI.Handle)
 }
