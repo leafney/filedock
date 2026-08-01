@@ -16,6 +16,9 @@ const (
 	ErrRoomCode        = 40004
 	ErrPIN             = 40005
 	ErrPINConfirmation = 40006
+	ErrFileManifest    = 40007
+	ErrFileRecipient   = 40008
+	ErrUploadSize      = 40009
 
 	ErrUnAuthorized             = 40101
 	ErrAuthExpired              = 40102
@@ -32,6 +35,7 @@ const (
 	ErrUserNotFound        = 40402
 	ErrRoomNotFound        = 40403
 	ErrJoinRequestNotFound = 40404
+	ErrFileNotFound        = 40405
 
 	ErrMethodNotAllowed = 40501
 	ErrTimeOut          = 40801
@@ -53,15 +57,24 @@ const (
 	ErrRoomCodeExhausted    = 40916
 	ErrJoinModeMismatch     = 40917
 	ErrJoinRequestResolved  = 40918
+	ErrRoomCapacity         = 40919
+	ErrFileState            = 40920
+	ErrUploadExpired        = 40921
+	ErrUploadCancelled      = 40922
+	ErrDownloadExpired      = 40923
+	ErrFileRecipientState   = 40924
 
-	ErrRateLimited = 42901
-	ErrPINPaused   = 42902
+	ErrRateLimited     = 42901
+	ErrPINPaused       = 42902
+	ErrUploadLimited   = 42903
+	ErrDownloadLimited = 42904
 
-	ErrServer    = 50000
-	ErrDataBase  = 50001
-	ErrCache     = 50002
-	ErrJWTKey    = 50003
-	ErrLifecycle = 50004
+	ErrServer      = 50000
+	ErrDataBase    = 50001
+	ErrCache       = 50002
+	ErrJWTKey      = 50003
+	ErrLifecycle   = 50004
+	ErrFileStorage = 50005
 )
 
 // ErrNoLogin is retained as a source-level semantic alias for missing sessions.
@@ -82,6 +95,9 @@ var definitions = map[int]Definition{
 	ErrRoomCode:                 {Code: ErrRoomCode, MessageKey: "error.room_code_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrPIN:                      {Code: ErrPIN, MessageKey: "error.pin_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrPINConfirmation:          {Code: ErrPINConfirmation, MessageKey: "error.pin_confirmation_mismatch", HTTPStatus: http.StatusBadRequest},
+	ErrFileManifest:             {Code: ErrFileManifest, MessageKey: "error.file_manifest_invalid", HTTPStatus: http.StatusBadRequest},
+	ErrFileRecipient:            {Code: ErrFileRecipient, MessageKey: "error.file_recipient_invalid", HTTPStatus: http.StatusBadRequest},
+	ErrUploadSize:               {Code: ErrUploadSize, MessageKey: "error.upload_size_mismatch", HTTPStatus: http.StatusBadRequest},
 	ErrUnAuthorized:             {Code: ErrUnAuthorized, MessageKey: "error.unauthorized", HTTPStatus: http.StatusUnauthorized},
 	ErrAuthExpired:              {Code: ErrAuthExpired, MessageKey: "error.auth_expired", HTTPStatus: http.StatusUnauthorized},
 	ErrTokenInvalid:             {Code: ErrTokenInvalid, MessageKey: "error.token_invalid", HTTPStatus: http.StatusUnauthorized},
@@ -95,6 +111,7 @@ var definitions = map[int]Definition{
 	ErrUserNotFound:             {Code: ErrUserNotFound, MessageKey: "error.user_not_found", HTTPStatus: http.StatusNotFound},
 	ErrRoomNotFound:             {Code: ErrRoomNotFound, MessageKey: "error.room_not_found", HTTPStatus: http.StatusNotFound},
 	ErrJoinRequestNotFound:      {Code: ErrJoinRequestNotFound, MessageKey: "error.join_request_not_found", HTTPStatus: http.StatusNotFound},
+	ErrFileNotFound:             {Code: ErrFileNotFound, MessageKey: "error.file_not_found", HTTPStatus: http.StatusNotFound},
 	ErrMethodNotAllowed:         {Code: ErrMethodNotAllowed, MessageKey: "error.method_not_allowed", HTTPStatus: http.StatusMethodNotAllowed},
 	ErrTimeOut:                  {Code: ErrTimeOut, MessageKey: "error.timeout", HTTPStatus: http.StatusRequestTimeout},
 	ErrExisted:                  {Code: ErrExisted, MessageKey: "error.existed", HTTPStatus: http.StatusConflict},
@@ -114,13 +131,22 @@ var definitions = map[int]Definition{
 	ErrRoomCodeExhausted:        {Code: ErrRoomCodeExhausted, MessageKey: "error.room_code_exhausted", HTTPStatus: http.StatusConflict},
 	ErrJoinModeMismatch:         {Code: ErrJoinModeMismatch, MessageKey: "error.join_mode_mismatch", HTTPStatus: http.StatusConflict},
 	ErrJoinRequestResolved:      {Code: ErrJoinRequestResolved, MessageKey: "error.join_request_resolved", HTTPStatus: http.StatusConflict},
+	ErrRoomCapacity:             {Code: ErrRoomCapacity, MessageKey: "error.room_capacity_insufficient", HTTPStatus: http.StatusConflict},
+	ErrFileState:                {Code: ErrFileState, MessageKey: "error.file_state_conflict", HTTPStatus: http.StatusConflict},
+	ErrUploadExpired:            {Code: ErrUploadExpired, MessageKey: "error.upload_task_expired", HTTPStatus: http.StatusConflict},
+	ErrUploadCancelled:          {Code: ErrUploadCancelled, MessageKey: "error.upload_cancelled", HTTPStatus: http.StatusConflict},
+	ErrDownloadExpired:          {Code: ErrDownloadExpired, MessageKey: "error.download_task_expired", HTTPStatus: http.StatusConflict},
+	ErrFileRecipientState:       {Code: ErrFileRecipientState, MessageKey: "error.file_recipient_state_conflict", HTTPStatus: http.StatusConflict},
 	ErrRateLimited:              {Code: ErrRateLimited, MessageKey: "error.rate_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrPINPaused:                {Code: ErrPINPaused, MessageKey: "error.pin_paused", HTTPStatus: http.StatusTooManyRequests},
+	ErrUploadLimited:            {Code: ErrUploadLimited, MessageKey: "error.upload_concurrency_limited", HTTPStatus: http.StatusTooManyRequests},
+	ErrDownloadLimited:          {Code: ErrDownloadLimited, MessageKey: "error.download_concurrency_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrServer:                   {Code: ErrServer, MessageKey: "error.internal_server", HTTPStatus: http.StatusInternalServerError},
 	ErrDataBase:                 {Code: ErrDataBase, MessageKey: "error.database", HTTPStatus: http.StatusInternalServerError},
 	ErrCache:                    {Code: ErrCache, MessageKey: "error.cache", HTTPStatus: http.StatusInternalServerError},
 	ErrJWTKey:                   {Code: ErrJWTKey, MessageKey: "error.jwt_key", HTTPStatus: http.StatusInternalServerError},
 	ErrLifecycle:                {Code: ErrLifecycle, MessageKey: "error.lifecycle", HTTPStatus: http.StatusInternalServerError},
+	ErrFileStorage:              {Code: ErrFileStorage, MessageKey: "error.file_storage", HTTPStatus: http.StatusInternalServerError},
 }
 
 func Lookup(code int) (Definition, bool) {

@@ -34,4 +34,30 @@ const (
 	CleanupRetryWaiting = "cleanup_retry_waiting"
 	CleanupSucceeded    = "cleanup_succeeded"
 	CleanupFailed       = "cleanup_failed"
+
+	FileScopeShared = "shared"
+	FileScopeDirect = "direct"
+
+	UploadBatchPending   = "pending"
+	UploadBatchUploading = "uploading"
+	UploadBatchCompleted = "completed"
+	UploadBatchPartial   = "partial"
+	UploadBatchFailed    = "failed"
+
+	FileStatusReserved  = "reserved"
+	FileStatusUploading = "uploading"
+	FileStatusAvailable = "available"
+	FileStatusFailed    = "failed"
+	FileStatusCancelled = "cancelled"
+
+	RecipientPending    = "pending"
+	RecipientAccepted   = "accepted"
+	RecipientDeclined   = "declined"
+	RecipientDownloaded = "downloaded"
+
+	DownloadTaskPending   = "pending"
+	DownloadTaskStreaming = "streaming"
+	DownloadTaskCompleted = "completed"
+	DownloadTaskFailed    = "failed"
+	DownloadTaskExpired   = "expired"
 )

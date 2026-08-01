@@ -18,20 +18,21 @@ import (
 )
 
 const (
-	RoomTTL            = 12 * time.Hour
-	RoomExtendTTL      = 12 * time.Hour
-	RoomDestroyDelay   = 10 * time.Second
-	RoomCodeCooldown   = 10 * time.Minute
-	MaxOwnedRooms      = 1
-	MaxJoinedRooms     = 5
-	MaxRoomMembers     = 50
-	ApprovalWait       = 10 * time.Minute
-	ApprovalRejectWait = 10 * time.Minute
-	ApprovalCancelWait = time.Minute
-	MaxUserPending     = 5
-	MaxRoomPending     = 50
-	RoomCodeMin        = 1
-	RoomCodeMax        = 9999
+	RoomTTL                   = 12 * time.Hour
+	RoomExtendTTL             = 12 * time.Hour
+	RoomDestroyDelay          = 10 * time.Second
+	RoomCodeCooldown          = 10 * time.Minute
+	MaxOwnedRooms             = 1
+	MaxJoinedRooms            = 5
+	MaxRoomMembers            = 50
+	ApprovalWait              = 10 * time.Minute
+	ApprovalRejectWait        = 10 * time.Minute
+	ApprovalCancelWait        = time.Minute
+	MaxUserPending            = 5
+	MaxRoomPending            = 50
+	RoomCodeMin               = 1
+	RoomCodeMax               = 9999
+	DefaultRoomCapacity int64 = 2 * 1024 * 1024 * 1024
 )
 
 type RoomSummary struct {
@@ -159,7 +160,7 @@ func (s *RoomSvc) Create(userID, joinMode, pin, pinConfirmation string) (RoomSna
 		}
 		roomCode = code
 		expiresAt := now.Add(RoomTTL).Unix()
-		room := model.Room{ID: roomID, Code: roomCode, Title: "房间 " + roomCode, OwnerUserID: userID, JoinMode: joinMode, PINHash: pinHash, Status: model.RoomStatusActive, CreatedAt: now.Unix(), ExpiresAt: expiresAt}
+		room := model.Room{ID: roomID, Code: roomCode, Title: "房间 " + roomCode, OwnerUserID: userID, JoinMode: joinMode, PINHash: pinHash, Status: model.RoomStatusActive, CreatedAt: now.Unix(), ExpiresAt: expiresAt, CapacityBytes: DefaultRoomCapacity}
 		member := model.RoomMember{ID: memberID, RoomID: roomID, UserID: userID, Role: model.MemberRoleOwner, DisplayName: user.DisplayName, Status: model.MemberStatusActive, JoinedAt: now.Unix(), LastSeenAt: now.Unix()}
 		if err := tx.Create(&room).Error; err != nil {
 			return fmt.Errorf("create room: %w", err)

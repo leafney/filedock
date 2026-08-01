@@ -8,7 +8,6 @@ import (
 )
 
 // AutoMigrate creates the tables required by the current application stage.
-// Future file and chat models should be appended here when their stage starts.
 func AutoMigrate(db *gorm.DB) error {
 	if db == nil {
 		return fmt.Errorf("migration database is required")
@@ -20,5 +19,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.RoomMember{},
 		&model.JoinRequest{},
 		&model.CleanupJob{},
+		&model.UploadBatch{},
+		&model.RoomFile{},
+		&model.FileRecipient{},
+		&model.FileEvent{},
+		&model.DownloadTask{},
 	)
 }

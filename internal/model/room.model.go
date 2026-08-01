@@ -15,6 +15,9 @@ type Room struct {
 	DestroyAt      *int64 `gorm:"index:idx_rooms_destroy_at"`
 	DestroyedAt    *int64 `gorm:"index:idx_rooms_destroyed_at"`
 	CodeReusableAt *int64 `gorm:"index:idx_rooms_code_reusable_at"`
+	CapacityBytes  int64  `gorm:"not null;default:2147483648"`
+	UsedBytes      int64  `gorm:"not null;default:0"`
+	ReservedBytes  int64  `gorm:"not null;default:0"`
 }
 
 func (Room) TableName() string { return "rooms" }
