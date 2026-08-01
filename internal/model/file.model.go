@@ -3,7 +3,7 @@ package model
 // UploadBatch reserves room capacity for a group of files before bytes are sent.
 type UploadBatch struct {
 	ID                string `gorm:"type:text;primaryKey;size:26"`
-	RoomID            string `gorm:"type:text;not null;index:idx_upload_batches_room_id"`
+	RoomID            string `gorm:"type:text;not null;index:idx_upload_batches_room_id;uniqueIndex:idx_upload_batches_idempotency"`
 	CreatorUserID     string `gorm:"type:text;not null;index:idx_upload_batches_creator_user_id;uniqueIndex:idx_upload_batches_idempotency"`
 	IdempotencyKey    string `gorm:"type:text;not null;uniqueIndex:idx_upload_batches_idempotency"`
 	Scope             string `gorm:"type:text;not null;index:idx_upload_batches_scope"`
@@ -19,7 +19,7 @@ func (UploadBatch) TableName() string { return "upload_batches" }
 // RoomFile stores metadata only. StorageName is always server generated.
 type RoomFile struct {
 	ID             string `gorm:"type:text;primaryKey;size:26"`
-	RoomID         string `gorm:"type:text;not null;index:idx_room_files_room_status;index:idx_room_files_room_scope"`
+	RoomID         string `gorm:"type:text;not null;index:idx_room_files_room_status;index:idx_room_files_room_scope;index:idx_room_files_private_code"`
 	BatchID        string `gorm:"type:text;not null;index:idx_room_files_batch_id"`
 	UploaderUserID string `gorm:"type:text;not null;index:idx_room_files_uploader_user_id"`
 	StorageName    string `gorm:"type:text;not null;uniqueIndex:idx_room_files_storage_name"`
