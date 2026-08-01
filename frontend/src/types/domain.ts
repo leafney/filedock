@@ -79,3 +79,103 @@ export interface StreamEvent<T = Record<string, unknown>> {
   occurredAt: string;
   payload?: T;
 }
+
+export type FileScope = "shared" | "direct";
+export type FileProjectionLevel = "full" | "anonymous";
+export type FileStatus = "reserved" | "uploading" | "available";
+export type FileRecipientStatus = "pending" | "accepted" | "declined" | "downloaded";
+export type FileRange = "all" | FileScope;
+export type FileIdentity = "all" | "uploaded" | "received";
+export type FileSort = "newest" | "oldest" | "size_asc" | "size_desc";
+
+export interface FileCapabilities {
+  canDownload: boolean;
+  canAccept: boolean;
+  canDecline: boolean;
+  canReuse: boolean;
+  canPublishShared: boolean;
+}
+
+export interface FileRecipient {
+  userId: string;
+  displayName: string;
+  status?: FileRecipientStatus;
+}
+
+export interface RoomFile {
+  projection: FileProjectionLevel;
+  fileId: string;
+  displayName: string;
+  originalName?: string;
+  privateCode?: string;
+  scope: FileScope;
+  size: number;
+  declaredMime?: string;
+  detectedMime?: string;
+  status: FileStatus;
+  progress: number;
+  uploaderUserId: string;
+  uploaderName: string;
+  createdAt: number;
+  completedAt?: number;
+  recipients?: FileRecipient[];
+  capabilities: FileCapabilities;
+}
+
+export interface FileGroup {
+  scope: FileScope;
+  items: RoomFile[];
+  total: number;
+  nextCursor?: string;
+}
+
+export interface FileListResult {
+  shared?: FileGroup;
+  direct?: FileGroup;
+}
+
+export interface FileEventItem {
+  eventId: string;
+  type: string;
+  actorId?: string;
+  actorName?: string;
+  createdAt: number;
+  file?: RoomFile;
+}
+
+export interface FileEventPage {
+  items: FileEventItem[];
+  nextCursor?: string;
+}
+
+export interface UploadManifest {
+  originalName: string;
+  declaredSize: number;
+  declaredMime: string;
+}
+
+export interface UploadBatchFile {
+  fileId: string;
+  displayName: string;
+  privateCode?: string;
+  declaredSize: number;
+  status: string;
+  uploadUrl: string;
+}
+
+export interface UploadBatch {
+  batchId: string;
+  scope: FileScope;
+  status: string;
+  declaredTotalSize: number;
+  files: UploadBatchFile[];
+}
+
+export interface DownloadTask {
+  taskId: string;
+  fileId: string;
+  fileName: string;
+  size: number;
+  expiresAt: number;
+  downloadUrl: string;
+}

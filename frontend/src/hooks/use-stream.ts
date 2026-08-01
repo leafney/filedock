@@ -36,6 +36,12 @@ export function useGlobalStream(session: Session | undefined) {
         }
         return;
       }
+      if (event.type.startsWith("file.")) {
+        if (event.type !== "file.upload_progress" && event.type !== "file.download_progress") {
+          void queryClient.invalidateQueries({ queryKey: ["room"] });
+        }
+        return;
+      }
       const known = new Set(["session.revoked", "user.profile_changed"]);
       if (!known.has(event.type)) {
         void queryClient.invalidateQueries({ queryKey: ["session"] });

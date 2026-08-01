@@ -1,12 +1,22 @@
 import { apiClient } from "../lib/api-client";
 import type { ApiResponse } from "../types/api";
 import type {
+  DownloadTask,
+  FileEventPage,
+  FileIdentity,
+  FileListResult,
+  FileRange,
+  FileSort,
   JoinRequestList,
+  RoomFile,
   RoomJoinInfo,
   RoomSnapshot,
   RoomSummary,
   Session,
+  UploadBatch,
+  UploadManifest,
 } from "../types/domain";
+import { currentLanguage } from "../i18n";
 
 async function unwrap<T>(request: Promise<{ data: ApiResponse<T> }>): Promise<T> {
   const response = await request;
@@ -91,4 +101,102 @@ export function approveJoinRequest(code: string, requestId: string) {
 
 export function rejectJoinRequest(code: string, requestId: string) {
   return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/join-requests/${requestId}/reject`));
+}
+
+export interface FileListParams {
+  range: FileRange;
+  identity: FileIdentity;
+  search: string;
+  sort: FileSort;
+  limit?: number;
+  sharedCursor?: string;
+  directCursor?: string;
+}
+
+export function listRoomFiles(code: string, params: FileListParams) {
+  return unwrap<FileListResult>(apiClient.get<ApiResponse<FileListResult>>(`/api/v1/rooms/${code}/files`, { params }));
+}
+
+export function listFileEvents(code: string, cursor = "", limit = 30) {
+  return unwrap<FileEventPage>(apiClient.get<ApiResponse<FileEventPage>>(`/api/v1/rooms/${code}/file-events`, { params: { cursor, limit } }));
+}
+
+export function listReusablePrivateFiles(code: string) {
+  return unwrap<{ items: RoomFile[] }>(apiClient.get<ApiResponse<{ items: RoomFile[] }>>(`/api/v1/rooms/${code}/private-files/reusable`));
+}
+
+export function createUploadBatch(code: string, idempotencyKey: string, scope: "shared" | "direct", recipientIds: string[], files: UploadManifest[]) {
+  return unwrap<UploadBatch>(apiClient.post<ApiResponse<UploadBatch>>(`/api/v1/rooms/${code}/file-upload-batches`, { idempotencyKey, scope, recipientIds, files }));
+}
+
+export function cancelFileUpload(code: string, fileId: string) {
+  return unwrap<null>(apiClient.delete<ApiResponse<null>>(`/api/v1/rooms/${code}/files/${fileId}/upload`));
+}
+
+export function acceptPrivateFile(code: string, fileId: string) {
+  return unwrap<DownloadTask>(apiClient.post<ApiResponse<DownloadTask>>(`/api/v1/rooms/${code}/files/${fileId}/accept`));
+}
+
+export function declinePrivateFile(code: string, fileId: string) {
+  return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/files/${fileId}/decline`));
+}
+
+export function reusePrivateFiles(code: string, fileIds: string[], recipientIds: string[]) {
+  return unwrap<{ changed: number; skipped: number }>(apiClient.post<ApiResponse<{ changed: number; skipped: number }>>(`/api/v1/rooms/${code}/private-files/reuse`, { fileIds, recipientIds }));
+}
+
+export function publishPrivateFile(code: string, fileId: string) {
+  return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/files/${fileId}/publish-shared`));
+}
+
+export function createFileDownload(code: string, fileId: string) {
+  return unwrap<DownloadTask>(apiClient.post<ApiResponse<DownloadTask>>(`/api/v1/rooms/${code}/files/${fileId}/downloads`));
+}
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
+export function uploadFileContent(uploadUrl: string, file: File, onProgress: (progress: UploadProgress) => void) {
+  const request = new XMLHttpRequest();
+  const promise = new Promise<void>((resolve, reject) => {
+    request.open("PUT", uploadUrl);
+    request.withCredentials = true;
+    request.setRequestHeader("Accept-Language", currentLanguage());
+    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    request.upload.onprogress = (event) => {
+      const total = event.lengthComputable ? event.total : file.size;
+      onProgress({ loaded: event.loaded, total, percent: total > 0 ? Math.min(100, Math.round(event.loaded * 100 / total)) : 0 });
+    };
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) resolve();
+      else reject(readXHRFailure(request));
+    };
+    request.onerror = () => reject(new Error("network"));
+    request.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+    request.send(file);
+  });
+  return { request, promise };
+}
+
+function readXHRFailure(request: XMLHttpRequest) {
+  try {
+    const response = JSON.parse(request.responseText) as ApiResponse<unknown>;
+    if (response.message) return new Error(response.message);
+  } catch {
+    // Use the HTTP status fallback when the response is not JSON.
+  }
+  return new Error(`HTTP ${request.status}`);
+}
+
+export function startNativeDownload(task: DownloadTask) {
+  const anchor = document.createElement("a");
+  anchor.href = task.downloadUrl;
+  anchor.download = task.fileName;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
 }

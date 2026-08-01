@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronLeft, Clock3, Copy, DoorOpen, Ellipsis, FileUp, LogOut, MessageSquare, QrCode, RefreshCw, Send, Trash2, Users, X } from "lucide-react";
+import { Bell, ChevronLeft, Clock3, Copy, DoorOpen, Ellipsis, LogOut, MessageSquare, QrCode, RefreshCw, Trash2, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice, LanguageSelector } from "../common";
+import { FileWorkspace } from "./FileWorkspace";
+import { TransferBar } from "./TransferBar";
 import { approveJoinRequest, getJoinRequests, getRoomQRCode, rejectJoinRequest } from "../../services/api";
 import type { RoomMember, RoomSnapshot, Session } from "../../types/domain";
 import { formatBytes, formatDate, formatDuration } from "../../utils/format";
@@ -48,7 +50,6 @@ export function RoomWorkspace(props: Props) {
   };
 
   return <main className="room-page">
-    <LanguageSelector />
     <header className="room-topbar">
       <div className="room-topbar-leading">
         <Link className="room-icon-button" to="/" aria-label={t("room.backHome")}><ChevronLeft aria-hidden="true" /></Link>
@@ -67,6 +68,7 @@ export function RoomWorkspace(props: Props) {
         </button>
       </div>
       <nav className="room-topbar-actions" aria-label={t("room.workspace.roomActions")}>
+        <LanguageSelector />
         <button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button>
         <button className="room-icon-button" type="button" aria-label={t("room.qrcode")} onClick={() => setQROpen(true)}><QrCode aria-hidden="true" /></button>
         {props.room.role === "owner" && <button className="room-icon-button" type="button" aria-label={t("room.notifications")} onClick={() => setRequestsOpen(true)}><Bell aria-hidden="true" />{pending > 0 && <b>{pending}</b>}</button>}
@@ -79,14 +81,10 @@ export function RoomWorkspace(props: Props) {
 
     <div className="room-workspace-layout">
       <MemberPanel room={props.room} session={props.session} onKick={props.onKick} />
-      <section className="room-files-shell">
-        <div className="room-file-toolbar"><div><span>{t("room.workspace.fileWorkspace")}</span><h1>{t("room.workspace.roomFiles")}</h1></div><div><button type="button"><FileUp aria-hidden="true" />{t("room.workspace.addFiles")}</button><button type="button"><Send aria-hidden="true" />{t("room.workspace.sendExisting")}</button></div></div>
-        <div className="room-file-tabs" role="tablist"><button className="active" role="tab" aria-selected="true" type="button">{t("room.workspace.fileList")}</button><button role="tab" aria-selected="false" type="button">{t("room.workspace.timeline")}</button></div>
-        <div className="room-file-stage-placeholder"><FileUp aria-hidden="true" /><h2>{t("room.workspace.fileStageTitle")}</h2><p>{t("room.workspace.fileStageDescription")}</p></div>
-      </section>
+      <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} />
       <aside className="room-chat-placeholder"><MessageSquare aria-hidden="true" /><h2>{t("room.workspace.chatLaterTitle")}</h2><p>{t("room.workspace.chatLaterDescription")}</p></aside>
     </div>
-    <footer className="room-transfer-placeholder"><span><RefreshCw aria-hidden="true" />{t("room.workspace.transferIdle")}</span></footer>
+    <TransferBar roomCode={props.code} />
 
     {membersOpen && <Overlay title={t("room.members")} onClose={() => setMembersOpen(false)}><MemberPanel room={props.room} session={props.session} onKick={props.onKick} drawer /></Overlay>}
     {qrOpen && <QRCodePanel code={props.code} onClose={() => setQROpen(false)} />}
