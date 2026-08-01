@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { cancelFileUpload, createUploadBatch, startNativeDownload, uploadFileContent, type UploadProgress } from "../services/api";
 import type { DownloadTask, FileScope, UploadBatch } from "../types/domain";
+import { downloadStatusForProgress, selectQueuedStarts, transferProgress } from "../utils/transfer-queue";
 
 export type UploadTransferStatus = "queued" | "uploading" | "completed" | "failed" | "cancelled";
 export type DownloadTransferStatus = "queued" | "starting" | "downloading" | "completed" | "failed";
@@ -89,10 +90,11 @@ export function enqueueUploadBatch(roomCode: string, batch: UploadBatch, files: 
 }
 
 function pumpUploadQueue() {
-  while (activeRequests.size < maximumConcurrentUploads) {
-    const task = useTransferStore.getState().uploads.find((item) => item.status === "queued" && !activeRequests.has(item.clientId));
-    if (!task) return;
-    startUpload(task);
+  const state = useTransferStore.getState();
+  const starts = selectQueuedStarts(state.uploads.map((task) => ({ id: task.clientId, status: task.status === "uploading" ? "active" : task.status })), new Set(activeRequests.keys()), maximumConcurrentUploads);
+  for (const id of starts) {
+    const task = useTransferStore.getState().uploads.find((item) => item.clientId === id);
+    if (task) startUpload(task);
   }
 }
 
@@ -148,9 +150,11 @@ export async function retryUploadTransfer(task: UploadTransferTask) {
 export function applyDownloadProgress(payload: Record<string, unknown>) {
   const taskId = typeof payload.taskId === "string" ? payload.taskId : "";
   if (!taskId) return;
-  const progress = typeof payload.progress === "number" ? payload.progress : 0;
+  const reported = typeof payload.progress === "number" ? payload.progress : undefined;
   const transferred = typeof payload.transferred === "number" ? payload.transferred : 0;
-  useTransferStore.getState().patchDownload(taskId, { status: progress >= 100 ? "completed" : "downloading", progress, transferred });
+  const current = useTransferStore.getState().downloads.find((item) => item.taskId === taskId);
+  const progress = reported ?? transferProgress(transferred, current?.total ?? 0);
+  useTransferStore.getState().patchDownload(taskId, { status: downloadStatusForProgress(progress), progress, transferred });
   if (progress >= 100) {
     activeDownloads.delete(taskId);
     pumpDownloadQueue();

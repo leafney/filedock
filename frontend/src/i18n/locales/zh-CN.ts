@@ -124,6 +124,7 @@ const zhCN = {
       copied: "房间号已复制",
       people: "{{count}} 人",
       remaining: "剩余时间",
+      duration: "{{hours}}时 {{minutes}}分 {{seconds}}秒",
       capacity: "房间容量",
       roomActions: "房间操作",
       openMembers: "查看房间成员",
@@ -215,6 +216,7 @@ const zhCN = {
       noActivity: "暂无文件动态",
       systemActor: "系统",
       events: {
+        unknown: "文件状态已更新",
         batch_created: "创建了上传批次",
         upload_started: "开始上传文件",
         upload_completed: "完成文件上传",

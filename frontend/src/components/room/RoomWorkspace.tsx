@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronLeft, Clock3, Copy, DoorOpen, Ellipsis, LogOut, MessageSquare, QrCode, RefreshCw, Trash2, Users, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -9,7 +9,8 @@ import { FileWorkspace } from "./FileWorkspace";
 import { TransferBar } from "./TransferBar";
 import { approveJoinRequest, getJoinRequests, getRoomQRCode, rejectJoinRequest } from "../../services/api";
 import type { RoomMember, RoomSnapshot, Session } from "../../types/domain";
-import { formatBytes, formatDate, formatDuration } from "../../utils/format";
+import { durationParts, formatBytes, formatDate } from "../../utils/format";
+import { useDialogFocus } from "../../hooks/use-dialog-focus";
 
 interface Props {
   room: RoomSnapshot;
@@ -35,11 +36,17 @@ export function RoomWorkspace(props: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (menuOpen) actionMenuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [menuOpen]);
   const expires = Math.max(0, props.room.expiresAt - now);
+  const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;
   const capacityPercent = props.room.capacity.capacityBytes > 0 ? Math.min(100, props.room.capacity.usedBytes * 100 / props.room.capacity.capacityBytes) : 0;
   const pending = props.room.pendingRequestCount ?? 0;
@@ -47,6 +54,11 @@ export function RoomWorkspace(props: Props) {
     await navigator.clipboard?.writeText(props.room.roomCode);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
+  };
+  const runMenuAction = (action: () => void) => {
+    setMenuOpen(false);
+    menuButtonRef.current?.focus();
+    action();
   };
 
   return <main className="room-page">
@@ -61,7 +73,7 @@ export function RoomWorkspace(props: Props) {
       </div>
       <div className="room-topbar-summary">
         <Summary label={t("room.members")} value={t("room.workspace.people", { count: props.room.members.length })} />
-        <Summary label={t("room.workspace.remaining")} value={formatDuration(expires)} />
+        <Summary label={t("room.workspace.remaining")} value={t("room.workspace.duration", { hours: String(duration.hours), minutes: String(duration.minutes), seconds: String(duration.seconds) })} />
         <button className="room-capacity-summary" type="button" onClick={() => setCapacityOpen(true)}>
           <span>{t("room.workspace.capacity")}</span><strong>{formatBytes(props.room.capacity.usedBytes)} / {formatBytes(props.room.capacity.capacityBytes)}</strong>
           <i><i style={{ width: `${capacityPercent}%` }} /></i>
@@ -72,9 +84,17 @@ export function RoomWorkspace(props: Props) {
         <button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button>
         <button className="room-icon-button" type="button" aria-label={t("room.qrcode")} onClick={() => setQROpen(true)}><QrCode aria-hidden="true" /></button>
         {props.room.role === "owner" && <button className="room-icon-button" type="button" aria-label={t("room.notifications")} onClick={() => setRequestsOpen(true)}><Bell aria-hidden="true" />{pending > 0 && <b>{pending}</b>}</button>}
-        <div className="room-menu-wrap"><button className="room-icon-button" type="button" aria-label={t("room.workspace.more")} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><Ellipsis aria-hidden="true" /></button>{menuOpen && <div className="room-action-menu">
-          {props.room.role === "owner" && props.room.canExtend && <button type="button" onClick={props.onExtend}><Clock3 aria-hidden="true" />{t("room.extend")}</button>}
-          {props.room.role === "owner" ? <button className="danger" type="button" onClick={props.onDissolve}><Trash2 aria-hidden="true" />{t("room.dissolve")}</button> : <button type="button" onClick={props.onLeave}><LogOut aria-hidden="true" />{t("room.leave")}</button>}
+        <div className="room-menu-wrap"><button ref={menuButtonRef} className="room-icon-button" type="button" aria-label={t("room.workspace.more")} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><Ellipsis aria-hidden="true" /></button>{menuOpen && <div ref={actionMenuRef} className="room-action-menu" role="menu" onKeyDown={(event) => {
+          const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+          const index = items.indexOf(document.activeElement as HTMLButtonElement);
+          if (event.key === "Escape") { event.preventDefault(); setMenuOpen(false); menuButtonRef.current?.focus(); return; }
+          if (index < 0 || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+          items[next]?.focus();
+        }}>
+          {props.room.role === "owner" && props.room.canExtend && <button role="menuitem" type="button" onClick={() => runMenuAction(props.onExtend)}><Clock3 aria-hidden="true" />{t("room.extend")}</button>}
+          {props.room.role === "owner" ? <button role="menuitem" className="danger" type="button" onClick={() => runMenuAction(props.onDissolve)}><Trash2 aria-hidden="true" />{t("room.dissolve")}</button> : <button role="menuitem" type="button" onClick={() => runMenuAction(props.onLeave)}><LogOut aria-hidden="true" />{t("room.leave")}</button>}
         </div>}</div>
       </nav>
     </header>
@@ -110,7 +130,8 @@ function MemberItem({ member, self, canKick, onKick }: { member: RoomMember; sel
 
 function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const { t } = useTranslation();
-  return <div className="room-overlay" role="dialog" aria-modal="true" aria-label={title}><section><header><h2>{title}</h2><button type="button" aria-label={t("room.workspace.close")} onClick={onClose}><X aria-hidden="true" /></button></header>{children}</section></div>;
+  const panelRef = useDialogFocus(onClose);
+  return <div className="room-overlay" role="dialog" aria-modal="true" aria-label={title}><section ref={panelRef}><header><h2>{title}</h2><button type="button" aria-label={t("room.workspace.close")} onClick={onClose}><X aria-hidden="true" /></button></header>{children}</section></div>;
 }
 
 function QRCodePanel({ code, onClose }: { code: string; onClose: () => void }) {

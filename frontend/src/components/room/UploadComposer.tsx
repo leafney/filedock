@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice } from "../common";
+import { useDialogFocus } from "../../hooks/use-dialog-focus";
 import { listReusablePrivateFiles } from "../../services/api";
 import type { FileScope, RoomFile, RoomMember } from "../../types/domain";
 import { formatBytes } from "../../utils/format";
+import { moveRovingFocus } from "../../utils/keyboard";
 
 interface UploadProps {
   files: File[];
@@ -27,11 +29,12 @@ export function UploadComposer(props: UploadProps) {
   const candidates = props.members.filter((member) => member.userId !== props.selfId && member.status === "active");
   const toggle = (id: string) => setRecipients((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const total = props.files.reduce((sum, file) => sum + file.size, 0);
+  const panelRef = useDialogFocus(props.onClose);
   return <div className="room-overlay upload-composer" role="dialog" aria-modal="true" aria-label={t("room.files.readyToSend")}>
-    <section><header><div><span>{t("room.files.newUpload")}</span><h2>{t("room.files.readyToSend")}</h2></div><button type="button" aria-label={t("room.workspace.close")} onClick={props.onClose}><X aria-hidden="true" /></button></header>
+    <section ref={panelRef}><header><div><span>{t("room.files.newUpload")}</span><h2>{t("room.files.readyToSend")}</h2></div><button type="button" aria-label={t("room.workspace.close")} onClick={props.onClose}><X aria-hidden="true" /></button></header>
       <div className="upload-composer-body">
         {props.error != null && <ErrorNotice error={props.error} />}
-        <div className="upload-scope" role="radiogroup" aria-label={t("room.files.chooseScope")}><button className={scope === "shared" ? "active" : ""} role="radio" aria-checked={scope === "shared"} type="button" onClick={() => { setScope("shared"); setRecipients(new Set()); }}>{t("room.files.shared")}</button><button className={scope === "direct" ? "active" : ""} role="radio" aria-checked={scope === "direct"} type="button" onClick={() => setScope("direct")}>{t("room.files.private")}</button></div>
+        <div className="upload-scope" role="radiogroup" aria-label={t("room.files.chooseScope")} onKeyDown={moveRovingFocus}><button className={scope === "shared" ? "active" : ""} role="radio" aria-checked={scope === "shared"} tabIndex={scope === "shared" ? 0 : -1} type="button" onClick={() => { setScope("shared"); setRecipients(new Set()); }}>{t("room.files.shared")}</button><button className={scope === "direct" ? "active" : ""} role="radio" aria-checked={scope === "direct"} tabIndex={scope === "direct" ? 0 : -1} type="button" onClick={() => setScope("direct")}>{t("room.files.private")}</button></div>
         {scope === "direct" && <fieldset className="recipient-picker"><legend>{t("room.files.chooseRecipients")}</legend>{candidates.length === 0 ? <p>{t("room.files.noRecipients")}</p> : candidates.map((member) => <label key={member.userId}><input type="checkbox" checked={recipients.has(member.userId)} onChange={() => toggle(member.userId)} /><span className="room-avatar">{member.displayName.slice(0, 1)}</span>{member.displayName}</label>)}</fieldset>}
         <div className="upload-draft-list">{props.files.map((file, index) => <article key={`${file.name}-${file.lastModified}-${index}`}><FilePlus2 aria-hidden="true" /><div><strong>{file.name}</strong><span>{formatBytes(file.size)}</span></div><button type="button" aria-label={t("room.files.removeFile", { name: file.name })} onClick={() => props.onRemove(index)}><Trash2 aria-hidden="true" /></button></article>)}</div>
         <button className="upload-add-more" type="button" onClick={props.onAdd}><FilePlus2 aria-hidden="true" />{t("room.files.addMore")}</button>
@@ -66,8 +69,9 @@ export function ReusePrivateDialog(props: ReuseProps) {
     setRecipients((current) => new Set([...current].filter((id) => !blocked.has(id))));
   }, [files, reusable.data?.items]);
   const toggle = (set: Set<string>, id: string, apply: (value: Set<string>) => void) => { const next = new Set(set); if (next.has(id)) next.delete(id); else next.add(id); apply(next); };
+  const panelRef = useDialogFocus(props.onClose);
   return <div className="room-overlay upload-composer" role="dialog" aria-modal="true" aria-label={t("room.files.sendExistingTitle")}>
-    <section><header><div><span>{t("room.files.private")}</span><h2>{t("room.files.sendExistingTitle")}</h2></div><button type="button" aria-label={t("room.workspace.close")} onClick={props.onClose}><X aria-hidden="true" /></button></header>
+    <section ref={panelRef}><header><div><span>{t("room.files.private")}</span><h2>{t("room.files.sendExistingTitle")}</h2></div><button type="button" aria-label={t("room.workspace.close")} onClick={props.onClose}><X aria-hidden="true" /></button></header>
       <div className="upload-composer-body">
         {props.error != null && <ErrorNotice error={props.error} />}
         {reusable.isPending && <p className="file-state-message">{t("room.files.loading")}</p>}
@@ -82,5 +86,6 @@ export function ReusePrivateDialog(props: ReuseProps) {
 
 export function FileDetailsDialog({ file, onClose }: { file: RoomFile; onClose: () => void }) {
   const { t } = useTranslation();
-  return <div className="room-overlay file-details" role="dialog" aria-modal="true" aria-label={t("room.files.fileDetails")}><section><header><h2>{t("room.files.fileDetails")}</h2><button type="button" aria-label={t("room.workspace.close")} onClick={onClose}><X aria-hidden="true" /></button></header><dl><div><dt>{t("room.files.name")}</dt><dd>{file.displayName}</dd></div>{file.privateCode && <div><dt>{t("room.files.privateNumber")}</dt><dd>#{file.privateCode}</dd></div>}<div><dt>{t("room.files.scope")}</dt><dd>{file.scope === "shared" ? t("room.files.shared") : t("room.files.private")}</dd></div><div><dt>{t("room.files.size")}</dt><dd>{formatBytes(file.size)}</dd></div><div><dt>{t("room.files.uploader")}</dt><dd>{file.uploaderName}</dd></div></dl></section></div>;
+  const panelRef = useDialogFocus(onClose);
+  return <div className="room-overlay file-details" role="dialog" aria-modal="true" aria-label={t("room.files.fileDetails")}><section ref={panelRef}><header><h2>{t("room.files.fileDetails")}</h2><button type="button" aria-label={t("room.workspace.close")} onClick={onClose}><X aria-hidden="true" /></button></header><dl><div><dt>{t("room.files.name")}</dt><dd>{file.displayName}</dd></div>{file.privateCode && <div><dt>{t("room.files.privateNumber")}</dt><dd>#{file.privateCode}</dd></div>}<div><dt>{t("room.files.scope")}</dt><dd>{file.scope === "shared" ? t("room.files.shared") : t("room.files.private")}</dd></div><div><dt>{t("room.files.size")}</dt><dd>{formatBytes(file.size)}</dd></div><div><dt>{t("room.files.uploader")}</dt><dd>{file.uploaderName}</dd></div></dl></section></div>;
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckSquare, FilePlus2, ListFilter, Search, Send, Square, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice } from "../common";
@@ -11,6 +11,7 @@ import { streamEventName, type StreamEventMessage } from "../../hooks/use-stream
 import { acceptPrivateFile, createFileDownload, createUploadBatch, declinePrivateFile, publishPrivateFile, reusePrivateFiles } from "../../services/api";
 import { applyDownloadProgress, enqueueDownload, enqueueUploadBatch, fileRefreshEventName } from "../../stores/transfer-store";
 import type { FileIdentity, FileRange, FileScope, FileSort, RoomFile, RoomMember } from "../../types/domain";
+import { moveRovingFocus } from "../../utils/keyboard";
 
 export function FileWorkspace({ code, members, selfId }: { code: string; members: RoomMember[]; selfId: string }) {
   const { t } = useTranslation();
@@ -28,12 +29,12 @@ export function FileWorkspace({ code, members, selfId }: { code: string; members
   const [details, setDetails] = useState<RoomFile | null>(null);
   const [actionError, setActionError] = useState<unknown>();
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["room-files", code] });
     void queryClient.invalidateQueries({ queryKey: ["file-events", code] });
     void queryClient.invalidateQueries({ queryKey: ["reusable-private-files", code] });
     void queryClient.invalidateQueries({ queryKey: ["room", code] });
-  };
+  }, [code, queryClient]);
 
   useEffect(() => {
     const stream = (raw: Event) => {
@@ -50,7 +51,7 @@ export function FileWorkspace({ code, members, selfId }: { code: string; members
     window.addEventListener(streamEventName, stream);
     window.addEventListener(fileRefreshEventName, local);
     return () => { window.removeEventListener(streamEventName, stream); window.removeEventListener(fileRefreshEventName, local); };
-  });
+  }, [code, refresh]);
 
   const upload = useMutation({
     mutationFn: ({ files, scope, recipientIds }: { files: File[]; scope: FileScope; recipientIds: string[] }) => createUploadBatch(code, makeRequestId(), scope, recipientIds, files.map((file) => ({ originalName: file.name, declaredSize: file.size, declaredMime: file.type || "application/octet-stream" }))),
@@ -94,10 +95,10 @@ export function FileWorkspace({ code, members, selfId }: { code: string; members
   return <section className="room-files-shell">
     <input ref={inputRef} className="visually-hidden" type="file" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
     <div className="room-file-toolbar"><div><span>{t("room.workspace.fileWorkspace")}</span><h1>{t("room.workspace.roomFiles")}</h1></div><div><button type="button" onClick={chooseFiles}><FilePlus2 aria-hidden="true" />{t("room.workspace.addFiles")}</button><button type="button" onClick={() => setReuseFiles([])}><Send aria-hidden="true" />{t("room.workspace.sendExisting")}</button></div></div>
-    <div className="room-file-tabs" role="tablist"><button className={view === "list" ? "active" : ""} role="tab" aria-selected={view === "list"} type="button" onClick={() => setView("list")}>{t("room.workspace.fileList")}</button><button className={view === "timeline" ? "active" : ""} role="tab" aria-selected={view === "timeline"} type="button" onClick={() => setView("timeline")}>{t("room.workspace.timeline")}</button></div>
+    <div className="room-file-tabs" role="tablist" onKeyDown={moveRovingFocus}><button className={view === "list" ? "active" : ""} role="tab" aria-selected={view === "list"} tabIndex={view === "list" ? 0 : -1} type="button" onClick={() => setView("list")}>{t("room.workspace.fileList")}</button><button className={view === "timeline" ? "active" : ""} role="tab" aria-selected={view === "timeline"} tabIndex={view === "timeline" ? 0 : -1} type="button" onClick={() => setView("timeline")}>{t("room.workspace.timeline")}</button></div>
     {view === "list" ? <div className="file-workspace-body">
       <div className="file-filter-bar">
-        <div className="file-range-tabs" role="radiogroup" aria-label={t("room.files.scopeFilter")}>{(["all", "shared", "direct"] as FileRange[]).map((value) => <button className={range === value ? "active" : ""} key={value} role="radio" aria-checked={range === value} type="button" onClick={() => changeFilter(setRange, value)}>{t(`room.files.range.${value}`)}</button>)}</div>
+        <div className="file-range-tabs" role="radiogroup" aria-label={t("room.files.scopeFilter")} onKeyDown={moveRovingFocus}>{(["all", "shared", "direct"] as FileRange[]).map((value) => <button className={range === value ? "active" : ""} key={value} role="radio" aria-checked={range === value} tabIndex={range === value ? 0 : -1} type="button" onClick={() => changeFilter(setRange, value)}>{t(`room.files.range.${value}`)}</button>)}</div>
         <label className="file-search"><Search aria-hidden="true" /><span className="visually-hidden">{t("room.files.search")}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} />{search && <button type="button" aria-label={t("room.files.clearSearch")} onClick={() => setSearch("")}><X aria-hidden="true" /></button>}</label>
         <label className="file-select-filter"><ListFilter aria-hidden="true" /><span className="visually-hidden">{t("room.files.identityFilter")}</span><select value={identity} onChange={(event) => changeFilter(setIdentity, event.target.value as FileIdentity)}><option value="all">{t("room.files.identity.all")}</option><option value="uploaded">{t("room.files.identity.uploaded")}</option><option value="received">{t("room.files.identity.received")}</option></select></label>
         <label className="file-select-filter"><span className="visually-hidden">{t("room.files.sortLabel")}</span><select value={sort} onChange={(event) => setSort(event.target.value as FileSort)}><option value="newest">{t("room.files.sort.newest")}</option><option value="oldest">{t("room.files.sort.oldest")}</option><option value="size_asc">{t("room.files.sort.sizeAsc")}</option><option value="size_desc">{t("room.files.sort.sizeDesc")}</option></select></label>

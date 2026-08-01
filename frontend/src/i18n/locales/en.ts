@@ -130,6 +130,7 @@ const en = {
       copied: "Room code copied",
       people: "{{count}} people",
       remaining: "Time remaining",
+      duration: "{{hours}}h {{minutes}}m {{seconds}}s",
       capacity: "Room capacity",
       roomActions: "Room actions",
       openMembers: "View room members",
@@ -221,6 +222,7 @@ const en = {
       noActivity: "No file activity",
       systemActor: "System",
       events: {
+        unknown: "File status updated",
         batch_created: "Created an upload batch",
         upload_started: "Started uploading a file",
         upload_completed: "Completed a file upload",

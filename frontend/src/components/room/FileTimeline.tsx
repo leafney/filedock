@@ -28,6 +28,7 @@ export function FileTimeline({ code }: { code: string }) {
 }
 
 const eventKeys = {
+  unknown: "room.files.events.unknown",
   batch_created: "room.files.events.batch_created",
   upload_started: "room.files.events.upload_started",
   upload_completed: "room.files.events.upload_completed",
@@ -43,5 +44,5 @@ const eventKeys = {
 } as const;
 
 function eventTranslationKey(type: string): (typeof eventKeys)[keyof typeof eventKeys] {
-  return eventKeys[type as keyof typeof eventKeys] ?? eventKeys.batch_created;
+  return eventKeys[type as keyof typeof eventKeys] ?? eventKeys.unknown;
 }

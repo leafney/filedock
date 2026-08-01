@@ -1,8 +1,9 @@
-export function formatDuration(seconds: number) {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const rest = seconds % 60;
-  return `${hours}h ${minutes}m ${rest}s`;
+export function durationParts(seconds: number) {
+  return {
+    hours: Math.floor(seconds / 3600),
+    minutes: Math.floor((seconds % 3600) / 60),
+    seconds: seconds % 60,
+  };
 }
 
 export function formatDate(timestamp: number) {
