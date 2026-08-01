@@ -95,7 +95,23 @@ func newTestServerWithConfig(t *testing.T, cfg *config.Config) *Server {
 	if err != nil {
 		t.Fatalf("NewRoomAPI() error = %v", err)
 	}
-	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, streamAPI, service.NewRateLimiter())
+	storage, err := service.NewFileStorage(cfg.App.DataDir)
+	if err != nil {
+		t.Fatalf("NewFileStorage() error = %v", err)
+	}
+	fileSvc, err := service.NewFileSvc(db, hub, storage)
+	if err != nil {
+		t.Fatalf("NewFileSvc() error = %v", err)
+	}
+	fileBiz, err := biz.NewFileBiz(fileSvc)
+	if err != nil {
+		t.Fatalf("NewFileBiz() error = %v", err)
+	}
+	fileAPI, err := api.NewFileAPI(fileBiz)
+	if err != nil {
+		t.Fatalf("NewFileAPI() error = %v", err)
+	}
+	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, service.NewRateLimiter())
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
@@ -201,6 +217,72 @@ func TestServerTLSConfigurationAndSecureCookie(t *testing.T) {
 	setCookie := response.Header.Get(fiber.HeaderSetCookie)
 	if !strings.Contains(strings.ToLower(setCookie), "secure") {
 		t.Fatalf("HTTPS session cookie missing Secure attribute: %q", setCookie)
+	}
+}
+
+func TestServerFileUploadBatchAndStreamingContent(t *testing.T) {
+	server := newTestServer(t)
+	createSession := httptest.NewRequest(fiber.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"displayName":"文件用户"}`))
+	createSession.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	sessionResponse, err := server.App().Test(createSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sessionResponse.Body.Close()
+	cookie := sessionResponse.Header.Get(fiber.HeaderSetCookie)
+	if cookie == "" {
+		t.Fatal("session cookie is empty")
+	}
+	createRoom := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms", bytes.NewBufferString(`{"joinMode":"open"}`))
+	createRoom.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	createRoom.Header.Set(fiber.HeaderCookie, cookie)
+	roomResponse, err := server.App().Test(createRoom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer roomResponse.Body.Close()
+	var roomBody struct {
+		Data struct {
+			RoomCode string `json:"roomCode"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(roomResponse.Body).Decode(&roomBody); err != nil || roomBody.Data.RoomCode == "" {
+		t.Fatalf("decode room response: code=%q error=%v", roomBody.Data.RoomCode, err)
+	}
+	manifest := `{"idempotencyKey":"integration-upload","scope":"shared","files":[{"originalName":"hello.txt","declaredSize":5,"declaredMime":"text/plain"}]}`
+	createBatch := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/file-upload-batches", bytes.NewBufferString(manifest))
+	createBatch.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	createBatch.Header.Set(fiber.HeaderCookie, cookie)
+	batchResponse, err := server.App().Test(createBatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer batchResponse.Body.Close()
+	if batchResponse.StatusCode != fiber.StatusCreated {
+		body, _ := io.ReadAll(batchResponse.Body)
+		t.Fatalf("create batch status=%d body=%s", batchResponse.StatusCode, body)
+	}
+	var batchBody struct {
+		Data struct {
+			Files []struct {
+				FileID string `json:"fileId"`
+			} `json:"files"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(batchResponse.Body).Decode(&batchBody); err != nil || len(batchBody.Data.Files) != 1 {
+		t.Fatalf("decode batch response: %+v error=%v", batchBody, err)
+	}
+	upload := httptest.NewRequest(fiber.MethodPut, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/files/"+batchBody.Data.Files[0].FileID+"/content", bytes.NewBufferString("hello"))
+	upload.Header.Set(fiber.HeaderContentType, fiber.MIMEOctetStream)
+	upload.Header.Set(fiber.HeaderCookie, cookie)
+	uploadResponse, err := server.App().Test(upload, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer uploadResponse.Body.Close()
+	if uploadResponse.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(uploadResponse.Body)
+		t.Fatalf("upload status=%d body=%s", uploadResponse.StatusCode, body)
 	}
 }
 

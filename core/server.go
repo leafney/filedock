@@ -28,7 +28,7 @@ type Server struct {
 	app *fiber.App
 }
 
-func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter) (*Server, error) {
+func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("server config is required")
 	}
@@ -50,6 +50,9 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	if roomAPI == nil {
 		return nil, fmt.Errorf("room api is required")
 	}
+	if fileAPI == nil {
+		return nil, fmt.Errorf("file api is required")
+	}
 	if streamAPI == nil {
 		return nil, fmt.Errorf("stream api is required")
 	}
@@ -64,14 +67,14 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	if err != nil {
 		return nil, err
 	}
-	app := fiber.New(fiber.Config{ErrorHandler: func(c *fiber.Ctx, err error) error {
+	app := fiber.New(fiber.Config{StreamRequestBody: true, BodyLimit: int(service.DefaultRoomCapacity + 1024), ErrorHandler: func(c *fiber.Ctx, err error) error {
 		return handleHTTPError(log, c, err)
 	}})
 	app.Use(recover.New())
 	app.Use(requestLogger.Handle)
 	app.Use(localizationMiddleware(catalog))
 	app.Use(sessionMiddleware(sessionSvc, cfg.HTTP.CertFile != "" && cfg.HTTP.KeyFile != ""))
-	registerRoutes(app, versionAPI, sessionAPI, roomAPI, streamAPI, limiter)
+	registerRoutes(app, versionAPI, sessionAPI, roomAPI, fileAPI, streamAPI, limiter)
 	if err := registerStatic(app); err != nil {
 		return nil, fmt.Errorf("register static resources: %w", err)
 	}

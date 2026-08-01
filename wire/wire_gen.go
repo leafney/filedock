@@ -76,12 +76,24 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
+	fileSvc, err := provideFileSvc(gormDBSvc, streamHub, fileStorage)
+	if err != nil {
+		return nil, err
+	}
+	fileBiz, err := provideFileBiz(fileSvc)
+	if err != nil {
+		return nil, err
+	}
+	fileAPI, err := provideFileAPI(fileBiz)
+	if err != nil {
+		return nil, err
+	}
 	streamAPI, err := provideStreamAPI(streamHub, presenceSvc)
 	if err != nil {
 		return nil, err
 	}
 	rateLimiter := provideRateLimiter()
-	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, streamAPI, rateLimiter)
+	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, rateLimiter)
 	if err != nil {
 		return nil, err
 	}

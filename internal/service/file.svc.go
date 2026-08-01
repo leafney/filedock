@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -20,6 +22,9 @@ const (
 	MaxUploadFiles       = 100
 	MaxOriginalNameRunes = 255
 	UploadStartTTL       = 10 * time.Minute
+	UploadGlobalLimit    = 4
+	UploadRoomLimit      = 2
+	UploadUserLimit      = 2
 
 	FileEventBatchCreated    = "batch_created"
 	FileEventUploadStarted   = "upload_started"
@@ -89,16 +94,29 @@ type FileProjection struct {
 }
 
 type FileSvc struct {
-	db  *gorm.DB
-	hub *StreamHub
-	now func() time.Time
+	db      *gorm.DB
+	hub     *StreamHub
+	storage *FileStorage
+	uploads *uploadRegistry
+	now     func() time.Time
 }
 
-func NewFileSvc(db *gorm.DB, hub *StreamHub) (*FileSvc, error) {
+type uploadRegistry struct {
+	mu     sync.Mutex
+	active map[string]context.CancelFunc
+	rooms  map[string]int
+	users  map[string]int
+}
+
+func NewFileSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*FileSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("file database is required")
 	}
-	return &FileSvc{db: db, hub: hub, now: time.Now}, nil
+	var storage *FileStorage
+	if len(storages) > 0 {
+		storage = storages[0]
+	}
+	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]context.CancelFunc), rooms: make(map[string]int), users: make(map[string]int)}, now: time.Now}, nil
 }
 
 // CreateUploadBatch validates and reserves the complete batch atomically.
@@ -216,6 +234,89 @@ func (s *FileSvc) MarkUploading(userID, fileID string) error {
 	return nil
 }
 
+func (s *FileSvc) UploadContent(ctx context.Context, userID, roomCode, fileID string, contentLength int64, source interface{ Read([]byte) (int, error) }) error {
+	if s == nil || s.db == nil || s.storage == nil || source == nil {
+		return fmt.Errorf("file upload service is unavailable")
+	}
+	_, member, err := activeFileMember(s.db, roomCode, userID)
+	if err != nil {
+		return err
+	}
+	var file model.RoomFile
+	if err := s.db.Where("id = ? AND room_id = ? AND uploader_user_id = ?", fileID, member.RoomID, userID).First(&file).Error; err != nil {
+		return fileNotFound(err)
+	}
+	if file.Status != model.FileStatusReserved {
+		return errx.New(errc.ErrFileState, nil)
+	}
+	if contentLength <= 0 || contentLength != file.DeclaredSize {
+		return errx.New(errc.ErrUploadSize, nil)
+	}
+	uploadContext, finish, err := s.uploads.begin(ctx, file.ID, file.RoomID, userID)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	if err := s.MarkUploading(userID, file.ID); err != nil {
+		return err
+	}
+
+	lastProgress := 0
+	lastPublished := time.Time{}
+	stored, writeErr := s.storage.Write(uploadContext, file.RoomID, file.StorageName, file.DeclaredSize, source, func(written int64) {
+		progress := int(written * 100 / file.DeclaredSize)
+		now := s.now()
+		if progress <= lastProgress || (progress < 100 && progress-lastProgress < 1) || (progress < 100 && now.Sub(lastPublished) < 500*time.Millisecond) {
+			return
+		}
+		lastProgress = progress
+		lastPublished = now
+		_ = s.db.Model(&model.RoomFile{}).Where("id = ? AND status = ?", file.ID, model.FileStatusUploading).Update("progress", progress).Error
+		if s.hub != nil {
+			s.hub.PublishUser(userID, "file.upload_progress", map[string]interface{}{"roomCode": roomCode, "fileId": file.ID, "progress": progress})
+		}
+	})
+	if writeErr != nil {
+		status := model.FileStatusFailed
+		code := errc.ErrFileStorage
+		if errors.Is(writeErr, context.Canceled) {
+			status = model.FileStatusCancelled
+			code = errc.ErrUploadCancelled
+		} else if errors.Is(writeErr, ErrStoredSizeMismatch) {
+			code = errc.ErrUploadSize
+		}
+		_ = s.ReleaseUpload(userID, file.ID, status, code)
+		return errx.Wrap(code, writeErr, nil)
+	}
+	if err := s.CompleteUpload(userID, file.ID, stored.DetectedMIME, stored.Size); err != nil {
+		_ = s.storage.DeleteFile(file.RoomID, file.StorageName)
+		_ = s.ReleaseUpload(userID, file.ID, model.FileStatusFailed, errc.ErrFileStorage)
+		return err
+	}
+	s.refreshBatchStatus(file.BatchID)
+	if s.hub != nil {
+		s.hub.PublishUser(userID, "file.available", map[string]interface{}{"roomCode": roomCode, "fileId": file.ID, "progress": 100})
+	}
+	return nil
+}
+
+func (s *FileSvc) CancelUpload(userID, roomCode, fileID string) error {
+	_, member, err := activeFileMember(s.db, roomCode, userID)
+	if err != nil {
+		return err
+	}
+	var file model.RoomFile
+	if err := s.db.Where("id = ? AND room_id = ? AND uploader_user_id = ?", fileID, member.RoomID, userID).First(&file).Error; err != nil {
+		return fileNotFound(err)
+	}
+	s.uploads.cancel(file.ID)
+	if err := s.ReleaseUpload(userID, file.ID, model.FileStatusCancelled, errc.ErrUploadCancelled); err != nil {
+		return err
+	}
+	s.refreshBatchStatus(file.BatchID)
+	return nil
+}
+
 func (s *FileSvc) CompleteUpload(userID, fileID, detectedMIME string, actualSize int64) error {
 	now := s.now().Unix()
 	return s.db.Transaction(func(tx *gorm.DB) error {
@@ -285,6 +386,78 @@ func (s *FileSvc) ReleaseUpload(userID, fileID, targetStatus string, failureCode
 		}
 		return assertRoomCapacity(tx, file.RoomID)
 	})
+}
+
+func (s *FileSvc) refreshBatchStatus(batchID string) {
+	if batchID == "" {
+		return
+	}
+	var files []model.RoomFile
+	if err := s.db.Select("status").Where("batch_id = ?", batchID).Find(&files).Error; err != nil || len(files) == 0 {
+		return
+	}
+	available, active, terminalFailure := 0, 0, 0
+	for _, file := range files {
+		switch file.Status {
+		case model.FileStatusAvailable:
+			available++
+		case model.FileStatusReserved, model.FileStatusUploading:
+			active++
+		case model.FileStatusFailed, model.FileStatusCancelled:
+			terminalFailure++
+		}
+	}
+	status := model.UploadBatchUploading
+	if active == 0 {
+		switch {
+		case available == len(files):
+			status = model.UploadBatchCompleted
+		case terminalFailure == len(files):
+			status = model.UploadBatchFailed
+		default:
+			status = model.UploadBatchPartial
+		}
+	}
+	_ = s.db.Model(&model.UploadBatch{}).Where("id = ?", batchID).Updates(map[string]interface{}{"status": status, "updated_at": s.now().Unix()}).Error
+}
+
+func (r *uploadRegistry) begin(parent context.Context, fileID, roomID, userID string) (context.Context, func(), error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.active[fileID]; exists || len(r.active) >= UploadGlobalLimit || r.rooms[roomID] >= UploadRoomLimit || r.users[userID] >= UploadUserLimit {
+		return nil, nil, errx.New(errc.ErrUploadLimited, nil)
+	}
+	ctx, cancel := context.WithCancel(parent)
+	r.active[fileID] = cancel
+	r.rooms[roomID]++
+	r.users[userID]++
+	var once sync.Once
+	finish := func() {
+		once.Do(func() {
+			r.mu.Lock()
+			delete(r.active, fileID)
+			r.rooms[roomID]--
+			r.users[userID]--
+			r.mu.Unlock()
+			cancel()
+		})
+	}
+	return ctx, finish, nil
+}
+
+func (r *uploadRegistry) cancel(fileID string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancel := r.active[fileID]
+	r.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func ProjectFile(file model.RoomFile, uploader model.RoomMember, recipients []model.FileRecipient, recipientMembers map[string]model.RoomMember, viewer model.RoomMember) FileProjection {

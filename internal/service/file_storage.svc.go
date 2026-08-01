@@ -14,6 +14,8 @@ import (
 
 const fileCopyBufferSize = 64 * 1024
 
+var ErrStoredSizeMismatch = errors.New("stored file size mismatch")
+
 type StoredFile struct {
 	Path         string
 	Size         int64
@@ -97,7 +99,7 @@ func (s *FileStorage) Write(ctx context.Context, roomID, storageName string, dec
 		}
 		remaining := declaredSize + 1 - written
 		if remaining <= 0 {
-			return StoredFile{}, fmt.Errorf("uploaded content exceeds declared size")
+			return StoredFile{}, fmt.Errorf("%w: content exceeds declared size", ErrStoredSizeMismatch)
 		}
 		chunk := buffer
 		if int64(len(chunk)) > remaining {
@@ -121,7 +123,7 @@ func (s *FileStorage) Write(ctx context.Context, roomID, storageName string, dec
 				return StoredFile{}, io.ErrShortWrite
 			}
 			if written > declaredSize {
-				return StoredFile{}, fmt.Errorf("uploaded content exceeds declared size")
+				return StoredFile{}, fmt.Errorf("%w: content exceeds declared size", ErrStoredSizeMismatch)
 			}
 			if progress != nil {
 				progress(written)
@@ -138,7 +140,7 @@ func (s *FileStorage) Write(ctx context.Context, roomID, storageName string, dec
 		}
 	}
 	if written != declaredSize {
-		return StoredFile{}, fmt.Errorf("uploaded content size %d does not match %d", written, declaredSize)
+		return StoredFile{}, fmt.Errorf("%w: uploaded %d bytes, declared %d", ErrStoredSizeMismatch, written, declaredSize)
 	}
 	if err := file.Sync(); err != nil {
 		return StoredFile{}, fmt.Errorf("sync upload temporary file: %w", err)

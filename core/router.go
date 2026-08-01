@@ -8,7 +8,7 @@ import (
 	"github.com/leafney/filedock/internal/service"
 )
 
-func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, roomAPI *api.RoomAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter) {
+func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter) {
 	app.Get("/version", versionAPI.HandleVersion)
 	app.Get("/api/v1/nicknames/random", rateLimited(limiter, "nickname_random", 30, time.Minute, sessionAPI.HandleRandomNickname))
 	app.Post("/api/v1/sessions", rateLimited(limiter, "session_create", 10, time.Minute, sessionAPI.HandleCreate))
@@ -31,5 +31,8 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.
 	app.Delete("/api/v1/rooms/:code/join-requests/me", roomAPI.HandleCancelJoinRequest)
 	app.Post("/api/v1/rooms/:code/join-requests/:requestId/approve", roomAPI.HandleApproveJoinRequest)
 	app.Post("/api/v1/rooms/:code/join-requests/:requestId/reject", roomAPI.HandleRejectJoinRequest)
+	app.Post("/api/v1/rooms/:code/file-upload-batches", fileAPI.HandleCreateUploadBatch)
+	app.Put("/api/v1/rooms/:code/files/:fileId/content", fileAPI.HandleUploadContent)
+	app.Delete("/api/v1/rooms/:code/files/:fileId/upload", fileAPI.HandleCancelUpload)
 	app.Get("/api/v1/stream", streamAPI.Handle)
 }

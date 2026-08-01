@@ -1,6 +1,10 @@
 package service
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +21,129 @@ type fileTestFixture struct {
 	uploader  model.RoomMember
 	recipient model.RoomMember
 	outsider  model.RoomMember
+}
+
+func TestUploadContentStreamsSettlesAndStoresFile(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	content := []byte("hello")
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-success", model.FileScopeShared, []FileManifest{{OriginalName: "hello.txt", DeclaredSize: int64(len(content)), DeclaredMIME: "text/plain"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileID := batch.Files[0].ID
+	if err := fixture.svc.UploadContent(context.Background(), fixture.uploader.UserID, fixture.room.Code, fileID, int64(len(content)), bytes.NewReader(content)); err != nil {
+		t.Fatalf("UploadContent() error = %v", err)
+	}
+	var file model.RoomFile
+	fixture.svc.db.First(&file, "id = ?", fileID)
+	if file.Status != model.FileStatusAvailable || file.Progress != 100 || file.ActualSize != int64(len(content)) || file.DetectedMIME == "" {
+		t.Fatalf("uploaded file = %+v", file)
+	}
+	stored, _, err := storage.Open(fixture.room.ID, file.StorageName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stored.Close()
+	read, _ := io.ReadAll(stored)
+	if !bytes.Equal(read, content) {
+		t.Fatalf("stored content = %q", read)
+	}
+}
+
+func TestUploadContentSizeMismatchFailsAndReleasesReservation(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-short", model.FileScopeShared, []FileManifest{{OriginalName: "short.bin", DeclaredSize: 5}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = fixture.svc.UploadContent(context.Background(), fixture.uploader.UserID, fixture.room.Code, batch.Files[0].ID, 5, bytes.NewReader([]byte("123")))
+	if errx.Code(err) != errc.ErrUploadSize {
+		t.Fatalf("UploadContent() code = %d, want %d: %v", errx.Code(err), errc.ErrUploadSize, err)
+	}
+	var room model.Room
+	fixture.svc.db.First(&room, "id = ?", fixture.room.ID)
+	if room.ReservedBytes != 0 || room.UsedBytes != 0 {
+		t.Fatalf("capacity after failed upload = %+v", room)
+	}
+}
+
+type controlledUploadReader struct {
+	started chan struct{}
+	resume  chan struct{}
+	reads   int
+}
+
+func (r *controlledUploadReader) Read(buffer []byte) (int, error) {
+	r.reads++
+	if r.reads == 1 {
+		close(r.started)
+		buffer[0] = 'a'
+		return 1, nil
+	}
+	if r.reads == 2 {
+		<-r.resume
+		buffer[0] = 'b'
+		return 1, nil
+	}
+	return 0, io.EOF
+}
+
+func TestCancelActiveUploadStopsTaskAndReleasesReservation(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-cancel", model.FileScopeShared, []FileManifest{{OriginalName: "cancel.bin", DeclaredSize: 2}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &controlledUploadReader{started: make(chan struct{}), resume: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- fixture.svc.UploadContent(context.Background(), fixture.uploader.UserID, fixture.room.Code, batch.Files[0].ID, 2, reader)
+	}()
+	<-reader.started
+	if err := fixture.svc.CancelUpload(fixture.uploader.UserID, fixture.room.Code, batch.Files[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	close(reader.resume)
+	if err := <-done; !errors.Is(err, context.Canceled) && errx.Code(err) != errc.ErrUploadCancelled {
+		t.Fatalf("active upload returned %v", err)
+	}
+	var file model.RoomFile
+	fixture.svc.db.First(&file, "id = ?", batch.Files[0].ID)
+	if file.Status != model.FileStatusCancelled {
+		t.Fatalf("file status = %q", file.Status)
+	}
+}
+
+func TestUploadRegistryEnforcesGlobalRoomAndUserLimits(t *testing.T) {
+	registry := &uploadRegistry{active: make(map[string]context.CancelFunc), rooms: make(map[string]int), users: make(map[string]int)}
+	_, finishOne, err := registry.begin(context.Background(), "file-1", "room", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finishOne()
+	_, finishTwo, err := registry.begin(context.Background(), "file-2", "room", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finishTwo()
+	if _, _, err := registry.begin(context.Background(), "file-3", "room", "user"); errx.Code(err) != errc.ErrUploadLimited {
+		t.Fatalf("third user upload error = %v", err)
+	}
 }
 
 func newFileTestFixture(t *testing.T, capacity int64) fileTestFixture {
