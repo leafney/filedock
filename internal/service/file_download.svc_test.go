@@ -167,34 +167,35 @@ func TestDownloadProgressIsOnlyPublishedToTaskUser(t *testing.T) {
 	if err := stream.WriteTo(context.Background(), &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case event := <-userEvents:
-		if event.Type != "file.download_progress" {
-			t.Fatalf("event type=%q", event.Type)
+	foundProgress := false
+	for len(userEvents) > 0 {
+		if event := <-userEvents; event.Type == "file.download_progress" {
+			foundProgress = true
 		}
-	default:
+	}
+	if !foundProgress {
 		t.Fatal("task user did not receive progress")
 	}
-	select {
-	case event := <-otherEvents:
-		t.Fatalf("other user received progress: %+v", event)
-	default:
+	for len(otherEvents) > 0 {
+		if event := <-otherEvents; event.Type == "file.download_progress" {
+			t.Fatalf("other user received progress: %+v", event)
+		}
 	}
 }
 
 func TestDownloadRegistryEnforcesPerUserLimit(t *testing.T) {
-	registry := &downloadRegistry{active: make(map[string]struct{}), rooms: make(map[string]int), users: make(map[string]int)}
-	finishOne, err := registry.begin("task-1", "room", "user")
+	registry := &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}
+	_, finishOne, err := registry.begin("task-1", "room", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer finishOne()
-	finishTwo, err := registry.begin("task-2", "room", "user")
+	_, finishTwo, err := registry.begin("task-2", "room", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer finishTwo()
-	if _, err := registry.begin("task-3", "room", "user"); errx.Code(err) != errc.ErrDownloadLimited {
+	if _, _, err := registry.begin("task-3", "room", "user"); errx.Code(err) != errc.ErrDownloadLimited {
 		t.Fatalf("third download error=%v", err)
 	}
 }

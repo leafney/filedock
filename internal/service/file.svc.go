@@ -104,9 +104,15 @@ type FileSvc struct {
 
 type uploadRegistry struct {
 	mu     sync.Mutex
-	active map[string]context.CancelFunc
+	active map[string]uploadActive
 	rooms  map[string]int
 	users  map[string]int
+}
+
+type uploadActive struct {
+	roomID string
+	userID string
+	cancel context.CancelFunc
 }
 
 func NewFileSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*FileSvc, error) {
@@ -117,7 +123,7 @@ func NewFileSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*FileSvc
 	if len(storages) > 0 {
 		storage = storages[0]
 	}
-	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]context.CancelFunc), rooms: make(map[string]int), users: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]struct{}), rooms: make(map[string]int), users: make(map[string]int)}, now: time.Now}, nil
+	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]uploadActive), rooms: make(map[string]int), users: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}, now: time.Now}, nil
 }
 
 // CreateUploadBatch validates and reserves the complete batch atomically.
@@ -138,6 +144,7 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 	}
 
 	var result UploadBatchResult
+	created := false
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, userID)
 		if err != nil {
@@ -223,8 +230,14 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 			return err
 		}
 		result = UploadBatchResult{Batch: batch, Files: files}
+		created = true
 		return assertRoomCapacity(tx, room.ID)
 	})
+	if err == nil && created {
+		for _, file := range result.Files {
+			s.publishFileProjection(file.ID, "file.created", nil)
+		}
+	}
 	return result, err
 }
 
@@ -284,9 +297,7 @@ func (s *FileSvc) UploadContent(ctx context.Context, userID, roomCode, fileID st
 		lastProgress = progress
 		lastPublished = now
 		_ = s.db.Model(&model.RoomFile{}).Where("id = ? AND status = ?", file.ID, model.FileStatusUploading).Update("progress", progress).Error
-		if s.hub != nil {
-			s.hub.PublishUser(userID, "file.upload_progress", map[string]interface{}{"roomCode": roomCode, "fileId": file.ID, "progress": progress})
-		}
+		s.publishFileProjection(file.ID, "file.upload_progress", map[string]interface{}{"progress": progress})
 	})
 	if writeErr != nil {
 		status := model.FileStatusFailed
@@ -298,6 +309,7 @@ func (s *FileSvc) UploadContent(ctx context.Context, userID, roomCode, fileID st
 			code = errc.ErrUploadSize
 		}
 		_ = s.ReleaseUpload(userID, file.ID, status, code)
+		s.publishFileProjection(file.ID, "file.upload_failed", map[string]interface{}{"failureCode": code})
 		return errx.Wrap(code, writeErr, nil)
 	}
 	if err := s.CompleteUpload(userID, file.ID, stored.DetectedMIME, stored.Size); err != nil {
@@ -306,9 +318,7 @@ func (s *FileSvc) UploadContent(ctx context.Context, userID, roomCode, fileID st
 		return err
 	}
 	s.refreshBatchStatus(file.BatchID)
-	if s.hub != nil {
-		s.hub.PublishUser(userID, "file.available", map[string]interface{}{"roomCode": roomCode, "fileId": file.ID, "progress": 100})
-	}
+	s.publishFileProjection(file.ID, "file.available", map[string]interface{}{"progress": 100})
 	return nil
 }
 
@@ -326,6 +336,7 @@ func (s *FileSvc) CancelUpload(userID, roomCode, fileID string) error {
 		return err
 	}
 	s.refreshBatchStatus(file.BatchID)
+	s.publishFileProjection(file.ID, "file.upload_cancelled", map[string]interface{}{"failureCode": errc.ErrUploadCancelled})
 	return nil
 }
 
@@ -443,7 +454,7 @@ func (r *uploadRegistry) begin(parent context.Context, fileID, roomID, userID st
 		return nil, nil, errx.New(errc.ErrUploadLimited, nil)
 	}
 	ctx, cancel := context.WithCancel(parent)
-	r.active[fileID] = cancel
+	r.active[fileID] = uploadActive{roomID: roomID, userID: userID, cancel: cancel}
 	r.rooms[roomID]++
 	r.users[userID]++
 	var once sync.Once
@@ -465,11 +476,44 @@ func (r *uploadRegistry) cancel(fileID string) {
 		return
 	}
 	r.mu.Lock()
-	cancel := r.active[fileID]
+	active := r.active[fileID]
 	r.mu.Unlock()
-	if cancel != nil {
+	if active.cancel != nil {
+		active.cancel()
+	}
+}
+
+func (r *uploadRegistry) cancelMatching(roomID, userID string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancels := make([]context.CancelFunc, 0)
+	for _, active := range r.active {
+		if active.roomID == roomID && (userID == "" || active.userID == userID) {
+			cancels = append(cancels, active.cancel)
+		}
+	}
+	r.mu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
+}
+
+func (s *FileSvc) CancelMemberTransfers(roomID, userID string) {
+	if s == nil {
+		return
+	}
+	s.uploads.cancelMatching(roomID, userID)
+	s.downloads.cancelMatching(roomID, userID)
+}
+
+func (s *FileSvc) CancelRoomTransfers(roomID string) {
+	if s == nil {
+		return
+	}
+	s.uploads.cancelMatching(roomID, "")
+	s.downloads.cancelMatching(roomID, "")
 }
 
 func ProjectFile(file model.RoomFile, uploader model.RoomMember, recipients []model.FileRecipient, recipientMembers map[string]model.RoomMember, viewer model.RoomMember) FileProjection {

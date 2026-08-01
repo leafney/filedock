@@ -65,6 +65,15 @@ type RoomSnapshot struct {
 	DestroyAt           *int64
 	Members             []RoomMemberView
 	PendingRequestCount int
+	Capacity            RoomCapacityView
+}
+
+type RoomCapacityView struct {
+	CapacityBytes int64
+	UsedBytes     int64
+	SharedBytes   *int64
+	DirectBytes   *int64
+	ReservedBytes *int64
 }
 
 type RoomJoinInfo struct {
@@ -90,6 +99,7 @@ type RoomSvc struct {
 	now      func() time.Time
 	hub      *StreamHub
 	presence *PresenceSvc
+	files    *FileSvc
 }
 
 func NewRoomSvc(db *gorm.DB, hub *StreamHub, presences ...*PresenceSvc) (*RoomSvc, error) {
@@ -101,6 +111,12 @@ func NewRoomSvc(db *gorm.DB, hub *StreamHub, presences ...*PresenceSvc) (*RoomSv
 		presence = presences[0]
 	}
 	return &RoomSvc{db: db, now: time.Now, hub: hub, presence: presence}, nil
+}
+
+func (s *RoomSvc) AttachFileService(files *FileSvc) {
+	if s != nil {
+		s.files = files
+	}
 }
 
 func (s *RoomSvc) Create(userID, joinMode, pin, pinConfirmation string) (RoomSnapshot, error) {
@@ -395,7 +411,21 @@ func (s *RoomSvc) Snapshot(userID, code string) (RoomSnapshot, error) {
 			return RoomSnapshot{}, err
 		}
 	}
-	return RoomSnapshot{RoomID: room.ID, RoomCode: room.Code, Title: room.Title, Status: room.Status, JoinMode: room.JoinMode, Role: current.Role, ExpiresAt: room.ExpiresAt, CanExtend: current.Role == model.MemberRoleOwner && room.Status == model.RoomStatusActive && room.ExtendedAt == nil, DestroyAt: room.DestroyAt, Members: views, PendingRequestCount: int(pending)}, nil
+	capacity := RoomCapacityView{CapacityBytes: room.CapacityBytes, UsedBytes: room.UsedBytes}
+	if current.Role == model.MemberRoleOwner {
+		var sharedBytes, directBytes int64
+		if err := s.db.Model(&model.RoomFile{}).Select("COALESCE(SUM(actual_size), 0)").Where("room_id = ? AND scope = ? AND status = ?", room.ID, model.FileScopeShared, model.FileStatusAvailable).Scan(&sharedBytes).Error; err != nil {
+			return RoomSnapshot{}, err
+		}
+		if err := s.db.Model(&model.RoomFile{}).Select("COALESCE(SUM(actual_size), 0)").Where("room_id = ? AND scope = ? AND status = ?", room.ID, model.FileScopeDirect, model.FileStatusAvailable).Scan(&directBytes).Error; err != nil {
+			return RoomSnapshot{}, err
+		}
+		reserved := room.ReservedBytes
+		capacity.SharedBytes = &sharedBytes
+		capacity.DirectBytes = &directBytes
+		capacity.ReservedBytes = &reserved
+	}
+	return RoomSnapshot{RoomID: room.ID, RoomCode: room.Code, Title: room.Title, Status: room.Status, JoinMode: room.JoinMode, Role: current.Role, ExpiresAt: room.ExpiresAt, CanExtend: current.Role == model.MemberRoleOwner && room.Status == model.RoomStatusActive && room.ExtendedAt == nil, DestroyAt: room.DestroyAt, Members: views, PendingRequestCount: int(pending), Capacity: capacity}, nil
 }
 
 func (s *RoomSvc) Members(userID, code string) ([]RoomMemberView, error) {
@@ -444,6 +474,9 @@ func (s *RoomSvc) Leave(userID, code string) error {
 	if err := s.db.Model(&model.RoomMember{}).Where("id = ?", member.ID).Updates(map[string]interface{}{"status": model.MemberStatusLeft, "left_at": now, "last_seen_at": now}).Error; err != nil {
 		return err
 	}
+	if s.files != nil {
+		s.files.CancelMemberTransfers(room.ID, userID)
+	}
 	s.publishRoom(room.ID, "room.member_left", map[string]interface{}{"roomCode": room.Code, "userId": userID, "reason": "left"})
 	return nil
 }
@@ -460,6 +493,9 @@ func (s *RoomSvc) Dissolve(userID, code string) error {
 	}
 	if result.RowsAffected == 0 {
 		return errx.New(errc.ErrOwnerRequired, nil)
+	}
+	if s.files != nil {
+		s.files.CancelRoomTransfers(room.ID)
 	}
 	s.publishRoom(room.ID, "room.destroying", map[string]interface{}{"roomCode": room.Code, "reason": "owner_dissolved", "destroyAt": now.Add(RoomDestroyDelay).Unix()})
 	return nil
@@ -483,6 +519,9 @@ func (s *RoomSvc) Kick(ownerID, code, targetUserID string) error {
 	}
 	if result.RowsAffected == 0 {
 		return errx.New(errc.ErrMemberRequired, nil)
+	}
+	if s.files != nil {
+		s.files.CancelMemberTransfers(room.ID, targetUserID)
 	}
 	s.hub.PublishUser(targetUserID, "room.member_kicked", map[string]interface{}{"roomCode": room.Code, "reason": "kicked"})
 	s.publishRoom(room.ID, "room.member_left", map[string]interface{}{"roomCode": room.Code, "userId": targetUserID, "reason": "kicked"})

@@ -165,11 +165,15 @@ func provideSessionAPI(sessionBiz *biz.SessionBiz, cfg *config.Config) (*api.Ses
 	return api.NewSessionAPI(sessionBiz, cfg)
 }
 
-func provideRoomSvc(db *gormx.GormDBSvc, hub *service.StreamHub, presence *service.PresenceSvc) (*service.RoomSvc, error) {
+func provideRoomSvc(db *gormx.GormDBSvc, hub *service.StreamHub, presence *service.PresenceSvc, files *service.FileSvc) (*service.RoomSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("room database is required")
 	}
-	return service.NewRoomSvc(db.DB, hub, presence)
+	room, err := service.NewRoomSvc(db.DB, hub, presence)
+	if err == nil {
+		room.AttachFileService(files)
+	}
+	return room, err
 }
 
 func provideRoomBiz(room *service.RoomSvc) (*biz.RoomBiz, error) {
@@ -217,11 +221,15 @@ func provideFileStorage(cfg *config.Config) (*service.FileStorage, error) {
 	return service.NewFileStorage(cfg.App.DataDir)
 }
 
-func provideLifecycleSvc(db *gormx.GormDBSvc, hub *service.StreamHub, storage *service.FileStorage) (*service.LifecycleSvc, error) {
+func provideLifecycleSvc(db *gormx.GormDBSvc, hub *service.StreamHub, storage *service.FileStorage, files *service.FileSvc) (*service.LifecycleSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("lifecycle database is required")
 	}
-	return service.NewLifecycleSvc(db.DB, hub, storage)
+	lifecycle, err := service.NewLifecycleSvc(db.DB, hub, storage)
+	if err == nil {
+		lifecycle.AttachFileService(files)
+	}
+	return lifecycle, err
 }
 
 func provideRateLimiter() *service.RateLimiter {

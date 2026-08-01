@@ -45,6 +45,15 @@ type RoomSnapshotDTO struct {
 	DestroyAt           *int64          `json:"destroyAt,omitempty"`
 	Members             []RoomMemberDTO `json:"members"`
 	PendingRequestCount int             `json:"pendingRequestCount,omitempty"`
+	Capacity            RoomCapacityDTO `json:"capacity"`
+}
+
+type RoomCapacityDTO struct {
+	CapacityBytes int64  `json:"capacityBytes"`
+	UsedBytes     int64  `json:"usedBytes"`
+	SharedBytes   *int64 `json:"sharedBytes,omitempty"`
+	DirectBytes   *int64 `json:"directBytes,omitempty"`
+	ReservedBytes *int64 `json:"reservedBytes,omitempty"`
 }
 
 type RoomJoinInfoDTO struct {

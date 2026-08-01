@@ -101,7 +101,7 @@ func (b *RoomBiz) RejectJoinRequest(ownerID, code, requestID string) error {
 }
 
 func roomSnapshotDTO(snapshot service.RoomSnapshot) dto.RoomSnapshotDTO {
-	return dto.RoomSnapshotDTO{RoomID: snapshot.RoomID, RoomCode: snapshot.RoomCode, Title: snapshot.Title, Status: snapshot.Status, JoinMode: snapshot.JoinMode, Role: snapshot.Role, ExpiresAt: snapshot.ExpiresAt, CanExtend: snapshot.CanExtend, DestroyAt: snapshot.DestroyAt, Members: roomMembersDTO(snapshot.Members), PendingRequestCount: snapshot.PendingRequestCount}
+	return dto.RoomSnapshotDTO{RoomID: snapshot.RoomID, RoomCode: snapshot.RoomCode, Title: snapshot.Title, Status: snapshot.Status, JoinMode: snapshot.JoinMode, Role: snapshot.Role, ExpiresAt: snapshot.ExpiresAt, CanExtend: snapshot.CanExtend, DestroyAt: snapshot.DestroyAt, Members: roomMembersDTO(snapshot.Members), PendingRequestCount: snapshot.PendingRequestCount, Capacity: dto.RoomCapacityDTO{CapacityBytes: snapshot.Capacity.CapacityBytes, UsedBytes: snapshot.Capacity.UsedBytes, SharedBytes: snapshot.Capacity.SharedBytes, DirectBytes: snapshot.Capacity.DirectBytes, ReservedBytes: snapshot.Capacity.ReservedBytes}}
 }
 
 func roomMembersDTO(members []service.RoomMemberView) []dto.RoomMemberDTO {

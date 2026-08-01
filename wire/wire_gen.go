@@ -27,7 +27,11 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	lifecycleSvc, err := provideLifecycleSvc(gormDBSvc, streamHub, fileStorage)
+	fileSvc, err := provideFileSvc(gormDBSvc, streamHub, fileStorage)
+	if err != nil {
+		return nil, err
+	}
+	lifecycleSvc, err := provideLifecycleSvc(gormDBSvc, streamHub, fileStorage, fileSvc)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +68,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	roomSvc, err := provideRoomSvc(gormDBSvc, streamHub, presenceSvc)
+	roomSvc, err := provideRoomSvc(gormDBSvc, streamHub, presenceSvc, fileSvc)
 	if err != nil {
 		return nil, err
 	}
@@ -73,10 +77,6 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		return nil, err
 	}
 	roomAPI, err := provideRoomAPI(roomBiz)
-	if err != nil {
-		return nil, err
-	}
-	fileSvc, err := provideFileSvc(gormDBSvc, streamHub, fileStorage)
 	if err != nil {
 		return nil, err
 	}

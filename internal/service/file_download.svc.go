@@ -33,21 +33,28 @@ type DownloadTaskResult struct {
 }
 
 type DownloadStream struct {
-	svc        *FileSvc
-	task       model.DownloadTask
-	fileRecord model.RoomFile
-	file       *os.File
-	fileName   string
-	mime       string
-	finish     func()
-	once       sync.Once
+	svc         *FileSvc
+	task        model.DownloadTask
+	fileRecord  model.RoomFile
+	file        *os.File
+	fileName    string
+	mime        string
+	finish      func()
+	taskContext context.Context
+	once        sync.Once
 }
 
 type downloadRegistry struct {
 	mu     sync.Mutex
-	active map[string]struct{}
+	active map[string]downloadActive
 	rooms  map[string]int
 	users  map[string]int
+}
+
+type downloadActive struct {
+	roomID string
+	userID string
+	cancel context.CancelFunc
 }
 
 func (s *FileSvc) CreateDownloadTask(userID, roomCode, fileID string) (DownloadTaskResult, error) {
@@ -114,7 +121,7 @@ func (s *FileSvc) BeginDownload(userID, roomCode, taskID string) (*DownloadStrea
 		}
 		return nil, errx.New(errc.ErrFileNotFound, nil)
 	}
-	finish, err := s.downloads.begin(task.ID, room.ID, userID)
+	taskContext, finish, err := s.downloads.begin(task.ID, room.ID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,13 +152,14 @@ func (s *FileSvc) BeginDownload(userID, roomCode, taskID string) (*DownloadStrea
 		_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
 		return nil, err
 	}
+	s.publishFileProjection(file.ID, "file.download_started", map[string]interface{}{"downloaderUserId": userID})
 	mimeType := file.DetectedMIME
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
 	task.Status = model.DownloadTaskStreaming
 	task.StartedAt = &now
-	return &DownloadStream{svc: s, task: task, fileRecord: file, file: stored, fileName: file.OriginalName, mime: mimeType, finish: finish}, nil
+	return &DownloadStream{svc: s, task: task, fileRecord: file, file: stored, fileName: file.OriginalName, mime: mimeType, finish: finish, taskContext: taskContext}, nil
 }
 
 func (stream *DownloadStream) FileName() string { return stream.fileName }
@@ -171,6 +179,10 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 	lastProgress := 0
 	lastPublished := time.Time{}
 	for {
+		if err := stream.taskContext.Err(); err != nil {
+			stream.fail(transferred)
+			return err
+		}
 		if err := ctx.Err(); err != nil {
 			stream.fail(transferred)
 			return err
@@ -219,6 +231,7 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 		stream.fail(transferred)
 		return err
 	}
+	stream.svc.publishFileProjection(stream.fileRecord.ID, "file.download_completed", map[string]interface{}{"downloaderUserId": stream.task.UserID})
 	return nil
 }
 
@@ -269,23 +282,42 @@ func (s *FileSvc) canDownload(userID string, file model.RoomFile) (bool, error) 
 	return recipient.Status == model.RecipientAccepted || recipient.Status == model.RecipientDownloaded, nil
 }
 
-func (r *downloadRegistry) begin(taskID, roomID, userID string) (func(), error) {
+func (r *downloadRegistry) begin(taskID, roomID, userID string) (context.Context, func(), error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.active[taskID]; exists || len(r.active) >= DownloadGlobalLimit || r.rooms[roomID] >= DownloadRoomLimit || r.users[userID] >= DownloadUserLimit {
-		return nil, errx.New(errc.ErrDownloadLimited, nil)
+		return nil, nil, errx.New(errc.ErrDownloadLimited, nil)
 	}
-	r.active[taskID] = struct{}{}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.active[taskID] = downloadActive{roomID: roomID, userID: userID, cancel: cancel}
 	r.rooms[roomID]++
 	r.users[userID]++
 	var once sync.Once
-	return func() {
+	return ctx, func() {
 		once.Do(func() {
 			r.mu.Lock()
 			delete(r.active, taskID)
 			r.rooms[roomID]--
 			r.users[userID]--
 			r.mu.Unlock()
+			cancel()
 		})
 	}, nil
+}
+
+func (r *downloadRegistry) cancelMatching(roomID, userID string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancels := make([]context.CancelFunc, 0)
+	for _, active := range r.active {
+		if active.roomID == roomID && (userID == "" || active.userID == userID) {
+			cancels = append(cancels, active.cancel)
+		}
+	}
+	r.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
 }

@@ -167,7 +167,7 @@ func (s *FileSvc) changeRecipientStatus(userID, roomCode, fileID, from, to, even
 		return err
 	}
 	now := s.now().Unix()
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var file model.RoomFile
 		if err := tx.Where("id = ? AND room_id = ? AND scope = ? AND status = ?", fileID, room.ID, model.FileScopeDirect, model.FileStatusAvailable).First(&file).Error; err != nil {
 			return fileNotFound(err)
@@ -187,6 +187,10 @@ func (s *FileSvc) changeRecipientStatus(userID, roomCode, fileID, from, to, even
 		}
 		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, eventType, now)
 	})
+	if err == nil {
+		s.publishFileProjection(fileID, "file.recipient_changed", map[string]interface{}{"recipientUserId": userID, "status": to})
+	}
+	return err
 }
 
 func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientIDs []string) (ReuseResult, error) {
@@ -254,6 +258,11 @@ func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientI
 		}
 		return nil
 	})
+	if err == nil {
+		for _, fileID := range fileIDs {
+			s.publishFileProjection(fileID, "file.reused", nil)
+		}
+	}
 	return result, err
 }
 
@@ -263,7 +272,7 @@ func (s *FileSvc) PublishShared(userID, roomCode, fileID string) error {
 		return err
 	}
 	now := s.now().Unix()
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var file model.RoomFile
 		if err := tx.Where("id = ? AND room_id = ? AND uploader_user_id = ? AND scope = ? AND status = ?", fileID, room.ID, userID, model.FileScopeDirect, model.FileStatusAvailable).First(&file).Error; err != nil {
 			return fileNotFound(err)
@@ -277,6 +286,10 @@ func (s *FileSvc) PublishShared(userID, roomCode, fileID string) error {
 		}
 		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventPublished, now)
 	})
+	if err == nil {
+		s.publishFileProjection(fileID, "file.published_shared", nil)
+	}
+	return err
 }
 
 func (s *FileSvc) projectFiles(files []model.RoomFile, viewer model.RoomMember) ([]FileProjection, error) {

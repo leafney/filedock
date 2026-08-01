@@ -130,7 +130,7 @@ func TestCancelActiveUploadStopsTaskAndReleasesReservation(t *testing.T) {
 }
 
 func TestUploadRegistryEnforcesGlobalRoomAndUserLimits(t *testing.T) {
-	registry := &uploadRegistry{active: make(map[string]context.CancelFunc), rooms: make(map[string]int), users: make(map[string]int)}
+	registry := &uploadRegistry{active: make(map[string]uploadActive), rooms: make(map[string]int), users: make(map[string]int)}
 	_, finishOne, err := registry.begin(context.Background(), "file-1", "room", "user")
 	if err != nil {
 		t.Fatal(err)

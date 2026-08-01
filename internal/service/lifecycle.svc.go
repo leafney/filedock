@@ -24,6 +24,7 @@ type LifecycleSvc struct {
 	db      *gorm.DB
 	hub     *StreamHub
 	storage *FileStorage
+	files   *FileSvc
 	now     func() time.Time
 
 	mu      sync.Mutex
@@ -47,6 +48,12 @@ func NewLifecycleSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*Li
 	service := &LifecycleSvc{db: db, hub: hub, storage: storage, now: time.Now}
 	service.cleanup = service.runCleanup
 	return service, nil
+}
+
+func (s *LifecycleSvc) AttachFileService(files *FileSvc) {
+	if s != nil {
+		s.files = files
+	}
 }
 
 func (s *LifecycleSvc) Start(ctx context.Context) error {
@@ -220,6 +227,9 @@ func (s *LifecycleSvc) startExpiredRooms(now time.Time) error {
 			return result.Error
 		}
 		if result.RowsAffected > 0 {
+			if s.files != nil {
+				s.files.CancelRoomTransfers(room.ID)
+			}
 			s.publishRoom(room.ID, "room.destroying", map[string]interface{}{"roomCode": room.Code, "reason": "expired", "destroyAt": now.Add(RoomDestroyDelay).Unix()})
 		}
 	}
@@ -325,6 +335,9 @@ func (s *LifecycleSvc) processCleanupJobs(now time.Time) error {
 }
 
 func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
+	if s.files != nil {
+		s.files.CancelRoomTransfers(roomID)
+	}
 	if s.storage != nil {
 		if err := s.storage.DeleteRoom(roomID); err != nil {
 			return fmt.Errorf("delete room file storage: %w", err)
