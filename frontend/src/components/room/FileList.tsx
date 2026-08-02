@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Download, Ellipsis, File, FileLock2, FileUp, FolderOpen, Send, Share2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Ellipsis, File, FileLock2, FolderOpen, Send, Share2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -19,7 +19,6 @@ interface Props {
   batchMode: boolean;
   selected: Set<string>;
   onSelectedChange: (selected: Set<string>) => void;
-  onAddFiles: () => void;
   onDropFiles: (files: File[]) => void;
   onDownload: (file: RoomFile) => void;
   onAccept: (file: RoomFile) => void;
@@ -35,6 +34,7 @@ export function FileList(props: Props) {
   const [sharedOpen, setSharedOpen] = useState(true);
   const [directOpen, setDirectOpen] = useState(true);
   const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
   const shared = useFileGroup(props, "shared");
   const direct = useFileGroup(props, "direct");
   const files = [...shared.items, ...direct.items];
@@ -43,20 +43,38 @@ export function FileList(props: Props) {
   const showShared = props.range === "all" || props.range === "shared";
   const showDirect = props.range === "all" || props.range === "direct";
 
+  const hasFiles = (event: React.DragEvent) => event.dataTransfer.types.includes("Files");
+  const enter = (event: React.DragEvent) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+  const leave = (event: React.DragEvent) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  };
+  const over = (event: React.DragEvent) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
   const drop = (event: React.DragEvent) => {
     event.preventDefault();
+    dragDepth.current = 0;
     setDragging(false);
-    props.onDropFiles(Array.from(event.dataTransfer.files));
+    if (hasFiles(event)) props.onDropFiles(Array.from(event.dataTransfer.files));
   };
-  return <div className="file-list-view">
-    <button className={`file-dropzone ${dragging ? "is-dragging" : ""}`} type="button" onClick={props.onAddFiles} onDragEnter={(event) => { event.preventDefault(); setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragging(false)} onDrop={drop}>
-      <FileUp aria-hidden="true" /><span><strong>{t("room.files.dropTitle")}</strong><small>{t("room.files.dropAction")}</small></span>
-    </button>
+  return <div className="file-list-view" onDragEnter={enter} onDragOver={over} onDragLeave={leave} onDrop={drop}>
+    <p className="file-drop-hint">{t("room.files.dropTitle")}</p>
     {props.batchMode && <div className="file-batch-bar"><strong>{t("room.files.selectedCount", { count: props.selected.size })}</strong><button type="button" disabled={!batch.canDownload} onClick={() => props.onBatchDownload(selectedFiles)}><Download aria-hidden="true" />{t("room.files.batchDownload")}</button><button type="button" disabled={!batch.canReuse} onClick={() => props.onReuse(selectedFiles)}><Send aria-hidden="true" />{t("room.files.batchSend")}</button></div>}
     <div className="file-groups">
       {showShared && <FileGroupView title={t("room.files.sharedFiles")} icon={<FolderOpen aria-hidden="true" />} open={sharedOpen} onToggle={() => setSharedOpen((value) => !value)} query={shared} batchMode={props.batchMode} selected={props.selected} onSelectedChange={props.onSelectedChange} {...fileActions(props)} />}
       {showDirect && <FileGroupView title={t("room.files.privateFiles")} icon={<FileLock2 aria-hidden="true" />} open={directOpen} onToggle={() => setDirectOpen((value) => !value)} query={direct} batchMode={props.batchMode} selected={props.selected} onSelectedChange={props.onSelectedChange} {...fileActions(props)} />}
     </div>
+    {dragging && <div className="file-drop-overlay" aria-hidden="true"><strong>{t("room.files.dropOverlay")}</strong></div>}
   </div>;
 }
 

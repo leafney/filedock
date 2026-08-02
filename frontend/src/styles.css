@@ -516,13 +516,10 @@ body {
 .file-batch-toggle.active { border-color: #5eead4; background: #f0fdfa; color: var(--room-primary); }
 .file-action-error { background: #f8fafc; padding: 0.6rem 0.85rem 0; }
 
-.file-list-view { min-height: 0; overflow: auto; padding: 0.75rem 0.85rem 1.25rem; }
-.file-dropzone { display: flex; width: 100%; min-height: 4.3rem; align-items: center; justify-content: center; gap: 0.75rem; border: 2px dashed #94a3b8; border-radius: 0.75rem; background: #fff; color: var(--room-primary); cursor: pointer; margin-bottom: 0.75rem; padding: 0.75rem; text-align: left; transition: border-color 160ms ease, background-color 160ms ease; }
-.file-dropzone:hover, .file-dropzone:focus-visible, .file-dropzone.is-dragging { border-color: #14b8a6; background: #f0fdfa; }
-.file-dropzone > svg { width: 1.6rem; height: 1.6rem; }
-.file-dropzone strong, .file-dropzone small { display: block; }
-.file-dropzone strong { color: #334155; font-size: 0.78rem; }
-.file-dropzone small { color: #94a3b8; font-size: 0.65rem; margin-top: 0.15rem; }
+.file-list-view { position: relative; min-height: 0; overflow: auto; padding: 0.75rem 0.85rem 1.25rem; }
+.file-drop-hint { border-bottom: 1px dashed #cbd5e1; color: #64748b; font-size: 0.68rem; margin: 0 0 0.75rem; padding: 0 0 0.55rem; text-align: center; }
+.file-drop-overlay { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgb(240 253 250 / 82%); color: var(--room-primary); pointer-events: none; }
+.file-drop-overlay strong { border: 2px solid #14b8a6; border-radius: 0.75rem; background: rgb(255 255 255 / 94%); box-shadow: 0 8px 24px rgb(15 118 110 / 12%); font-size: 0.85rem; padding: 0.9rem 1.2rem; }
 .file-batch-bar { display: flex; align-items: center; gap: 0.45rem; border: 1px solid #99f6e4; border-radius: 0.65rem; background: #f0fdfa; color: #115e59; margin-bottom: 0.75rem; padding: 0.55rem 0.7rem; }
 .file-batch-bar strong { flex: 1; font-size: 0.72rem; }
 .file-batch-bar button { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid #5eead4; border-radius: 0.45rem; background: #fff; color: #0f766e; cursor: pointer; font-size: 0.68rem; padding: 0.4rem 0.55rem; }
@@ -651,8 +648,7 @@ body {
   .file-batch-toggle { font-size: 0; }
   .file-batch-toggle svg { width: 1rem; height: 1rem; }
   .file-list-view { padding: 0.6rem 0.65rem 5rem; }
-  .file-dropzone { min-height: 3.4rem; justify-content: flex-start; padding: 0.55rem 0.75rem; }
-  .file-dropzone small { display: none; }
+  .file-drop-hint { display: none; }
   .file-batch-bar { position: sticky; top: 0; z-index: 4; flex-wrap: wrap; }
   .file-batch-bar strong { flex-basis: 100%; }
   .file-row { grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.5rem; min-height: 5rem; padding: 0.65rem; }
