@@ -3,7 +3,7 @@
 Related discussion: [docs/discuss/2026-08-03-homepage-water-ripple.md](../discuss/2026-08-03-homepage-water-ripple.md)
 
 - 日期：2026-08-03
-- 状态：人工验收修订，待重新批准
+- 状态：修订已完成，待人工复验
 - 变更类型：前端视觉动效与响应式渲染优化
 - 影响范围：首页雷达波纹、中心头像定位、装饰房间节点呼吸、减少动态效果
 
