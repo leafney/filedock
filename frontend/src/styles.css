@@ -192,19 +192,19 @@ body {
 }
 
 .radar-canvas-reduced .radar-waves span { animation: none; will-change: auto; }
-.radar-canvas-reduced .radar-waves span:nth-child(1) { opacity: 0.24; transform: scale(var(--radar-wave-static-1-scale)); }
-.radar-canvas-reduced .radar-waves span:nth-child(2) { opacity: 0.18; transform: scale(var(--radar-wave-static-2-scale)); }
-.radar-canvas-reduced .radar-waves span:nth-child(3) { opacity: 0.12; transform: scale(var(--radar-wave-static-3-scale)); }
+.radar-canvas-reduced .radar-waves span:nth-child(1) { opacity: 0.1; transform: scale(var(--radar-wave-static-1-scale)); }
+.radar-canvas-reduced .radar-waves span:nth-child(2) { opacity: 0.07; transform: scale(var(--radar-wave-static-2-scale)); }
+.radar-canvas-reduced .radar-waves span:nth-child(3) { opacity: 0.04; transform: scale(var(--radar-wave-static-3-scale)); }
 .radar-canvas-reduced .radar-waves span:nth-child(n + 4) { display: none; }
 .radar-canvas-reduced .radar-node { animation: none; transition: none; }
 .radar-canvas-reduced .radar-node-avatar { animation: none; transform: none; box-shadow: var(--radar-node-shadow); }
 
 @keyframes radar-wave {
   0% { opacity: 0; transform: scale(1); }
-  10% { opacity: 0.6; }
-  30% { opacity: 0.25; }
-  50% { opacity: 0.48; }
-  72% { opacity: 0.25; }
+  10% { opacity: 0.45; }
+  32% { opacity: 0.05; }
+  62% { opacity: 0.35; }
+  86% { opacity: 0.03; }
   100% { opacity: 0; transform: scale(var(--radar-wave-end-scale)); }
 }
 
@@ -230,9 +230,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
   .radar-waves span { animation: none !important; will-change: auto; }
-  .radar-waves span:nth-child(1) { opacity: 0.24; transform: scale(var(--radar-wave-static-1-scale)); }
-  .radar-waves span:nth-child(2) { opacity: 0.18; transform: scale(var(--radar-wave-static-2-scale)); }
-  .radar-waves span:nth-child(3) { opacity: 0.12; transform: scale(var(--radar-wave-static-3-scale)); }
+  .radar-waves span:nth-child(1) { opacity: 0.1; transform: scale(var(--radar-wave-static-1-scale)); }
+  .radar-waves span:nth-child(2) { opacity: 0.07; transform: scale(var(--radar-wave-static-2-scale)); }
+  .radar-waves span:nth-child(3) { opacity: 0.04; transform: scale(var(--radar-wave-static-3-scale)); }
   .radar-waves span:nth-child(n + 4) { display: none; }
   .radar-node, .radar-node-avatar { animation: none !important; transition: none !important; }
   .radar-node-avatar { transform: none; box-shadow: var(--radar-node-shadow); }

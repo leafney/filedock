@@ -16,13 +16,13 @@ const REPLACEMENT_POLL_MS = 750;
 const EXIT_ANIMATION_MS = 350;
 const LABEL_WIDTH = 72;
 const WAVE_BASE_DIAMETER = 132;
-const WAVE_END_RATIO = 0.9;
+const WAVE_WIDTH_RATIO = 0.8;
 const STATIC_WAVE_PROGRESS = [0.22, 0.52, 0.82] as const;
 const BREATH_DURATIONS = [2.8, 3.15, 3.5, 3.85, 4.2] as const;
 const BREATH_DELAYS = [-0.4, -1.7, -2.9, -0.9, -3.6] as const;
 
 function getWaveScales(bounds: RadarBounds) {
-  const endScale = Math.max(1, Math.min(bounds.width, bounds.height) * WAVE_END_RATIO / WAVE_BASE_DIAMETER);
+  const endScale = Math.max(1, bounds.width * WAVE_WIDTH_RATIO / WAVE_BASE_DIAMETER);
   const staticScales = STATIC_WAVE_PROGRESS.map((progress) => 1 + (endScale - 1) * progress);
   return { endScale, staticScales };
 }
