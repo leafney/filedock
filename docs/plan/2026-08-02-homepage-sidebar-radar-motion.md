@@ -3,7 +3,7 @@
 Related discussion: [docs/discuss/2026-08-02-homepage-sidebar-radar-motion.md](../discuss/2026-08-02-homepage-sidebar-radar-motion.md)
 
 - 日期：2026-08-02
-- 状态：已批准，实施中
+- 状态：已完成，待人工验收
 - 变更类型：前端布局、视觉动效、响应式与历史原型说明优化
 - 影响范围：首页操作侧栏、雷达画布、雷达波纹、装饰房间节点、减少动态效果、历史房间原型提示
 
