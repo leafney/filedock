@@ -27,6 +27,19 @@ body {
   min-height: 100vh;
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .app-footer {
   display: flex;
   justify-content: center;
@@ -491,7 +504,6 @@ body {
 }
 
 @media (max-width: 420px) {
-  .room-topbar-actions .room-icon-button:nth-of-type(2) { display: none; }
   .room-file-stage-placeholder p { display: none; }
 }
 

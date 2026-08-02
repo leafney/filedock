@@ -75,7 +75,7 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, pen
       {extraActions}
       {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<ShareAltOutlined />} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
       <Badge count={session && !notificationDisabled ? pendingCount : 0} size="small" overflowCount={99}>
-        <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={t("room.notifications")} disabled={!session || notificationDisabled} onClick={onOpenNotifications} />
+        <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={notificationDisabled ? t("room.workspace.notificationsDisabled") : t("room.notifications")} title={notificationDisabled ? t("room.workspace.notificationsDisabled") : undefined} disabled={!session || notificationDisabled} onClick={onOpenNotifications} />
       </Badge>
       <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} trigger={["click"]} placement="bottomRight">
         <button type="button" className={userClassName} aria-label={session ? t("home.profile") : t("language.label")}>

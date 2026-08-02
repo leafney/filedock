@@ -129,6 +129,7 @@ const zhCN = {
       capacity: "房间容量",
       roomActions: "房间操作",
       shareRoom: "分享房间",
+      notificationsDisabled: "当前页面没有可处理的通知",
       openMembers: "查看房间成员",
       more: "更多操作",
       fileWorkspace: "文件工作区",

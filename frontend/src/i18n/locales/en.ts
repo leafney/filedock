@@ -135,6 +135,7 @@ const en = {
       capacity: "Room capacity",
       roomActions: "Room actions",
       shareRoom: "Share room",
+      notificationsDisabled: "There are no notifications to handle here",
       openMembers: "View room members",
       more: "More actions",
       fileWorkspace: "File workspace",
