@@ -15,8 +15,35 @@ import {
 const REPLACEMENT_POLL_MS = 750;
 const EXIT_ANIMATION_MS = 350;
 const LABEL_WIDTH = 72;
+const WAVE_BASE_DIAMETER = 132;
+const WAVE_END_RATIO = 0.9;
+const STATIC_WAVE_PROGRESS = [0.22, 0.52, 0.82] as const;
 const BREATH_DURATIONS = [2.8, 3.15, 3.5, 3.85, 4.2] as const;
 const BREATH_DELAYS = [-0.4, -1.7, -2.9, -0.9, -3.6] as const;
+
+function getWaveScales(bounds: RadarBounds) {
+  const endScale = Math.max(1, Math.min(bounds.width, bounds.height) * WAVE_END_RATIO / WAVE_BASE_DIAMETER);
+  const staticScales = STATIC_WAVE_PROGRESS.map((progress) => 1 + (endScale - 1) * progress);
+  return { endScale, staticScales };
+}
+
+function applyWaveScales(canvas: HTMLDivElement, bounds: RadarBounds) {
+  const { endScale, staticScales } = getWaveScales(bounds);
+  canvas.style.setProperty("--radar-wave-end-scale", endScale.toFixed(4));
+  staticScales.forEach((scale, index) => {
+    canvas.style.setProperty(`--radar-wave-static-${index + 1}-scale`, scale.toFixed(4));
+  });
+}
+
+const DEFAULT_WAVE_STYLE = (() => {
+  const { endScale, staticScales } = getWaveScales(DEFAULT_RADAR_BOUNDS);
+  return {
+    "--radar-wave-end-scale": endScale,
+    "--radar-wave-static-1-scale": staticScales[0],
+    "--radar-wave-static-2-scale": staticScales[1],
+    "--radar-wave-static-3-scale": staticScales[2],
+  } as CSSProperties;
+})();
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -55,9 +82,10 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
       const width = Math.round(entry.contentRect.width);
       const height = Math.round(entry.contentRect.height);
       if (width <= 0 || height <= 0) return;
+      const bounds = { width, height };
+      applyWaveScales(canvas, bounds);
       const current = boundsRef.current;
       if (Math.abs(current.width - width) < 2 && Math.abs(current.height - height) < 2) return;
-      const bounds = { width, height };
       boundsRef.current = bounds;
       commitNodes((value) => relayoutRadarNodes(value, bounds));
     });
@@ -119,8 +147,19 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
   };
 
   return (
-    <div ref={canvasRef} className={`radar-canvas${reducedMotion ? " radar-canvas-reduced" : ""}`} aria-label="">
-      <div className="radar-waves" aria-hidden="true"><span /><span /><span /><span /></div>
+    <div
+      ref={canvasRef}
+      className={`radar-canvas${reducedMotion ? " radar-canvas-reduced" : ""}`}
+      style={DEFAULT_WAVE_STYLE}
+      aria-label=""
+    >
+      <div className="radar-waves" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
       {nodes.map((node) => {
         const nodeWidth = Math.max(node.diameter, LABEL_WIDTH);
         const fontSize = Math.round(10 + ((node.diameter - 40) / 48) * 5);
@@ -135,7 +174,9 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
               width: nodeWidth,
             }}
             aria-hidden="true"
-            onAnimationEnd={() => markVisible(node.id)}
+            onAnimationEnd={(event) => {
+              if (event.currentTarget === event.target) markVisible(node.id);
+            }}
           >
             <span
               className="radar-node-avatar"
@@ -147,7 +188,6 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
                 width: node.diameter,
                 "--radar-breathe-duration": `${BREATH_DURATIONS[motionIndex]}s`,
                 "--radar-breathe-delay": `${BREATH_DELAYS[motionIndex]}s`,
-                "--radar-node-glow": `hsl(${node.hue} 70% 45% / 24%)`,
               } as CSSProperties}
             >
               {node.roomCode.slice(-2)}
