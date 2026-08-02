@@ -339,6 +339,7 @@ body {
 }
 
 .room-topbar-leading { min-width: 0; gap: 0.65rem; }
+.global-header-brand { color: inherit; text-decoration: none; }
 .room-topbar-actions { justify-content: flex-end; gap: 0.2rem; }
 .room-topbar-summary { justify-content: center; gap: 1.7rem; }
 .room-brand-mark { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border-radius: 0.65rem; background: var(--room-primary); color: #fff; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; }
@@ -385,10 +386,20 @@ body {
 .room-panel-heading span, .room-file-toolbar span { color: var(--room-primary); font-size: 0.62rem; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
 .room-panel-heading h2, .room-file-toolbar h1 { font-size: 1rem; margin: 0.22rem 0 0; }
 .room-panel-heading b { display: grid; min-width: 1.7rem; height: 1.7rem; place-items: center; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 0.68rem; }
+.room-panel-room-info { display: grid; min-width: 0; gap: 0.35rem; }
+.room-panel-room-info > strong { overflow: hidden; color: var(--room-text); font-size: 0.88rem; text-overflow: ellipsis; white-space: nowrap; }
+.room-panel-room-info > button { display: inline-flex; width: fit-content; align-items: center; gap: 0.3rem; border: 0; border-radius: 0.35rem; background: transparent; color: var(--room-muted); cursor: pointer; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.68rem; padding: 0; }
+.room-panel-room-info > button:hover, .room-panel-room-info > button:focus-visible { color: var(--room-primary); outline: none; }
+.room-panel-room-info > button svg { width: 0.78rem; height: 0.78rem; }
+.room-panel-room-info > small { color: var(--room-primary); font-size: 0.62rem; }
 .room-member-list { max-height: calc(100vh - 178px); overflow: auto; padding: 0.45rem; }
 .room-member-item { position: relative; gap: 0.65rem; border-radius: 0.65rem; padding: 0.65rem; }
 .room-member-item:hover { background: #f8fafc; }
+.room-avatar-wrap { position: relative; display: block; width: 2.15rem; height: 2.15rem; flex: 0 0 auto; }
 .room-avatar { display: grid; width: 2.15rem; height: 2.15rem; flex: 0 0 auto; place-items: center; border-radius: 0.65rem; background: var(--room-primary-soft); color: var(--room-primary); font-weight: 750; }
+.room-avatar-wrap > .room-avatar { width: 100%; height: 100%; }
+.room-owner-corner { position: absolute; top: -0.2rem; left: -0.2rem; display: grid; width: 1rem; height: 1rem; place-items: start; border: 1px solid #fff; border-radius: 0.25rem 0 0 0; background: #fbbf24; color: #78350f; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.room-owner-corner svg { width: 0.48rem; height: 0.48rem; margin: 0.08rem 0 0 0.08rem; }
 .room-member-item > div { min-width: 0; flex: 1; }
 .room-member-item strong { gap: 0.35rem; overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
 .room-member-item strong small { border-radius: 999px; background: #ecfdf5; color: #047857; font-size: 0.55rem; padding: 0.12rem 0.35rem; }
@@ -426,6 +437,14 @@ body {
 .room-overlay .room-member-list { max-height: none; }
 .room-qr { display: grid; place-items: center; padding: 1.5rem; }
 .room-qr svg { width: min(18rem, 100%); height: auto; }
+.room-share-panel { display: grid; gap: 0.65rem; padding: 0.2rem 1rem 1rem; }
+.room-share-panel > strong { overflow: hidden; color: var(--room-text); font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
+.room-share-panel > span { color: var(--room-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; }
+.room-share-panel > label { display: grid; gap: 0.3rem; color: var(--room-muted); font-size: 0.68rem; }
+.room-share-panel > label input { min-width: 0; border: 1px solid var(--room-border); border-radius: 0.45rem; color: var(--room-text); font-size: 0.68rem; padding: 0.55rem; }
+.room-share-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.room-share-actions button { min-height: 2.2rem; border: 1px solid var(--room-border); border-radius: 0.45rem; background: #fff; color: var(--room-primary); cursor: pointer; font-size: 0.66rem; padding: 0.35rem; }
+.room-share-actions button:hover, .room-share-actions button:focus-visible { border-color: #5eead4; background: #f0fdfa; outline: none; }
 .room-modal-message { color: var(--room-muted); padding: 1.5rem; text-align: center; }
 .room-request-list { padding: 0.5rem 1rem 1rem; }
 .room-request-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.5rem; border-bottom: 1px solid #f1f5f9; padding: 0.75rem 0; }
@@ -452,7 +471,8 @@ body {
 @media (max-width: 760px) {
   .room-page { min-height: 560px; grid-template-rows: 58px minmax(0, 1fr) 52px; }
   .room-topbar { grid-template-columns: minmax(0, 1fr) auto; padding: 0 0.55rem; }
-  .room-brand-mark, .room-topbar-summary { display: none; }
+  .room-brand-mark { width: 2rem; height: 2rem; }
+  .room-topbar-summary { display: none; }
   .room-page > .language-selector { display: none; }
   .room-topbar-actions { gap: 0; }
   .room-workspace-layout { grid-template-columns: minmax(0, 1fr); }
@@ -663,6 +683,7 @@ body {
   .file-row-actions > button { min-width: 4.5rem; font-size: 0.6rem; padding-inline: 0.35rem; }
   .file-row-main > em { max-width: 10rem; }
   .file-timeline-axis header { align-items: flex-start; flex-direction: column; }
+  .room-share-actions { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

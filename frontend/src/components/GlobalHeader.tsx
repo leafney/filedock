@@ -1,4 +1,4 @@
-import { BellOutlined, DownOutlined, GlobalOutlined, SettingOutlined } from "@ant-design/icons";
+import { BellOutlined, DownOutlined, GlobalOutlined, ShareAltOutlined, SettingOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { Avatar, Badge, Button, Dropdown } from "antd";
 import type { ReactNode } from "react";
@@ -27,10 +27,11 @@ interface Props {
   onOpenNotifications: () => void;
   onOpenProfile: () => void;
   onShare?: () => void;
+  extraActions?: ReactNode;
   roomActions?: RoomHeaderActions;
 }
 
-export function GlobalHeader({ variant, session, fallbackName = "?", center, pendingCount = 0, notificationDisabled = false, onOpenNotifications, onOpenProfile, onShare, roomActions }: Props) {
+export function GlobalHeader({ variant, session, fallbackName = "?", center, pendingCount = 0, notificationDisabled = false, onOpenNotifications, onOpenProfile, onShare, extraActions, roomActions }: Props) {
   const { t, i18n } = useTranslation();
   const roomVariant = variant === "room";
   const displayName = session?.displayName || fallbackName || "?";
@@ -71,7 +72,8 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, pen
     </Link>
     {center}
     <div className={actionClassName}>
-      {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<span aria-hidden="true">↗</span>} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
+      {extraActions}
+      {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<ShareAltOutlined />} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
       <Badge count={session && !notificationDisabled ? pendingCount : 0} size="small" overflowCount={99}>
         <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={t("room.notifications")} disabled={!session || notificationDisabled} onClick={onOpenNotifications} />
       </Badge>

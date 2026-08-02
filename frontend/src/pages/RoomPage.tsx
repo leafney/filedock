@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Shield, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice, LanguageSelector, PinInput } from "../components/common";
+import { ProfileModal } from "../components/ProfileModal";
 import { RoomWorkspace } from "../components/room/RoomWorkspace";
 import { streamEventName, type StreamEventMessage } from "../hooks/use-stream";
 import { useSessionQuery } from "../hooks/use-session";
@@ -17,7 +18,9 @@ import {
   getRoom,
   joinRoom,
   kickMember,
+  listRooms,
   leaveRoom,
+  resetSession,
 } from "../services/api";
 import type { RoomJoinInfo } from "../types/domain";
 
@@ -30,8 +33,11 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const [joined, setJoined] = useState(false);
   const [destroyAt, setDestroyAt] = useState<number>();
   const [kicked, setKicked] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [actionError, setActionError] = useState<unknown>();
   const validCode = /^\d{4}$/.test(code);
+  const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: listRooms, enabled: Boolean(session), retry: false });
+  const ownerRoom = useMemo(() => roomsQuery.data?.items.find((room) => room.role === "owner"), [roomsQuery.data?.items]);
   const joinInfo = useQuery({ queryKey: ["room-join-info", code], queryFn: () => getJoinInfo(code), enabled: Boolean(session && validCode), retry: false });
   useEffect(() => { if (joinInfo.data?.alreadyMember) setJoined(true); }, [joinInfo.data?.alreadyMember]);
   const snapshot = useQuery({ queryKey: ["room", code], queryFn: () => getRoom(code), enabled: Boolean(session && joined), retry: false, refetchInterval: joined && !destroyAt ? 30_000 : false });
@@ -80,7 +86,7 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   if (!joined && joinInfo.data) return <JoinPanel info={joinInfo.data} onJoin={(confirmed, pin) => join.mutate({ confirmed, pin })} onRequest={() => request.mutate()} onCancelRequest={() => cancelRequest.mutate()} loading={join.isPending || request.isPending || cancelRequest.isPending} error={join.isError ? join.error : request.isError ? request.error : cancelRequest.error} />;
   if (snapshot.isPending) return <RoomGate>{t("room.loading")}</RoomGate>;
   if (snapshot.isError || !snapshot.data) return <RoomGate><ErrorNotice error={snapshot.error} /><Link to="/">{t("room.backHome")}</Link></RoomGate>;
-  return <RoomWorkspace
+  return <><RoomWorkspace
     room={snapshot.data}
     code={code}
     session={session}
@@ -91,8 +97,17 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     onLeave={() => { if (window.confirm(t("room.leaveConfirm")) && !leave.isPending) leave.mutate(); }}
     onDissolve={() => { if (window.confirm(t("room.dissolveConfirm")) && !dissolve.isPending) dissolve.mutate(); }}
     onKick={(userId) => { setActionError(undefined); void kickMember(code, userId).then(() => queryClient.invalidateQueries({ queryKey: ["room", code] })).catch(setActionError); }}
+    onOpenProfile={() => setProfileOpen(true)}
     actionError={actionError}
-  />;
+  />{profileOpen && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={() => {
+    if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
+    void resetSession().then(() => {
+      queryClient.removeQueries({ queryKey: ["session"] });
+      queryClient.removeQueries({ queryKey: ["rooms"] });
+      setProfileOpen(false);
+      navigate("/", { replace: true });
+    }).catch(setActionError);
+  }} />}</>;
 }
 
 function RoomGate({ children }: { children: ReactNode }) {

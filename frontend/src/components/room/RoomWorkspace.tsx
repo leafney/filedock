@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronLeft, Clock3, Copy, DoorOpen, Ellipsis, LogOut, MessageSquare, QrCode, RefreshCw, Trash2, Users, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Copy, Crown, DoorOpen, MessageSquare, RefreshCw, Users, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ErrorNotice, LanguageSelector } from "../common";
+import { GlobalHeader } from "../GlobalHeader";
+import { ErrorNotice } from "../common";
 import { FileWorkspace } from "./FileWorkspace";
 import { TransferBar } from "./TransferBar";
 import { approveJoinRequest, getJoinRequests, getRoomQRCode, rejectJoinRequest } from "../../services/api";
@@ -23,6 +23,7 @@ interface Props {
   onLeave: () => void;
   onDissolve: () => void;
   onKick: (userId: string) => void;
+  onOpenProfile: () => void;
   actionError?: unknown;
 }
 
@@ -31,73 +32,38 @@ export function RoomWorkspace(props: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [membersOpen, setMembersOpen] = useState(false);
-  const [qrOpen, setQROpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [requestsOpen, setRequestsOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const actionMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  useEffect(() => {
-    if (menuOpen) actionMenuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [menuOpen]);
   const expires = Math.max(0, props.room.expiresAt - now);
   const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;
   const capacityPercent = props.room.capacity.capacityBytes > 0 ? Math.min(100, props.room.capacity.usedBytes * 100 / props.room.capacity.capacityBytes) : 0;
   const pending = props.room.pendingRequestCount ?? 0;
-  const copyCode = async () => {
-    await navigator.clipboard?.writeText(props.room.roomCode);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-  const runMenuAction = (action: () => void) => {
-    setMenuOpen(false);
-    menuButtonRef.current?.focus();
-    action();
-  };
-
   return <main className="room-page">
-    <header className="room-topbar">
-      <div className="room-topbar-leading">
-        <Link className="room-icon-button" to="/" aria-label={t("room.backHome")}><ChevronLeft aria-hidden="true" /></Link>
-        <span className="room-brand-mark" aria-hidden="true">FD</span>
-        <div className="room-topbar-identity">
-          <button type="button" onClick={() => void copyCode()}><strong>{t("room.code")} {props.room.roomCode}</strong><Copy aria-hidden="true" /></button>
-          <span>{copied ? t("room.workspace.copied") : props.room.title}</span>
-        </div>
-      </div>
-      <div className="room-topbar-summary">
+    <GlobalHeader
+      variant="room"
+      session={props.session}
+      center={<div className="room-topbar-summary">
         <Summary label={t("room.members")} value={t("room.workspace.people", { count: props.room.members.length })} />
         <Summary label={t("room.workspace.remaining")} value={t("room.workspace.duration", { hours: String(duration.hours), minutes: String(duration.minutes), seconds: String(duration.seconds) })} />
         <button className="room-capacity-summary" type="button" onClick={() => setCapacityOpen(true)}>
           <span>{t("room.workspace.capacity")}</span><strong>{formatBytes(props.room.capacity.usedBytes)} / {formatBytes(props.room.capacity.capacityBytes)}</strong>
           <i><i style={{ width: `${capacityPercent}%` }} /></i>
         </button>
-      </div>
-      <nav className="room-topbar-actions" aria-label={t("room.workspace.roomActions")}>
-        <LanguageSelector />
-        <button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button>
-        <button className="room-icon-button" type="button" aria-label={t("room.qrcode")} onClick={() => setQROpen(true)}><QrCode aria-hidden="true" /></button>
-        {props.room.role === "owner" && <button className="room-icon-button" type="button" aria-label={t("room.notifications")} onClick={() => setRequestsOpen(true)}><Bell aria-hidden="true" />{pending > 0 && <b>{pending}</b>}</button>}
-        <div className="room-menu-wrap"><button ref={menuButtonRef} className="room-icon-button" type="button" aria-label={t("room.workspace.more")} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><Ellipsis aria-hidden="true" /></button>{menuOpen && <div ref={actionMenuRef} className="room-action-menu" role="menu" onKeyDown={(event) => {
-          const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
-          const index = items.indexOf(document.activeElement as HTMLButtonElement);
-          if (event.key === "Escape") { event.preventDefault(); setMenuOpen(false); menuButtonRef.current?.focus(); return; }
-          if (index < 0 || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-          items[next]?.focus();
-        }}>
-          {props.room.role === "owner" && props.room.canExtend && <button role="menuitem" type="button" onClick={() => runMenuAction(props.onExtend)}><Clock3 aria-hidden="true" />{t("room.extend")}</button>}
-          {props.room.role === "owner" ? <button role="menuitem" className="danger" type="button" onClick={() => runMenuAction(props.onDissolve)}><Trash2 aria-hidden="true" />{t("room.dissolve")}</button> : <button role="menuitem" type="button" onClick={() => runMenuAction(props.onLeave)}><LogOut aria-hidden="true" />{t("room.leave")}</button>}
-        </div>}</div>
-      </nav>
-    </header>
+      </div>}
+      extraActions={<button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button>}
+      pendingCount={pending}
+      notificationDisabled={props.room.role !== "owner"}
+      onOpenNotifications={() => { if (props.room.role === "owner") setRequestsOpen(true); }}
+      onOpenProfile={props.onOpenProfile}
+      onShare={() => setShareOpen(true)}
+      roomActions={props.room.role === "owner" ? { role: "owner", canExtend: props.room.canExtend, onExtend: props.onExtend, onDissolve: props.onDissolve } : { role: "member", onLeave: props.onLeave }}
+    />
 
     <div className="room-workspace-layout">
       <MemberPanel room={props.room} session={props.session} onKick={props.onKick} />
@@ -107,7 +73,7 @@ export function RoomWorkspace(props: Props) {
     <TransferBar roomCode={props.code} />
 
     {membersOpen && <Overlay title={t("room.members")} onClose={() => setMembersOpen(false)}><MemberPanel room={props.room} session={props.session} onKick={props.onKick} drawer /></Overlay>}
-    {qrOpen && <QRCodePanel code={props.code} onClose={() => setQROpen(false)} />}
+    {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
     {requestsOpen && props.room.role === "owner" && <RequestPanel code={props.code} onClose={() => setRequestsOpen(false)} onChanged={() => void queryClient.invalidateQueries({ queryKey: ["room", props.code] })} />}
     {capacityOpen && <Overlay title={t("room.workspace.capacityDetails")} onClose={() => setCapacityOpen(false)}><CapacityPanel room={props.room} /></Overlay>}
     {props.actionError != null && <div className="room-floating-error"><ErrorNotice error={props.actionError} /></div>}
@@ -120,12 +86,29 @@ function Summary({ label, value }: { label: string; value: string }) { return <d
 
 function MemberPanel({ room, session, onKick, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; drawer?: boolean }) {
   const { t } = useTranslation();
-  return <aside className={drawer ? "room-member-panel is-drawer" : "room-member-panel"}><div className="room-panel-heading"><div><span>{t("room.workspace.membersEyebrow")}</span><h2>{t("room.members")}</h2></div><b>{room.members.length}</b></div><div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} />)}</div></aside>;
+  const [copied, setCopied] = useState(false);
+  const copyCode = async () => {
+    if (!navigator.clipboard?.writeText) return;
+    await navigator.clipboard.writeText(room.roomCode);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+  return <aside className={drawer ? "room-member-panel is-drawer" : "room-member-panel"}>
+    <div className="room-panel-heading">
+      <div className="room-panel-room-info">
+        <strong title={room.title}>{room.title}</strong>
+        <button type="button" onClick={() => void copyCode()}><span>{t("room.code")} {room.roomCode}</span><Copy aria-hidden="true" /></button>
+        {copied && <small>{t("room.workspace.copied")}</small>}
+      </div>
+    </div>
+    <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} />)}</div>
+  </aside>;
 }
 
 function MemberItem({ member, self, canKick, onKick }: { member: RoomMember; self: boolean; canKick: boolean; onKick: (id: string) => void }) {
   const { t } = useTranslation();
-  return <article className="room-member-item"><span className="room-avatar">{member.displayName.slice(0, 1)}</span><div><strong>{member.displayName}{self && <small>{t("room.workspace.me")}</small>}</strong><span><i className={`presence ${member.onlineStatus}`} />{member.onlineStatus === "online" ? t("room.online") : member.onlineStatus === "away" ? t("room.away") : t("room.offline")}</span></div>{canKick && <button type="button" aria-label={t("room.kick")} onClick={() => { if (window.confirm(t("room.kickConfirm", { name: member.displayName }))) onKick(member.userId); }}><X aria-hidden="true" /></button>}</article>;
+  const ownerLabel = t("room.workspace.owner");
+  return <article className="room-member-item"><span className="room-avatar-wrap" title={member.role === "owner" ? ownerLabel : undefined} aria-label={member.role === "owner" ? ownerLabel : undefined}><span className="room-avatar">{member.displayName.slice(0, 1)}</span>{member.role === "owner" && <span className="room-owner-corner"><Crown aria-hidden="true" /></span>}</span><div><strong>{member.displayName}{self && <small>{t("room.workspace.me")}</small>}</strong><span><i className={`presence ${member.onlineStatus}`} />{member.onlineStatus === "online" ? t("room.online") : member.onlineStatus === "away" ? t("room.away") : t("room.offline")}</span></div>{canKick && <button type="button" aria-label={t("room.kick")} onClick={() => { if (window.confirm(t("room.kickConfirm", { name: member.displayName }))) onKick(member.userId); }}><X aria-hidden="true" /></button>}</article>;
 }
 
 function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -134,10 +117,32 @@ function Overlay({ title, onClose, children }: { title: string; onClose: () => v
   return <div className="room-overlay" role="dialog" aria-modal="true" aria-label={title}><section ref={panelRef}><header><h2>{title}</h2><button type="button" aria-label={t("room.workspace.close")} onClick={onClose}><X aria-hidden="true" /></button></header>{children}</section></div>;
 }
 
-function QRCodePanel({ code, onClose }: { code: string; onClose: () => void }) {
+function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => void }) {
   const { t } = useTranslation();
-  const qr = useQuery({ queryKey: ["room-qrcode", code], queryFn: () => getRoomQRCode(code), retry: false });
-  return <Overlay title={t("room.qrcode")} onClose={onClose}>{qr.data?.svg ? <div className="room-qr" dangerouslySetInnerHTML={{ __html: qr.data.svg }} /> : <p className="room-modal-message">{qr.isError ? t("room.qrcodeUnavailable") : t("room.loading")}</p>}</Overlay>;
+  const qr = useQuery({ queryKey: ["room-qrcode", room.roomCode], queryFn: () => getRoomQRCode(room.roomCode), retry: false });
+  const [copied, setCopied] = useState<string>();
+  const [copyError, setCopyError] = useState(false);
+  const link = `${window.location.origin}/rooms/${room.roomCode}`;
+  const invite = t("room.workspace.inviteTemplate", { title: room.title, code: room.roomCode, link });
+  const copy = async (kind: string, value: string) => {
+    setCopyError(false);
+    if (!navigator.clipboard?.writeText) { setCopyError(true); return; }
+    try { await navigator.clipboard.writeText(value); setCopied(kind); window.setTimeout(() => setCopied(undefined), 1500); } catch { setCopyError(true); }
+  };
+  return <Overlay title={t("room.workspace.shareRoom")} onClose={onClose}>
+    <div className="room-share-panel">
+      <strong title={room.title}>{room.title}</strong>
+      <span>{t("room.code")} {room.roomCode}</span>
+      {qr.data?.svg ? <div className="room-qr" dangerouslySetInnerHTML={{ __html: qr.data.svg }} /> : <p className="room-modal-message">{qr.isError ? t("room.qrcodeUnavailable") : t("room.loading")}</p>}
+      <label><span>{t("room.workspace.joinLink")}</span><input readOnly value={link} /></label>
+      <div className="room-share-actions">
+        <button type="button" onClick={() => void copy("code", room.roomCode)}>{copied === "code" ? t("room.workspace.copied") : t("room.workspace.copyRoomCode")}</button>
+        <button type="button" onClick={() => void copy("link", link)}>{copied === "link" ? t("room.workspace.copied") : t("room.workspace.copyLink")}</button>
+        <button type="button" onClick={() => void copy("invite", invite)}>{copied === "invite" ? t("room.workspace.copied") : t("room.workspace.copyInvite")}</button>
+      </div>
+      {copyError && <p className="room-modal-message">{t("room.workspace.copyFailed")}</p>}
+    </div>
+  </Overlay>;
 }
 
 function RequestPanel({ code, onClose, onChanged }: { code: string; onClose: () => void; onChanged: () => void }) {
