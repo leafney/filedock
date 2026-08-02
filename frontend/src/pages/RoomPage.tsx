@@ -41,6 +41,10 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const joinInfo = useQuery({ queryKey: ["room-join-info", code], queryFn: () => getJoinInfo(code), enabled: Boolean(session && validCode), retry: false });
   useEffect(() => { if (joinInfo.data?.alreadyMember) setJoined(true); }, [joinInfo.data?.alreadyMember]);
   const snapshot = useQuery({ queryKey: ["room", code], queryFn: () => getRoom(code), enabled: Boolean(session && joined), retry: false, refetchInterval: joined && !destroyAt ? 30_000 : false });
+  useEffect(() => {
+    if (!joined || !session?.displayName) return;
+    void queryClient.invalidateQueries({ queryKey: ["room", code] });
+  }, [code, joined, queryClient, session?.displayName]);
   useEffect(() => { if (snapshot.data?.destroyAt) setDestroyAt(snapshot.data.destroyAt); }, [snapshot.data?.destroyAt]);
   useEffect(() => {
     const listener = (raw: Event) => {
