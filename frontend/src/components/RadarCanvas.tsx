@@ -1,5 +1,5 @@
 import { Avatar } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { getAvatarInitial, getStableAvatarColor } from "../utils/avatar";
 import {
@@ -15,6 +15,8 @@ import {
 const REPLACEMENT_POLL_MS = 750;
 const EXIT_ANIMATION_MS = 350;
 const LABEL_WIDTH = 72;
+const BREATH_DURATIONS = [2.8, 3.15, 3.5, 3.85, 4.2] as const;
+const BREATH_DELAYS = [-0.4, -1.7, -2.9, -0.9, -3.6] as const;
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -122,6 +124,7 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
       {nodes.map((node) => {
         const nodeWidth = Math.max(node.diameter, LABEL_WIDTH);
         const fontSize = Math.round(10 + ((node.diameter - 40) / 48) * 5);
+        const motionIndex = node.slot % BREATH_DURATIONS.length;
         return (
           <div
             key={node.id}
@@ -142,7 +145,10 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
                 fontSize,
                 height: node.diameter,
                 width: node.diameter,
-              }}
+                "--radar-breathe-duration": `${BREATH_DURATIONS[motionIndex]}s`,
+                "--radar-breathe-delay": `${BREATH_DELAYS[motionIndex]}s`,
+                "--radar-node-glow": `hsl(${node.hue} 70% 45% / 24%)`,
+              } as CSSProperties}
             >
               {node.roomCode.slice(-2)}
             </span>
