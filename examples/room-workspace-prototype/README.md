@@ -1,5 +1,7 @@
 # FileDock 房间工作区交互原型
 
+> **历史原型：** 此原型已过时，仅保留用于历史评审参考。当前界面、交互与业务行为以生产前端为准。
+
 用于评审新版房间工作区布局与业务可见性，不属于生产前端。对应规格：
 [docs/plan/2026-07-31-room-workspace-prototype.md](../../docs/plan/2026-07-31-room-workspace-prototype.md)。
 文件列表交互优化另见

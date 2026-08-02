@@ -1,5 +1,5 @@
 const zh = {
-  prototypeOnly: "仅原型", prototypeNotice: "独立交互原型 · 不连接生产服务", room: "房间", active: "进行中",
+  prototypeOnly: "历史原型", prototypeNotice: "已由生产页面替代 · 仅供历史参考 · 不连接生产服务", room: "房间", active: "进行中",
   members: "成员", remainingTime: "剩余时间", roomCapacity: "房间容量", fileWorkspace: "文件工作区", roomFiles: "房间文件",
   uploadShared: "上传共享文件", addFile: "添加文件", sendExistingPrivate: "发送已有私密文件", directSend: "私密发送", chooseExisting: "选择已有文件", fileList: "文件列表", fileTimeline: "文件动态", recycleBin: "回收站",
   privateFile: "私密文件#{{alias}}", shared: "共享文件", direct: "私密文件", privateAudit: "匿名审计", ready: "可下载", uploading: "上传中",
@@ -27,7 +27,7 @@ const zh = {
 };
 
 const en = {
-  prototypeOnly: "Prototype", prototypeNotice: "Standalone interactive prototype · No production service", room: "Room", active: "Active",
+  prototypeOnly: "Historical prototype", prototypeNotice: "Replaced by the production UI · Historical reference only · No production service", room: "Room", active: "Active",
   members: "Members", remainingTime: "Time left", roomCapacity: "Room capacity", fileWorkspace: "File workspace", roomFiles: "Room files",
   uploadShared: "Upload shared files", addFile: "Add files", sendExistingPrivate: "Send existing private files", directSend: "Send privately", chooseExisting: "Choose uploaded file", fileList: "Files", fileTimeline: "Activity", recycleBin: "Recycle Bin",
   privateFile: "Private file #{{alias}}", shared: "Shared files", direct: "Private files", privateAudit: "Anonymous audit", ready: "Available", uploading: "Uploading",
