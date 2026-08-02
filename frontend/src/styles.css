@@ -247,7 +247,7 @@ body {
 .home-user-name { max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; font-weight: 600; }
 .home-user-chevron { color: #94a3b8; font-size: 0.65rem; }
 
-.home-layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 340px); gap: clamp(1rem, 3vw, 3rem); align-items: stretch; padding: 0.6rem 0 1rem; }
+.home-layout { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: clamp(1rem, 3vw, 3rem); align-items: stretch; padding: 0.6rem 0 1rem; }
 .home-radar-panel { min-width: 0; display: flex; align-items: center; justify-content: center; }
 .home-radar-panel .radar-canvas { width: 100%; min-height: min(70vh, 650px); }
 .home-sidebar { width: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1rem; }
