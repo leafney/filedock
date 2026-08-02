@@ -3,6 +3,7 @@ const zhCN = {
     name: "FileDock",
     displayName: "码头",
     description: "浏览器即开即用的文件传输基础服务。",
+    homeLink: "返回首页",
   },
   language: {
     label: "选择语言",
@@ -127,6 +128,7 @@ const zhCN = {
       duration: "{{hours}}时 {{minutes}}分 {{seconds}}秒",
       capacity: "房间容量",
       roomActions: "房间操作",
+      shareRoom: "分享房间",
       openMembers: "查看房间成员",
       more: "更多操作",
       fileWorkspace: "文件工作区",

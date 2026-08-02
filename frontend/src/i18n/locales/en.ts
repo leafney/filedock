@@ -9,6 +9,7 @@ const en = {
     name: "FileDock",
     displayName: "FileDock",
     description: "A browser-ready foundation for transferring files.",
+    homeLink: "Back to home",
   },
   language: {
     label: "Select language",
@@ -133,6 +134,7 @@ const en = {
       duration: "{{hours}}h {{minutes}}m {{seconds}}s",
       capacity: "Room capacity",
       roomActions: "Room actions",
+      shareRoom: "Share room",
       openMembers: "View room members",
       more: "More actions",
       fileWorkspace: "File workspace",
