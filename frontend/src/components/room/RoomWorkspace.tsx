@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Crown, DoorOpen, MessageSquare, RefreshCw, Users, X } from "lucide-react";
+import { Copy, Crown, DoorOpen, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { GlobalHeader } from "../GlobalHeader";
 import { ErrorNotice } from "../common";
 import { FileWorkspace } from "./FileWorkspace";
+import { ChatWorkspace } from "./ChatWorkspace";
 import { TransferBar } from "./TransferBar";
 import { approveJoinRequest, getJoinRequests, getRoomQRCode, rejectJoinRequest } from "../../services/api";
 import type { RoomMember, RoomSnapshot, Session } from "../../types/domain";
 import { durationParts, formatBytes, formatDate } from "../../utils/format";
 import { useDialogFocus } from "../../hooks/use-dialog-focus";
+import { copyText } from "../../utils/clipboard";
 
 interface Props {
   room: RoomSnapshot;
@@ -35,6 +37,7 @@ export function RoomWorkspace(props: Props) {
   const [shareOpen, setShareOpen] = useState(false);
   const [requestsOpen, setRequestsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
+  const [chatTarget, setChatTarget] = useState<string>();
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => window.clearInterval(timer);
@@ -66,9 +69,9 @@ export function RoomWorkspace(props: Props) {
     />
 
     <div className="room-workspace-layout">
-      <MemberPanel room={props.room} session={props.session} onKick={props.onKick} />
+      <MemberPanel room={props.room} session={props.session} onKick={props.onKick} onChat={(userId) => setChatTarget(userId)} />
       <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} />
-      <aside className="room-chat-placeholder"><MessageSquare aria-hidden="true" /><h2>{t("room.workspace.chatLaterTitle")}</h2><p>{t("room.workspace.chatLaterDescription")}</p></aside>
+      <ChatWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} initialPeerUserId={chatTarget} onInitialPeerConsumed={() => setChatTarget(undefined)} />
     </div>
     <TransferBar roomCode={props.code} />
 
@@ -84,7 +87,7 @@ export function RoomWorkspace(props: Props) {
 
 function Summary({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
-function MemberPanel({ room, session, onKick, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; drawer?: boolean }) {
+function MemberPanel({ room, session, onKick, onChat, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; onChat?: (id: string) => void; drawer?: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -103,14 +106,14 @@ function MemberPanel({ room, session, onKick, drawer = false }: { room: RoomSnap
         {copyError && <small>{t("room.workspace.copyFailed")}</small>}
       </div>
     </div>
-    <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} />)}</div>
+    <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} onChat={onChat} />)}</div>
   </aside>;
 }
 
-function MemberItem({ member, self, canKick, onKick }: { member: RoomMember; self: boolean; canKick: boolean; onKick: (id: string) => void }) {
+function MemberItem({ member, self, canKick, onKick, onChat }: { member: RoomMember; self: boolean; canKick: boolean; onKick: (id: string) => void; onChat?: (id: string) => void }) {
   const { t } = useTranslation();
   const ownerLabel = t("room.workspace.owner");
-  return <article className="room-member-item"><span className="room-avatar-wrap" title={member.role === "owner" ? ownerLabel : undefined} aria-label={member.role === "owner" ? ownerLabel : undefined}><span className="room-avatar">{member.displayName.slice(0, 1)}</span>{member.role === "owner" && <span className="room-owner-corner"><Crown aria-hidden="true" /></span>}</span><div><strong>{member.displayName}{self && <small>{t("room.workspace.me")}</small>}</strong><span><i className={`presence ${member.onlineStatus}`} />{member.onlineStatus === "online" ? t("room.online") : member.onlineStatus === "away" ? t("room.away") : t("room.offline")}</span></div>{canKick && <button type="button" aria-label={t("room.kick")} onClick={() => { if (window.confirm(t("room.kickConfirm", { name: member.displayName }))) onKick(member.userId); }}><X aria-hidden="true" /></button>}</article>;
+  return <article className={`room-member-item ${!self && member.status === "active" ? "is-chatable" : ""}`} onDoubleClick={() => { if (!self && member.status === "active") onChat?.(member.userId); }}><button className="room-member-chat-hit" type="button" disabled={self || member.status !== "active"} aria-label={!self ? t("chat.openConversation", { name: member.displayName }) : undefined} onClick={() => { if (!self && member.status === "active") onChat?.(member.userId); }}><span className="room-avatar-wrap" title={member.role === "owner" ? ownerLabel : undefined} aria-label={member.role === "owner" ? ownerLabel : undefined}><span className="room-avatar">{member.displayName.slice(0, 1)}</span>{member.role === "owner" && <span className="room-owner-corner"><Crown aria-hidden="true" /></span>}</span><div><strong>{member.displayName}{self && <small>{t("room.workspace.me")}</small>}</strong><span><i className={`presence ${member.onlineStatus}`} />{member.onlineStatus === "online" ? t("room.online") : member.onlineStatus === "away" ? t("room.away") : t("room.offline")}</span></div></button>{canKick && <button type="button" aria-label={t("room.kick")} onClick={() => { if (window.confirm(t("room.kickConfirm", { name: member.displayName }))) onKick(member.userId); }}><X aria-hidden="true" /></button>}</article>;
 }
 
 function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -146,41 +149,6 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
       {copyError && <p className="room-modal-message">{t("room.workspace.copyFailed")}</p>}
     </div>
   </Overlay>;
-}
-
-async function copyText(value: string): Promise<boolean> {
-  if (window.isSecureContext && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return true;
-    } catch {
-      // 局域网 HTTP 等非安全上下文中，回退到传统同步复制方式。
-    }
-  }
-
-  const textarea = document.createElement("textarea");
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.inset = "0 auto auto 0";
-  textarea.style.width = "1px";
-  textarea.style.height = "1px";
-  textarea.style.opacity = "0";
-  textarea.style.pointerEvents = "none";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  textarea.setSelectionRange(0, value.length);
-
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    textarea.remove();
-    activeElement?.focus({ preventScroll: true });
-  }
 }
 
 function RequestPanel({ code, onClose, onChanged }: { code: string; onClose: () => void; onChanged: () => void }) {

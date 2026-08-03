@@ -49,6 +49,10 @@ function eventMessage(payload: ChatPayload): ChatMessage | null {
   };
 }
 
+function normalizeMessages(items: ChatMessage[]): ChatMessage[] {
+	return items.map((item) => ({ ...item, optimistic: false, deliveryStatus: item.read ? "read" : "sent" }));
+}
+
 export function useChatRoom(code: string, selfId: string) {
   const queryClient = useQueryClient();
   const [peerUserId, setPeerUserId] = useState<string>();
@@ -66,12 +70,13 @@ export function useChatRoom(code: string, selfId: string) {
     setMessageError(undefined);
     try {
       const page = await getChatMessages(code, peer, { ...params, limit: 30 });
+      const loadedItems = normalizeMessages(page.items);
       if (params.beforeSequence !== undefined) {
-        setMessages((current) => mergeChatMessages(page.items, current));
+        setMessages((current) => mergeChatMessages(loadedItems, current));
       } else {
-        setMessages(page.items);
+        setMessages(loadedItems);
       }
-      setMessagePage((current) => params.beforeSequence !== undefined && current ? { ...page, items: mergeChatMessages(page.items, current.items) } : page);
+      setMessagePage((current) => params.beforeSequence !== undefined && current ? { ...page, items: mergeChatMessages(loadedItems, current.items) } : { ...page, items: loadedItems });
       return page;
     } catch (error) {
       setMessageError(error);
@@ -82,6 +87,12 @@ export function useChatRoom(code: string, selfId: string) {
   }, [code]);
 
   const openConversation = useCallback((peer: string) => {
+	if (!peer) {
+		setPeerUserId(undefined);
+		setMessages([]);
+		setMessagePage(undefined);
+		return;
+	}
     setPeerUserId(peer);
     setMessages([]);
     setMessagePage(undefined);
