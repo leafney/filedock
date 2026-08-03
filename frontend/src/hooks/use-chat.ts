@@ -50,7 +50,7 @@ function eventMessage(payload: ChatPayload): ChatMessage | null {
 }
 
 function normalizeMessages(items: ChatMessage[]): ChatMessage[] {
-	return items.map((item) => ({ ...item, optimistic: false, deliveryStatus: item.read ? "read" : "sent" }));
+  return items.map((item) => ({ ...item, optimistic: false, deliveryStatus: item.read ? "read" : "sent" }));
 }
 
 export function useChatRoom(code: string, selfId: string) {
@@ -62,14 +62,18 @@ export function useChatRoom(code: string, selfId: string) {
   const [messageError, setMessageError] = useState<unknown>();
   const [pendingMessages, setPendingMessages] = useState<Record<string, ChatMessage>>({});
   const activePeerRef = useRef(peerUserId);
+  const messageLoadGeneration = useRef(0);
   activePeerRef.current = peerUserId;
   const conversationsQuery = useQuery({ queryKey: ["chat-conversations", code], queryFn: () => listChatConversations(code), enabled: Boolean(code), retry: false, staleTime: 2_000 });
 
   const loadMessages = useCallback(async (peer: string, params: { beforeSequence?: number; aroundSequence?: number } = {}) => {
+    const generation = messageLoadGeneration.current;
+    const isCurrentConversation = () => activePeerRef.current === peer && messageLoadGeneration.current === generation;
     setLoadingMessages(true);
     setMessageError(undefined);
     try {
       const page = await getChatMessages(code, peer, { ...params, limit: 30 });
+      if (!isCurrentConversation()) return page;
       const loadedItems = normalizeMessages(page.items);
       if (params.beforeSequence !== undefined) {
         setMessages((current) => mergeChatMessages(loadedItems, current));
@@ -79,24 +83,28 @@ export function useChatRoom(code: string, selfId: string) {
       setMessagePage((current) => params.beforeSequence !== undefined && current ? { ...page, items: mergeChatMessages(loadedItems, current.items) } : { ...page, items: loadedItems });
       return page;
     } catch (error) {
-      setMessageError(error);
+      if (isCurrentConversation()) setMessageError(error);
       throw error;
     } finally {
-      setLoadingMessages(false);
+      if (isCurrentConversation()) setLoadingMessages(false);
     }
   }, [code]);
 
   const openConversation = useCallback((peer: string) => {
-	if (!peer) {
-		setPeerUserId(undefined);
-		setMessages([]);
-		setMessagePage(undefined);
-		return;
-	}
+    messageLoadGeneration.current += 1;
+    activePeerRef.current = peer || undefined;
+    if (!peer) {
+      setPeerUserId(undefined);
+      setMessages([]);
+      setMessagePage(undefined);
+      setLoadingMessages(false);
+      setMessageError(undefined);
+      return;
+    }
     setPeerUserId(peer);
     setMessages([]);
     setMessagePage(undefined);
-    void loadMessages(peer);
+    void loadMessages(peer).catch(() => undefined);
   }, [loadMessages]);
 
   const send = useCallback(async (contentText: string, recipient = peerUserId) => {
@@ -104,16 +112,16 @@ export function useChatRoom(code: string, selfId: string) {
     const clientMessageId = newChatClientMessageID();
     const optimistic: ChatMessage = { roomCode: code, conversationId: "", messageId: `optimistic-${clientMessageId}`, clientMessageId, senderUserId: selfId, recipientUserId: recipient, senderDisplayName: "", contentText, isForwarded: false, sequence: Number.MAX_SAFE_INTEGER, createdAt: Math.floor(Date.now() / 1000), read: false, canCopy: true, canRecall: false, canRecallAndEdit: false, canForward: true, canDelete: true, deliveryStatus: "sending", optimistic: true };
     setPendingMessages((current) => ({ ...current, [clientMessageId]: optimistic }));
-    setMessages((current) => [...current, optimistic]);
+    if (activePeerRef.current === recipient) setMessages((current) => [...current, optimistic]);
     try {
       const result = await sendChatMessage(code, recipient, clientMessageId, contentText);
       setPendingMessages((current) => { const next = { ...current }; delete next[clientMessageId]; return next; });
-      setMessages((current) => mergeChatMessage(current, { ...result, deliveryStatus: result.read ? "read" : "sent" }));
+      if (activePeerRef.current === recipient) setMessages((current) => mergeChatMessage(current, { ...result, deliveryStatus: result.read ? "read" : "sent" }));
       void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
       return result;
     } catch (error) {
       setPendingMessages((current) => ({ ...current, [clientMessageId]: { ...optimistic, deliveryStatus: "failed" } }));
-      setMessages((current) => current.map((message) => message.clientMessageId === clientMessageId ? { ...message, deliveryStatus: "failed" } : message));
+      if (activePeerRef.current === recipient) setMessages((current) => current.map((message) => message.clientMessageId === clientMessageId ? { ...message, deliveryStatus: "failed" } : message));
       throw error;
     }
   }, [code, peerUserId, queryClient, selfId]);
@@ -137,8 +145,9 @@ export function useChatRoom(code: string, selfId: string) {
   }, [code]);
 
   const forward = useCallback(async (messageId: string, recipientUserIds: string[]) => {
+    const sourcePeer = peerUserId;
     const result = await forwardChatMessage(code, messageId, newChatClientMessageID(), recipientUserIds);
-    if (peerUserId) setMessages((current) => mergeChatMessages(current, result.items.filter((item) => item.recipientUserId === peerUserId)));
+    if (sourcePeer && activePeerRef.current === sourcePeer) setMessages((current) => mergeChatMessages(current, result.items.filter((item) => item.recipientUserId === sourcePeer)));
     void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
     return result.items;
   }, [code, peerUserId, queryClient]);
@@ -178,6 +187,6 @@ export function useChatRoom(code: string, selfId: string) {
   }, [code, queryClient, selfId]);
 
   const conversationItems = conversationsQuery.data?.items ?? [];
-  const visibleMessages = useMemo(() => mergeChatMessages(messages, Object.values(pendingMessages)), [messages, pendingMessages]);
+  const visibleMessages = useMemo(() => mergeChatMessages(messages, Object.values(pendingMessages).filter((message) => message.recipientUserId === peerUserId || message.senderUserId === peerUserId)), [messages, peerUserId, pendingMessages]);
   return { conversations: conversationItems, conversationsQuery, peerUserId, openConversation, messages: visibleMessages, messagePage, loadingMessages, messageError, loadMessages, loadOlder: () => peerUserId && messagePage?.hasMoreBefore && messagePage.previousCursor ? loadMessages(peerUserId, { beforeSequence: messagePage.previousCursor }) : Promise.resolve(undefined), send, markRead, recall, remove, forward, search, refresh: () => void conversationsQuery.refetch() };
 }
