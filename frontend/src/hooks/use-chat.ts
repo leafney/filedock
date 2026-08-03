@@ -162,8 +162,10 @@ export function useChatRoom(code: string, selfId: string) {
         void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
       } else if (event.type === "chat.message_recalled" && payload.messageId) {
         setMessages((current) => current.map((message) => message.messageId === payload.messageId ? { ...message, contentText: "", recalledAt: payload.recalledAt, canCopy: false, canForward: false } : message));
+        void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
       } else if (event.type === "chat.message_deleted_local" && payload.messageId) {
         setMessages((current) => current.filter((message) => message.messageId !== payload.messageId));
+        void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
       } else if (event.type === "chat.read_updated" && payload.userId && typeof payload.lastReadSequence === "number") {
         const readUserID = payload.userId;
         const readSequence = payload.lastReadSequence;
@@ -177,5 +179,5 @@ export function useChatRoom(code: string, selfId: string) {
 
   const conversationItems = conversationsQuery.data?.items ?? [];
   const visibleMessages = useMemo(() => mergeChatMessages(messages, Object.values(pendingMessages)), [messages, pendingMessages]);
-  return { conversations: conversationItems, conversationsQuery, peerUserId, openConversation, messages: visibleMessages, messagePage, loadingMessages, messageError, loadOlder: () => peerUserId && messagePage?.hasMoreBefore && messagePage.previousCursor ? loadMessages(peerUserId, { beforeSequence: messagePage.previousCursor }) : Promise.resolve(undefined), send, markRead, recall, remove, forward, search, refresh: () => void conversationsQuery.refetch() };
+  return { conversations: conversationItems, conversationsQuery, peerUserId, openConversation, messages: visibleMessages, messagePage, loadingMessages, messageError, loadMessages, loadOlder: () => peerUserId && messagePage?.hasMoreBefore && messagePage.previousCursor ? loadMessages(peerUserId, { beforeSequence: messagePage.previousCursor }) : Promise.resolve(undefined), send, markRead, recall, remove, forward, search, refresh: () => void conversationsQuery.refetch() };
 }

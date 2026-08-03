@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Crown, DoorOpen, RefreshCw, Users, X } from "lucide-react";
+import { Copy, Crown, DoorOpen, MessageSquare, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -38,6 +38,8 @@ export function RoomWorkspace(props: Props) {
   const [requestsOpen, setRequestsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<string>();
+  const [chatMobileOpen, setChatMobileOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => window.clearInterval(timer);
@@ -59,7 +61,7 @@ export function RoomWorkspace(props: Props) {
           <i><i style={{ width: `${capacityPercent}%` }} /></i>
         </button>
       </div>}
-      extraActions={<button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button>}
+      extraActions={<><button className="room-icon-button room-chat-mobile-trigger" type="button" aria-label={t("chat.openMobile")} onClick={() => setChatMobileOpen(true)}><MessageSquare aria-hidden="true" />{chatUnread > 0 && <b>{chatUnread > 99 ? "99+" : chatUnread}</b>}</button><button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button></>}
       pendingCount={pending}
       notificationDisabled={props.room.role !== "owner"}
       onOpenNotifications={() => { if (props.room.role === "owner") setRequestsOpen(true); }}
@@ -71,7 +73,7 @@ export function RoomWorkspace(props: Props) {
     <div className="room-workspace-layout">
       <MemberPanel room={props.room} session={props.session} onKick={props.onKick} onChat={(userId) => setChatTarget(userId)} />
       <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} />
-      <ChatWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} initialPeerUserId={chatTarget} onInitialPeerConsumed={() => setChatTarget(undefined)} />
+      <ChatWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} initialPeerUserId={chatTarget} onInitialPeerConsumed={() => setChatTarget(undefined)} onUnreadCount={setChatUnread} />
     </div>
     <TransferBar roomCode={props.code} />
 
@@ -79,6 +81,7 @@ export function RoomWorkspace(props: Props) {
     {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
     {requestsOpen && props.room.role === "owner" && <RequestPanel code={props.code} onClose={() => setRequestsOpen(false)} onChanged={() => void queryClient.invalidateQueries({ queryKey: ["room", props.code] })} />}
     {capacityOpen && <Overlay title={t("room.workspace.capacityDetails")} onClose={() => setCapacityOpen(false)}><CapacityPanel room={props.room} /></Overlay>}
+    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} onUnreadCount={setChatUnread} /></section></div>}
     {props.actionError != null && <div className="room-floating-error"><ErrorNotice error={props.actionError} /></div>}
     {(props.destroyAt || props.room.status === "destroying") && <div className="room-blocking-state"><RefreshCw aria-hidden="true" /><h2>{t("room.destroyingTitle")}</h2><p>{t("room.destroyingHint")}</p><strong>{t("room.destroyCountdown", { seconds: String(countdown) })}</strong></div>}
     {props.kicked && <div className="room-blocking-state"><DoorOpen aria-hidden="true" /><h2>{t("room.kickedTitle")}</h2><p>{t("room.kicked")}</p><button type="button" onClick={() => { props.setKicked(false); window.location.replace("/"); }}>{t("room.confirmOnly")}</button></div>}
