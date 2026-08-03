@@ -1,9 +1,10 @@
 import type { RadarBounds } from "./radar";
 
 const RING_COUNT = 8;
-const LINE_WIDTH = 2;
+const LINE_WIDTH = 1;
+const RING_SPACING_DIVISOR = 9;
 const START_RADIUS = 33;
-const PHASE_DURATION_MS = 2_000;
+const PHASE_DURATION_MS = 3_000;
 const FRAME_INTERVAL_MS = 1_000 / 60;
 const DESKTOP_BASE_OPACITY = 0.18;
 const MOBILE_BASE_OPACITY = 0.12;
@@ -48,7 +49,7 @@ export function createRadarWaveRenderer(
     context.clearRect(0, 0, width, height);
     context.lineWidth = LINE_WIDTH;
 
-    const spacing = Math.max(1, Math.round(Math.max(width * 0.6, height) / 10));
+    const spacing = Math.max(1, Math.round(Math.max(width * 0.6, height) / RING_SPACING_DIVISOR));
     const phaseOffset = spacing * phase;
     const maxDimension = Math.max(1, width, height);
     const baseOpacity = mobile ? MOBILE_BASE_OPACITY : DESKTOP_BASE_OPACITY;
