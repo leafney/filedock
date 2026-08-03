@@ -2,7 +2,7 @@ Related discussion: [docs/discuss/2026-08-03-chat-member-layout.md](../discuss/2
 
 # FileDock 聊天成员导航与右栏布局优化 PRD
 
-状态：已批准，实施中
+状态：已完成
 
 日期：2026-08-03
 
