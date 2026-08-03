@@ -64,6 +64,164 @@ func TestRoomCreateAndOpenJoin(t *testing.T) {
 	}
 }
 
+func TestRoomLeavePublishesMemberDetails(t *testing.T) {
+	session, _, _ := newSessionTestService(t)
+	owner, err := session.Create("刘备", "")
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	guest, err := session.Create("关羽", "")
+	if err != nil {
+		t.Fatalf("create guest: %v", err)
+	}
+	hub := NewStreamHub()
+	room, err := NewRoomSvc(session.db, hub)
+	if err != nil {
+		t.Fatalf("new room service: %v", err)
+	}
+	snapshot, err := room.Create(owner.Principal.UserID, model.JoinModeOpen, "", "")
+	if err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	if _, err := room.Join(guest.Principal.UserID, snapshot.RoomCode, true, ""); err != nil {
+		t.Fatalf("join guest: %v", err)
+	}
+	ownerEvents, unsubscribe := hub.Subscribe(owner.Principal.UserID)
+	defer unsubscribe()
+
+	if err := room.Leave(guest.Principal.UserID, snapshot.RoomCode); err != nil {
+		t.Fatalf("leave room: %v", err)
+	}
+
+	select {
+	case event := <-ownerEvents:
+		if event.Type != "room.member_left" {
+			t.Fatalf("event type = %q", event.Type)
+		}
+		payload, ok := event.Payload.(map[string]interface{})
+		if !ok {
+			t.Fatalf("payload type = %T", event.Payload)
+		}
+		if payload["userId"] != guest.Principal.UserID || payload["displayName"] != guest.Principal.DisplayName || payload["reason"] != "left" {
+			t.Fatalf("event payload = %#v", payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owner did not receive member-left event")
+	}
+}
+
+func TestRoomJoinPublishesMemberDetails(t *testing.T) {
+	t.Run("open", func(t *testing.T) {
+		session, _, _ := newSessionTestService(t)
+		owner, err := session.Create("刘备", "")
+		if err != nil {
+			t.Fatalf("create owner: %v", err)
+		}
+		guest, err := session.Create("关羽", "")
+		if err != nil {
+			t.Fatalf("create guest: %v", err)
+		}
+		hub := NewStreamHub()
+		room, err := NewRoomSvc(session.db, hub)
+		if err != nil {
+			t.Fatalf("new room service: %v", err)
+		}
+		snapshot, err := room.Create(owner.Principal.UserID, model.JoinModeOpen, "", "")
+		if err != nil {
+			t.Fatalf("create room: %v", err)
+		}
+		ownerEvents, unsubscribe := hub.Subscribe(owner.Principal.UserID)
+		defer unsubscribe()
+
+		if _, err := room.Join(guest.Principal.UserID, snapshot.RoomCode, true, ""); err != nil {
+			t.Fatalf("join room: %v", err)
+		}
+
+		assertMemberJoinedEvent(t, ownerEvents, snapshot.RoomCode, guest.Principal.UserID, guest.Principal.DisplayName)
+	})
+
+	t.Run("pin", func(t *testing.T) {
+		session, _, _ := newSessionTestService(t)
+		owner, err := session.Create("曹操", "")
+		if err != nil {
+			t.Fatalf("create owner: %v", err)
+		}
+		guest, err := session.Create("孙权", "")
+		if err != nil {
+			t.Fatalf("create guest: %v", err)
+		}
+		hub := NewStreamHub()
+		room, err := NewRoomSvc(session.db, hub)
+		if err != nil {
+			t.Fatalf("new room service: %v", err)
+		}
+		snapshot, err := room.Create(owner.Principal.UserID, model.JoinModePassword, "1234", "1234")
+		if err != nil {
+			t.Fatalf("create room: %v", err)
+		}
+		ownerEvents, unsubscribe := hub.Subscribe(owner.Principal.UserID)
+		defer unsubscribe()
+
+		if _, err := room.Join(guest.Principal.UserID, snapshot.RoomCode, true, "1234"); err != nil {
+			t.Fatalf("join room: %v", err)
+		}
+
+		assertMemberJoinedEvent(t, ownerEvents, snapshot.RoomCode, guest.Principal.UserID, guest.Principal.DisplayName)
+	})
+
+	t.Run("approval", func(t *testing.T) {
+		session, _, _ := newSessionTestService(t)
+		owner, err := session.Create("周瑜", "")
+		if err != nil {
+			t.Fatalf("create owner: %v", err)
+		}
+		guest, err := session.Create("鲁肃", "")
+		if err != nil {
+			t.Fatalf("create guest: %v", err)
+		}
+		hub := NewStreamHub()
+		room, err := NewRoomSvc(session.db, hub)
+		if err != nil {
+			t.Fatalf("new room service: %v", err)
+		}
+		snapshot, err := room.Create(owner.Principal.UserID, model.JoinModeOwnerApproval, "", "")
+		if err != nil {
+			t.Fatalf("create room: %v", err)
+		}
+		request, err := room.CreateJoinRequest(guest.Principal.UserID, snapshot.RoomCode)
+		if err != nil {
+			t.Fatalf("create join request: %v", err)
+		}
+		ownerEvents, unsubscribe := hub.Subscribe(owner.Principal.UserID)
+		defer unsubscribe()
+
+		if err := room.ApproveJoinRequest(owner.Principal.UserID, snapshot.RoomCode, request.RequestID); err != nil {
+			t.Fatalf("approve join request: %v", err)
+		}
+
+		assertMemberJoinedEvent(t, ownerEvents, snapshot.RoomCode, guest.Principal.UserID, guest.Principal.DisplayName)
+	})
+}
+
+func assertMemberJoinedEvent(t *testing.T, events <-chan *StreamEvent, roomCode, userID, displayName string) {
+	t.Helper()
+	select {
+	case event := <-events:
+		if event.Type != "room.member_joined" {
+			t.Fatalf("event type = %q", event.Type)
+		}
+		payload, ok := event.Payload.(map[string]interface{})
+		if !ok {
+			t.Fatalf("payload type = %T", event.Payload)
+		}
+		if payload["roomCode"] != roomCode || payload["userId"] != userID || payload["displayName"] != displayName || payload["role"] != model.MemberRoleMember {
+			t.Fatalf("event payload = %#v", payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("room member did not receive member-joined event")
+	}
+}
+
 func TestRoomPINAndApprovalModes(t *testing.T) {
 	session, _, _ := newSessionTestService(t)
 	owner, err := session.Create("曹操", "")

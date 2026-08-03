@@ -343,6 +343,77 @@ body {
   .home-room-actions { display: none; }
 }
 
+/* Room entry and terminal states share the production light visual language. */
+.room-gate-page {
+  --room-border: #e2e8f0;
+  --room-primary: #0f766e;
+  --room-primary-soft: #ccfbf1;
+  --room-text: #0f172a;
+  --room-muted: #64748b;
+  position: relative;
+  display: grid;
+  min-width: 320px;
+  min-height: 100vh;
+  place-items: center;
+  background: radial-gradient(circle at 50% 15%, #ffffff 0, #f0fdfa 38%, #eef2f5 100%);
+  color: var(--room-text);
+  padding: 5rem 1rem 2rem;
+}
+
+.room-gate-page > label select {
+  border-color: #cbd5e1;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+  color: #334155;
+}
+
+.room-gate-page > section {
+  width: min(30rem, 100%);
+  border: 1px solid var(--room-border);
+  border-radius: 1.25rem;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 20px 55px rgb(15 23 42 / 10%);
+  padding: clamp(1.4rem, 5vw, 2.25rem);
+}
+
+.room-gate-back {
+  display: inline-flex;
+  color: var(--room-muted);
+  font-size: 0.78rem;
+  margin-bottom: 1.35rem;
+  text-decoration: none;
+}
+
+.room-gate-back:hover,
+.room-gate-back:focus-visible { color: var(--room-primary); }
+.room-gate-code { display: block; color: var(--room-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; font-weight: 750; letter-spacing: 0.12em; }
+.room-gate-page h1 { color: var(--room-text); font-size: clamp(1.45rem, 5vw, 2rem); line-height: 1.2; margin: 0.6rem 0 0.55rem; overflow-wrap: anywhere; }
+.room-gate-page section > p { color: var(--room-muted); line-height: 1.65; margin: 0 0 1.35rem; }
+.room-gate-page section > button,
+.room-gate-form > button {
+  display: inline-flex;
+  min-height: 2.65rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid var(--room-primary);
+  border-radius: 0.65rem;
+  background: var(--room-primary);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 1rem;
+}
+
+.room-gate-page section > button.secondary { border-color: var(--room-border); background: #fff; color: #475569; }
+.room-gate-page section > button:disabled,
+.room-gate-form > button:disabled { cursor: not-allowed; opacity: 0.5; }
+.room-gate-form { display: grid; gap: 1rem; }
+.room-gate-form fieldset { border: 0; color: var(--room-muted); margin: 0; padding: 0; }
+.room-gate-form input { border-color: #cbd5e1; background: #f8fafc; color: var(--room-text); }
+.room-gate-form input:focus { border-color: #14b8a6; box-shadow: 0 0 0 3px rgb(20 184 166 / 14%); }
+
 /* Production room workspace. Keep all rules scoped to avoid changing the home page. */
 .room-page {
   --room-border: #e2e8f0;
@@ -504,9 +575,10 @@ body {
 .room-capacity-details div { display: flex; align-items: center; justify-content: space-between; border-radius: 0.6rem; background: #f8fafc; color: var(--room-muted); padding: 0.75rem; }
 .room-capacity-details dd { color: var(--room-text); font-weight: 650; }
 .room-floating-error { position: fixed; right: 1rem; bottom: 3.5rem; z-index: 12; width: min(25rem, calc(100vw - 2rem)); }
-.room-blocking-state { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgb(248 250 252 / 96%); color: var(--room-muted); padding: 2rem; text-align: center; }
+.room-blocking-state { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(circle at 50% 35%, rgb(255 255 255 / 98%), rgb(240 253 250 / 97%) 45%, rgb(238 242 245 / 98%)); color: var(--room-muted); padding: 2rem; text-align: center; }
 .room-blocking-state > svg { width: 2.5rem; height: 2.5rem; color: var(--room-primary); }
-.room-blocking-state h2 { color: var(--room-text); margin: 1rem 0 0.4rem; }
+.room-blocking-state h2 { color: var(--room-text); font-size: clamp(1.4rem, 4vw, 2rem); margin: 1rem 0 0.4rem; }
+.room-blocking-state p { max-width: 32rem; line-height: 1.65; margin: 0; }
 .room-blocking-state strong { color: var(--room-primary); margin: 0.8rem 0; }
 
 @media (max-width: 1180px) {

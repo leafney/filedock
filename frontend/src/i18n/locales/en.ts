@@ -80,6 +80,8 @@ const en = {
     offline: "Offline",
     extend: "Extend room",
     leave: "Leave room",
+    memberJoinedNotice: "{{name}} joined the room",
+    memberLeftNotice: "{{name}} left the room",
     dissolve: "Dissolve room",
     kicked: "The owner removed you from this room. Confirm to return home.",
     destroying: "The owner dissolved the room. It will be released in {{seconds}} seconds.",

@@ -74,6 +74,8 @@ const zhCN = {
     offline: "离线",
     extend: "延期房间",
     leave: "退出房间",
+    memberJoinedNotice: "{{name}} 加入了房间",
+    memberLeftNotice: "{{name}} 已退出房间",
     dissolve: "解散房间",
     kicked: "你已被房主移出房间，请确认后返回首页。",
     destroying: "房主已解散房间，当前房间将在 {{seconds}} 秒后释放。",

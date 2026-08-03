@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { message } from "antd";
 import { Check, Shield, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -53,6 +54,12 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
       const payload = (event.payload ?? {}) as Record<string, unknown>;
       if (payload.roomCode !== code) return;
       if (event.type === "room.member_kicked") setKicked(true);
+      if (event.type === "room.member_joined" && typeof payload.userId === "string" && payload.userId !== session?.userId && typeof payload.displayName === "string") {
+        message.info(t("room.memberJoinedNotice", { name: payload.displayName }));
+      }
+      if (event.type === "room.member_left" && payload.reason === "left" && typeof payload.displayName === "string") {
+        message.info(t("room.memberLeftNotice", { name: payload.displayName }));
+      }
       if (event.type === "room.destroying" && typeof payload.destroyAt === "number") setDestroyAt(payload.destroyAt);
       if (event.type === "room.destroyed") setDestroyAt(Math.floor(Date.now() / 1000));
       void queryClient.invalidateQueries({ queryKey: ["room", code] });
@@ -60,7 +67,7 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     };
     window.addEventListener(streamEventName, listener);
     return () => window.removeEventListener(streamEventName, listener);
-  }, [code, queryClient]);
+  }, [code, queryClient, session?.userId, t]);
   useEffect(() => {
     if (!destroyAt) return undefined;
     const timer = window.setInterval(() => {

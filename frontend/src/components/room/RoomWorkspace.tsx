@@ -87,9 +87,10 @@ function Summary({ label, value }: { label: string; value: string }) { return <d
 function MemberPanel({ room, session, onKick, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; drawer?: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const copyCode = async () => {
-    if (!navigator.clipboard?.writeText) return;
-    await navigator.clipboard.writeText(room.roomCode);
+    setCopyError(false);
+    if (!await copyText(room.roomCode)) { setCopyError(true); return; }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
@@ -99,6 +100,7 @@ function MemberPanel({ room, session, onKick, drawer = false }: { room: RoomSnap
         <strong title={room.title}>{room.title}</strong>
         <button type="button" onClick={() => void copyCode()}><span>{t("room.code")} {room.roomCode}</span><Copy aria-hidden="true" /></button>
         {copied && <small>{t("room.workspace.copied")}</small>}
+        {copyError && <small>{t("room.workspace.copyFailed")}</small>}
       </div>
     </div>
     <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} />)}</div>
@@ -126,8 +128,9 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
   const invite = t("room.workspace.inviteTemplate", { title: room.title, code: room.roomCode, link });
   const copy = async (kind: string, value: string) => {
     setCopyError(false);
-    if (!navigator.clipboard?.writeText) { setCopyError(true); return; }
-    try { await navigator.clipboard.writeText(value); setCopied(kind); window.setTimeout(() => setCopied(undefined), 1500); } catch { setCopyError(true); }
+    if (!await copyText(value)) { setCopyError(true); return; }
+    setCopied(kind);
+    window.setTimeout(() => setCopied(undefined), 1500);
   };
   return <Overlay title={t("room.workspace.shareRoom")} onClose={onClose}>
     <div className="room-share-panel">
@@ -143,6 +146,41 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
       {copyError && <p className="room-modal-message">{t("room.workspace.copyFailed")}</p>}
     </div>
   </Overlay>;
+}
+
+async function copyText(value: string): Promise<boolean> {
+  if (window.isSecureContext && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // 局域网 HTTP 等非安全上下文中，回退到传统同步复制方式。
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.inset = "0 auto auto 0";
+  textarea.style.width = "1px";
+  textarea.style.height = "1px";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, value.length);
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+    activeElement?.focus({ preventScroll: true });
+  }
 }
 
 function RequestPanel({ code, onClose, onChanged }: { code: string; onClose: () => void; onChanged: () => void }) {
