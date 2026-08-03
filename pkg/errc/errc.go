@@ -19,6 +19,8 @@ const (
 	ErrFileManifest    = 40007
 	ErrFileRecipient   = 40008
 	ErrUploadSize      = 40009
+	ErrChatContent     = 40010
+	ErrChatRecipient   = 40011
 
 	ErrUnAuthorized             = 40101
 	ErrAuthExpired              = 40102
@@ -36,6 +38,7 @@ const (
 	ErrRoomNotFound        = 40403
 	ErrJoinRequestNotFound = 40404
 	ErrFileNotFound        = 40405
+	ErrChatMessageNotFound = 40406
 
 	ErrMethodNotAllowed = 40501
 	ErrTimeOut          = 40801
@@ -63,11 +66,14 @@ const (
 	ErrUploadCancelled      = 40922
 	ErrDownloadExpired      = 40923
 	ErrFileRecipientState   = 40924
+	ErrChatMessageState     = 40925
+	ErrChatRecallExpired    = 40926
 
 	ErrRateLimited     = 42901
 	ErrPINPaused       = 42902
 	ErrUploadLimited   = 42903
 	ErrDownloadLimited = 42904
+	ErrChatRateLimited = 42905
 
 	ErrServer      = 50000
 	ErrDataBase    = 50001
@@ -98,6 +104,8 @@ var definitions = map[int]Definition{
 	ErrFileManifest:             {Code: ErrFileManifest, MessageKey: "error.file_manifest_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrFileRecipient:            {Code: ErrFileRecipient, MessageKey: "error.file_recipient_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrUploadSize:               {Code: ErrUploadSize, MessageKey: "error.upload_size_mismatch", HTTPStatus: http.StatusBadRequest},
+	ErrChatContent:              {Code: ErrChatContent, MessageKey: "error.chat_content_invalid", HTTPStatus: http.StatusBadRequest},
+	ErrChatRecipient:            {Code: ErrChatRecipient, MessageKey: "error.chat_recipient_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrUnAuthorized:             {Code: ErrUnAuthorized, MessageKey: "error.unauthorized", HTTPStatus: http.StatusUnauthorized},
 	ErrAuthExpired:              {Code: ErrAuthExpired, MessageKey: "error.auth_expired", HTTPStatus: http.StatusUnauthorized},
 	ErrTokenInvalid:             {Code: ErrTokenInvalid, MessageKey: "error.token_invalid", HTTPStatus: http.StatusUnauthorized},
@@ -112,6 +120,7 @@ var definitions = map[int]Definition{
 	ErrRoomNotFound:             {Code: ErrRoomNotFound, MessageKey: "error.room_not_found", HTTPStatus: http.StatusNotFound},
 	ErrJoinRequestNotFound:      {Code: ErrJoinRequestNotFound, MessageKey: "error.join_request_not_found", HTTPStatus: http.StatusNotFound},
 	ErrFileNotFound:             {Code: ErrFileNotFound, MessageKey: "error.file_not_found", HTTPStatus: http.StatusNotFound},
+	ErrChatMessageNotFound:      {Code: ErrChatMessageNotFound, MessageKey: "error.chat_message_not_found", HTTPStatus: http.StatusNotFound},
 	ErrMethodNotAllowed:         {Code: ErrMethodNotAllowed, MessageKey: "error.method_not_allowed", HTTPStatus: http.StatusMethodNotAllowed},
 	ErrTimeOut:                  {Code: ErrTimeOut, MessageKey: "error.timeout", HTTPStatus: http.StatusRequestTimeout},
 	ErrExisted:                  {Code: ErrExisted, MessageKey: "error.existed", HTTPStatus: http.StatusConflict},
@@ -137,10 +146,13 @@ var definitions = map[int]Definition{
 	ErrUploadCancelled:          {Code: ErrUploadCancelled, MessageKey: "error.upload_cancelled", HTTPStatus: http.StatusConflict},
 	ErrDownloadExpired:          {Code: ErrDownloadExpired, MessageKey: "error.download_task_expired", HTTPStatus: http.StatusConflict},
 	ErrFileRecipientState:       {Code: ErrFileRecipientState, MessageKey: "error.file_recipient_state_conflict", HTTPStatus: http.StatusConflict},
+	ErrChatMessageState:         {Code: ErrChatMessageState, MessageKey: "error.chat_message_state_conflict", HTTPStatus: http.StatusConflict},
+	ErrChatRecallExpired:        {Code: ErrChatRecallExpired, MessageKey: "error.chat_recall_expired", HTTPStatus: http.StatusConflict},
 	ErrRateLimited:              {Code: ErrRateLimited, MessageKey: "error.rate_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrPINPaused:                {Code: ErrPINPaused, MessageKey: "error.pin_paused", HTTPStatus: http.StatusTooManyRequests},
 	ErrUploadLimited:            {Code: ErrUploadLimited, MessageKey: "error.upload_concurrency_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrDownloadLimited:          {Code: ErrDownloadLimited, MessageKey: "error.download_concurrency_limited", HTTPStatus: http.StatusTooManyRequests},
+	ErrChatRateLimited:          {Code: ErrChatRateLimited, MessageKey: "error.chat_rate_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrServer:                   {Code: ErrServer, MessageKey: "error.internal_server", HTTPStatus: http.StatusInternalServerError},
 	ErrDataBase:                 {Code: ErrDataBase, MessageKey: "error.database", HTTPStatus: http.StatusInternalServerError},
 	ErrCache:                    {Code: ErrCache, MessageKey: "error.cache", HTTPStatus: http.StatusInternalServerError},

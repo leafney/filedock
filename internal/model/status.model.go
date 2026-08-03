@@ -60,4 +60,6 @@ const (
 	DownloadTaskCompleted = "completed"
 	DownloadTaskFailed    = "failed"
 	DownloadTaskExpired   = "expired"
+
+	ChatMessageText = "text"
 )
