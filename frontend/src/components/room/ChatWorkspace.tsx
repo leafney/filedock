@@ -6,23 +6,31 @@ import { ErrorNotice } from "../common";
 import { useChatRoom } from "../../hooks/use-chat";
 import type { ChatMessage, RoomMember } from "../../types/domain";
 import { chatMessageCapabilities, chatDateKey, chatTimeBucket, isChatNearBottom, shouldMarkChatRead } from "../../utils/chat";
+import { readChatDraft, writeChatDraft } from "../../utils/chat-drafts";
 import { copyText } from "../../utils/clipboard";
 
 interface Props {
+  roomId: string;
   code: string;
   members: RoomMember[];
   selfId: string;
-  initialPeerUserId?: string;
-  onInitialPeerConsumed?: () => void;
+  mode: "desktop" | "mobile";
+  selectedPeerUserId?: string;
+  onCloseConversation?: () => void;
   onUnreadCount?: (count: number) => void;
+  onUnreadByPeer?: (counts: Record<string, number>) => void;
 }
 
 type MenuPoint = { clientX: number; clientY: number };
 
-export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInitialPeerConsumed, onUnreadCount }: Props) {
+export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPeerUserId, onCloseConversation, onUnreadCount, onUnreadByPeer }: Props) {
   const { t } = useTranslation();
   const chat = useChatRoom(code, selfId);
-  const [draft, setDraft] = useState("");
+  const desktop = mode === "desktop";
+  const [mobileDraft, setMobileDraft] = useState("");
+  const [desktopDrafts, setDesktopDrafts] = useState<Record<string, string>>({});
+  const desktopDraftsRef = useRef<Record<string, string>>({});
+  const loadedDesktopDrafts = useRef(new Set<string>());
   const [actionError, setActionError] = useState<unknown>();
   const [menu, setMenu] = useState<{ message: ChatMessage; x: number; y: number }>();
   const [copied, setCopied] = useState(false);
@@ -38,29 +46,64 @@ export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInit
   const wasNearBottom = useRef(true);
 
   useEffect(() => {
-    if (!initialPeerUserId) return;
-    chat.openConversation(initialPeerUserId);
-    onInitialPeerConsumed?.();
-  }, [chat.openConversation, initialPeerUserId, onInitialPeerConsumed]);
+    if (!desktop) return;
+    if (selectedPeerUserId && selectedPeerUserId !== chat.peerUserId) {
+      chat.openConversation(selectedPeerUserId);
+      return;
+    }
+    if (!selectedPeerUserId && chat.peerUserId) chat.openConversation("");
+  }, [chat.openConversation, chat.peerUserId, desktop, selectedPeerUserId]);
 
   const peers = useMemo(() => {
     const active = members.filter((member) => member.userId !== selfId && member.status === "active");
     return active.map((member) => ({ member, conversation: chat.conversations.find((item) => item.peerUserId === member.userId) }));
   }, [chat.conversations, members, selfId]);
-  const peer = members.find((member) => member.userId === chat.peerUserId);
+  const activePeerUserId = desktop ? selectedPeerUserId : chat.peerUserId;
+  const peer = members.find((member) => member.userId === activePeerUserId && member.status === "active");
+  const conversationReady = Boolean(activePeerUserId && chat.peerUserId === activePeerUserId);
+  const draft = desktop && activePeerUserId ? desktopDrafts[activePeerUserId] ?? "" : mobileDraft;
+  const unreadByPeer = useMemo(() => Object.fromEntries(peers.map(({ member, conversation }) => [member.userId, conversation?.unreadCount ?? 0])), [peers]);
+  const activePeerUserIdRef = useRef(activePeerUserId);
+  activePeerUserIdRef.current = activePeerUserId;
 
   useEffect(() => {
     onUnreadCount?.(peers.reduce((total, item) => total + (item.conversation?.unreadCount ?? 0), 0));
-  }, [onUnreadCount, peers]);
+    onUnreadByPeer?.(unreadByPeer);
+  }, [onUnreadByPeer, onUnreadCount, peers, unreadByPeer]);
+
+  useEffect(() => {
+    loadedDesktopDrafts.current.clear();
+    desktopDraftsRef.current = {};
+    setDesktopDrafts({});
+  }, [roomId, selfId]);
+
+  useEffect(() => {
+    if (!desktop || !activePeerUserId || loadedDesktopDrafts.current.has(activePeerUserId)) return;
+    loadedDesktopDrafts.current.add(activePeerUserId);
+    const content = readChatDraft({ roomId, selfId, peerId: activePeerUserId });
+    desktopDraftsRef.current = { ...desktopDraftsRef.current, [activePeerUserId]: content };
+    setDesktopDrafts((current) => ({ ...current, [activePeerUserId]: content }));
+  }, [activePeerUserId, desktop, roomId, selfId]);
+
+  useEffect(() => {
+    setMenu(undefined);
+    setHistoryOpen(false);
+    setHistoryQuery("");
+    setHistoryResults([]);
+    setHistoryError(undefined);
+    setForwardMessage(undefined);
+    setForwardTargets([]);
+    setActionError(undefined);
+  }, [activePeerUserId]);
 
   useEffect(() => {
     const element = listRef.current;
     if (!element) return;
     if (wasNearBottom.current) element.scrollTop = element.scrollHeight;
-  }, [chat.messages.length, chat.peerUserId]);
+  }, [activePeerUserId, chat.messages.length]);
 
   useEffect(() => {
-    if (!peer || chat.messages.length === 0) return;
+    if (!peer || !conversationReady || chat.messages.length === 0) return;
     const lastIncoming = [...chat.messages].reverse().find((message) => message.recipientUserId === selfId && !message.recalledAt);
     if (!lastIncoming) return;
     const mark = () => {
@@ -70,7 +113,7 @@ export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInit
     window.addEventListener("focus", mark);
     document.addEventListener("visibilitychange", mark);
     return () => { window.removeEventListener("focus", mark); document.removeEventListener("visibilitychange", mark); };
-  }, [chat.markRead, chat.messages, chat.peerUserId, peer, selfId]);
+  }, [chat.markRead, chat.messages, chat.peerUserId, conversationReady, peer, selfId]);
 
   useEffect(() => {
     if (!highlightMessageId) return;
@@ -101,17 +144,36 @@ export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInit
     return () => window.clearTimeout(timer);
   }, [chat.peerUserId, chat.search, historyOpen, historyQuery]);
 
+  const updateDraft = (peerUserId: string, value: string) => {
+    if (!desktop) {
+      setMobileDraft(value);
+      return;
+    }
+    desktopDraftsRef.current = { ...desktopDraftsRef.current, [peerUserId]: value };
+    setDesktopDrafts((current) => ({ ...current, [peerUserId]: value }));
+    writeChatDraft({ roomId, selfId, peerId: peerUserId }, value);
+  };
+
+  const restoreFailedDraft = (peerUserId: string, value: string) => {
+    if (!desktop) {
+      setMobileDraft((current) => current || value);
+      return;
+    }
+    if (!desktopDraftsRef.current[peerUserId]) updateDraft(peerUserId, value);
+  };
+
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
+    const recipient = activePeerUserId;
     const content = draft.trim();
-    if (!content || !chat.peerUserId) return;
+    if (!content || !recipient || !conversationReady) return;
     setActionError(undefined);
-    setDraft("");
+    updateDraft(recipient, "");
     try {
-      await chat.send(content);
+      await chat.send(content, recipient);
     } catch (error) {
-      setDraft(content);
-      setActionError(error);
+      restoreFailedDraft(recipient, content);
+      if (activePeerUserIdRef.current === recipient) setActionError(error);
     }
   };
 
@@ -134,12 +196,13 @@ export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInit
   };
 
   const runRecallAndEdit = async (message: ChatMessage) => {
+    if (!activePeerUserId) return;
     const content = message.contentText;
     if (draft.trim() && !window.confirm(t("chat.replaceDraftConfirm"))) return;
     setMenu(undefined);
     try {
       await chat.recall(message.messageId);
-      setDraft(content);
+      updateDraft(activePeerUserId, content);
     } catch (error) {
       setActionError(error);
     }
@@ -176,7 +239,13 @@ export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInit
     window.setTimeout(() => setCopied(false), 1_500);
   };
 
-  if (!chat.peerUserId || !peer) {
+  if (!activePeerUserId || !peer) {
+    if (desktop) {
+      return <aside className="room-chat-workspace room-chat-empty">
+        <MessageSquare aria-hidden="true" />
+        <p>{t("chat.selectMember")}</p>
+      </aside>;
+    }
     return <aside className="room-chat-workspace room-chat-conversations">
       <header className="chat-panel-heading"><div><span>{t("chat.eyebrow")}</span><h2>{t("chat.conversations")}</h2></div><MessageSquare aria-hidden="true" /></header>
       <div className="chat-conversation-list">
@@ -192,23 +261,26 @@ export function ChatWorkspace({ code, members, selfId, initialPeerUserId, onInit
 
   return <aside className="room-chat-workspace room-chat-conversation">
     <header className="chat-panel-heading chat-active-heading">
-      <button className="chat-back-button" type="button" aria-label={t("chat.backToConversations")} onClick={() => { setMenu(undefined); chat.openConversation(""); }}><ArrowLeft aria-hidden="true" /></button>
+      {!desktop && <button className="chat-back-button" type="button" aria-label={t("chat.backToConversations")} onClick={() => { setMenu(undefined); chat.openConversation(""); }}><ArrowLeft aria-hidden="true" /></button>}
       <span className="room-avatar">{peer.displayName.slice(0, 1)}</span>
       <div className="chat-active-peer"><strong>{peer.displayName}</strong><small><i className={`presence ${peer.onlineStatus}`} />{peer.onlineStatus === "online" ? t("room.online") : peer.onlineStatus === "away" ? t("room.away") : t("room.offline")}</small></div>
-      <button className="chat-history-button" type="button" aria-label={t("chat.history")} title={t("chat.history")} onClick={() => setHistoryOpen(true)}><History aria-hidden="true" /></button>
+      <div className="chat-heading-actions">
+        <button className="chat-history-button" type="button" disabled={!conversationReady} aria-label={t("chat.history")} title={t("chat.history")} onClick={() => setHistoryOpen(true)}><History aria-hidden="true" /></button>
+        {desktop && <button className="chat-close-button" type="button" aria-label={t("chat.closeConversation")} title={t("chat.closeConversation")} onClick={() => { setMenu(undefined); setHistoryOpen(false); setForwardMessage(undefined); onCloseConversation?.(); }}><X aria-hidden="true" /></button>}
+      </div>
     </header>
     <div ref={listRef} className="chat-message-list" onScroll={(event) => { const element = event.currentTarget; wasNearBottom.current = isChatNearBottom(element.scrollTop, element.scrollHeight, element.clientHeight); }} onClick={() => setMenu(undefined)}>
-      {chat.loadingMessages && <p className="chat-state-message">{t("chat.loading")}</p>}
-      {chat.messageError != null && <ErrorNotice error={chat.messageError} />}
-      {!chat.loadingMessages && chat.messages.length === 0 && <p className="chat-empty-state">{t("chat.empty")}</p>}
-      {chat.messagePage?.hasMoreBefore && <button className="chat-load-older" type="button" onClick={() => void chat.loadOlder()}>{t("chat.loadOlder")}</button>}
-      {chat.messages.map((message, index) => <ChatMessageRow key={message.messageId || message.clientMessageId} message={message} selfId={selfId} previous={chat.messages[index - 1]} onContextMenu={openMenu} onLongPress={(point, item) => openMenuAt(point, item)} />)}
+      {(!conversationReady || chat.loadingMessages) && <p className="chat-state-message">{t("chat.loading")}</p>}
+      {conversationReady && chat.messageError != null && <ErrorNotice error={chat.messageError} />}
+      {conversationReady && !chat.loadingMessages && chat.messages.length === 0 && <p className="chat-empty-state">{t("chat.empty")}</p>}
+      {conversationReady && chat.messagePage?.hasMoreBefore && <button className="chat-load-older" type="button" onClick={() => void chat.loadOlder()}>{t("chat.loadOlder")}</button>}
+      {conversationReady && chat.messages.map((message, index) => <ChatMessageRow key={message.messageId || message.clientMessageId} message={message} selfId={selfId} previous={chat.messages[index - 1]} onContextMenu={openMenu} onLongPress={(point, item) => openMenuAt(point, item)} />)}
       {copied && <span className="chat-copy-toast">{t("chat.copied")}</span>}
     </div>
     {actionError != null && <div className="chat-action-error"><ErrorNotice error={actionError} /></div>}
     <form className="chat-composer" onSubmit={(event) => void submit(event)}>
-      <textarea value={draft} maxLength={2000} placeholder={t("chat.inputPlaceholder")} aria-label={t("chat.inputLabel")} onChange={(event) => setDraft(event.target.value)} onKeyDown={onInputKeyDown} />
-      <div><span>{t("chat.inputHint")}</span><button type="submit" disabled={!draft.trim()}><Send aria-hidden="true" />{t("chat.send")}</button></div>
+      <textarea value={draft} disabled={!conversationReady} maxLength={2000} placeholder={t("chat.inputPlaceholder")} aria-label={t("chat.inputLabel")} onChange={(event) => { if (activePeerUserId) updateDraft(activePeerUserId, event.target.value); }} onKeyDown={onInputKeyDown} />
+      <div><span>{t("chat.inputHint")}</span><button type="submit" disabled={!conversationReady || !draft.trim()}><Send aria-hidden="true" />{t("chat.send")}</button></div>
     </form>
     {menu && <ChatContextMenu menu={menu} selfId={selfId} onClose={() => setMenu(undefined)} onCopy={() => void copyMessage(menu.message)} onRecall={() => void (async () => { setMenu(undefined); try { await chat.recall(menu.message.messageId); } catch (error) { setActionError(error); } })()} onRecallAndEdit={() => void runRecallAndEdit(menu.message)} onForward={() => { setMenu(undefined); setForwardMessage(menu.message); setForwardTargets([]); }} onDelete={() => void deleteMessage(menu.message)} />}
     {historyOpen && <ChatHistoryDrawer query={historyQuery} results={historyResults} loading={historyLoading} error={historyError} onQueryChange={setHistoryQuery} onClose={() => setHistoryOpen(false)} onSelect={(message) => void chooseHistoryResult(message)} />}

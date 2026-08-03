@@ -40,10 +40,14 @@ export function RoomWorkspace(props: Props) {
   const [chatTarget, setChatTarget] = useState<string>();
   const [chatMobileOpen, setChatMobileOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
+  const [chatUnreadByPeer, setChatUnreadByPeer] = useState<Record<string, number>>({});
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (chatTarget && !props.room.members.some((member) => member.userId === chatTarget && member.status === "active")) setChatTarget(undefined);
+  }, [chatTarget, props.room.members]);
   const expires = Math.max(0, props.room.expiresAt - now);
   const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;
@@ -71,9 +75,9 @@ export function RoomWorkspace(props: Props) {
     />
 
     <div className="room-workspace-layout">
-      <MemberPanel room={props.room} session={props.session} onKick={props.onKick} onChat={(userId) => setChatTarget(userId)} />
+      <MemberPanel room={props.room} session={props.session} onKick={props.onKick} onChat={setChatTarget} selectedUserId={chatTarget} unreadByUser={chatUnreadByPeer} />
       <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} />
-      <ChatWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} initialPeerUserId={chatTarget} onInitialPeerConsumed={() => setChatTarget(undefined)} onUnreadCount={setChatUnread} />
+      <ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="desktop" selectedPeerUserId={chatTarget} onCloseConversation={() => setChatTarget(undefined)} onUnreadCount={setChatUnread} onUnreadByPeer={setChatUnreadByPeer} />
     </div>
     <TransferBar roomCode={props.code} />
 
@@ -81,7 +85,7 @@ export function RoomWorkspace(props: Props) {
     {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
     {requestsOpen && props.room.role === "owner" && <RequestPanel code={props.code} onClose={() => setRequestsOpen(false)} onChanged={() => void queryClient.invalidateQueries({ queryKey: ["room", props.code] })} />}
     {capacityOpen && <Overlay title={t("room.workspace.capacityDetails")} onClose={() => setCapacityOpen(false)}><CapacityPanel room={props.room} /></Overlay>}
-    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} onUnreadCount={setChatUnread} /></section></div>}
+    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="mobile" onUnreadCount={setChatUnread} /></section></div>}
     {props.actionError != null && <div className="room-floating-error"><ErrorNotice error={props.actionError} /></div>}
     {(props.destroyAt || props.room.status === "destroying") && <div className="room-blocking-state"><RefreshCw aria-hidden="true" /><h2>{t("room.destroyingTitle")}</h2><p>{t("room.destroyingHint")}</p><strong>{t("room.destroyCountdown", { seconds: String(countdown) })}</strong></div>}
     {props.kicked && <div className="room-blocking-state"><DoorOpen aria-hidden="true" /><h2>{t("room.kickedTitle")}</h2><p>{t("room.kicked")}</p><button type="button" onClick={() => { props.setKicked(false); window.location.replace("/"); }}>{t("room.confirmOnly")}</button></div>}
@@ -90,7 +94,7 @@ export function RoomWorkspace(props: Props) {
 
 function Summary({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
-function MemberPanel({ room, session, onKick, onChat, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; onChat?: (id: string) => void; drawer?: boolean }) {
+function MemberPanel({ room, session, onKick, onChat, selectedUserId, unreadByUser = {}, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; onChat?: (id: string) => void; selectedUserId?: string; unreadByUser?: Record<string, number>; drawer?: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -109,14 +113,14 @@ function MemberPanel({ room, session, onKick, onChat, drawer = false }: { room: 
         {copyError && <small>{t("room.workspace.copyFailed")}</small>}
       </div>
     </div>
-    <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} onChat={onChat} />)}</div>
+    <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} selected={member.userId === selectedUserId} unreadCount={unreadByUser[member.userId] ?? 0} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} onChat={onChat} />)}</div>
   </aside>;
 }
 
-function MemberItem({ member, self, canKick, onKick, onChat }: { member: RoomMember; self: boolean; canKick: boolean; onKick: (id: string) => void; onChat?: (id: string) => void }) {
+function MemberItem({ member, self, selected, unreadCount, canKick, onKick, onChat }: { member: RoomMember; self: boolean; selected: boolean; unreadCount: number; canKick: boolean; onKick: (id: string) => void; onChat?: (id: string) => void }) {
   const { t } = useTranslation();
   const ownerLabel = t("room.workspace.owner");
-  return <article className={`room-member-item ${!self && member.status === "active" ? "is-chatable" : ""}`} onDoubleClick={() => { if (!self && member.status === "active") onChat?.(member.userId); }}><button className="room-member-chat-hit" type="button" disabled={self || member.status !== "active"} aria-label={!self ? t("chat.openConversation", { name: member.displayName }) : undefined} onClick={() => { if (!self && member.status === "active") onChat?.(member.userId); }}><span className="room-avatar-wrap" title={member.role === "owner" ? ownerLabel : undefined} aria-label={member.role === "owner" ? ownerLabel : undefined}><span className="room-avatar">{member.displayName.slice(0, 1)}</span>{member.role === "owner" && <span className="room-owner-corner"><Crown aria-hidden="true" /></span>}</span><div><strong>{member.displayName}{self && <small>{t("room.workspace.me")}</small>}</strong><span><i className={`presence ${member.onlineStatus}`} />{member.onlineStatus === "online" ? t("room.online") : member.onlineStatus === "away" ? t("room.away") : t("room.offline")}</span></div></button>{canKick && <button type="button" aria-label={t("room.kick")} onClick={() => { if (window.confirm(t("room.kickConfirm", { name: member.displayName }))) onKick(member.userId); }}><X aria-hidden="true" /></button>}</article>;
+  return <article className={`room-member-item ${!self && member.status === "active" ? "is-chatable" : ""} ${selected ? "is-selected" : ""}`}><button className="room-member-chat-hit" type="button" disabled={self || member.status !== "active"} aria-current={selected ? "true" : undefined} aria-label={!self ? t("chat.openConversation", { name: member.displayName }) : undefined} onClick={() => { if (!self && member.status === "active") onChat?.(member.userId); }}><span className="room-avatar-wrap" title={member.role === "owner" ? ownerLabel : undefined} aria-label={member.role === "owner" ? ownerLabel : undefined}><span className="room-avatar">{member.displayName.slice(0, 1)}</span>{member.role === "owner" && <span className="room-owner-corner"><Crown aria-hidden="true" /></span>}{unreadCount > 0 && <span className="room-member-unread" role="status" aria-label={t("chat.unreadMessages", { name: member.displayName, count: unreadCount })}>{unreadCount > 99 ? "99+" : unreadCount}</span>}</span><div><strong>{member.displayName}{self && <small>{t("room.workspace.me")}</small>}</strong><span><i className={`presence ${member.onlineStatus}`} />{member.onlineStatus === "online" ? t("room.online") : member.onlineStatus === "away" ? t("room.away") : t("room.offline")}</span></div></button>{canKick && <button type="button" aria-label={t("room.kick")} onClick={() => { if (window.confirm(t("room.kickConfirm", { name: member.displayName }))) onKick(member.userId); }}><X aria-hidden="true" /></button>}</article>;
 }
 
 function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
