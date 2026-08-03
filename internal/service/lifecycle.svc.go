@@ -274,7 +274,15 @@ func (s *LifecycleSvc) finishDestroyingRooms(now time.Time) error {
 		if err != nil {
 			return err
 		}
-		job := model.CleanupJob{ID: jobID, RoomID: room.ID, Status: model.CleanupPending, Phase: "scheduled", ScheduledAt: now.Add(delay).Unix()}
+		// The cleanup window starts when destruction begins, not when the
+		// periodic worker happens to observe the destroyed state. This keeps the
+		// configured delay stable across scheduler jitter and avoids extending
+		// the retention window by the destroy grace period.
+		scheduleBase := now
+		if room.DestroyingAt != nil {
+			scheduleBase = time.Unix(*room.DestroyingAt, 0)
+		}
+		job := model.CleanupJob{ID: jobID, RoomID: room.ID, Status: model.CleanupPending, Phase: "scheduled", ScheduledAt: scheduleBase.Add(delay).Unix()}
 		if err := s.db.Where("room_id = ?", room.ID).FirstOrCreate(&job).Error; err != nil {
 			return err
 		}
@@ -352,6 +360,18 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 		return err
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("message_id IN (?)", tx.Model(&model.ChatMessage{}).Select("id").Where("room_id = ?", roomID)).Delete(&model.ChatMessageDeletion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("conversation_id IN (?)", tx.Model(&model.ChatConversation{}).Select("id").Where("room_id = ?", roomID)).Delete(&model.ChatReadState{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.ChatMessage{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.ChatConversation{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("room_id = ?", roomID).Delete(&model.DownloadTask{}).Error; err != nil {
 			return err
 		}

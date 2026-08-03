@@ -25,3 +25,21 @@ func TestRateLimiterSeparatesActionsAndIPs(t *testing.T) {
 		t.Fatal("request was not allowed after window reset")
 	}
 }
+
+func TestRateLimiterAllowNAndPairAreAtomic(t *testing.T) {
+	limiter := NewRateLimiter()
+	limiter.now = func() time.Time { return time.Unix(300, 0) }
+	if allowed, _ := limiter.AllowN("chat", "room-user", 3, 5, time.Minute); !allowed {
+		t.Fatal("initial AllowN was denied")
+	}
+	if allowed, _ := limiter.AllowN("chat", "room-user", 3, 5, time.Minute); allowed {
+		t.Fatal("AllowN exceeded the bucket limit")
+	}
+	if allowed, _ := limiter.AllowNPair("chat-pair", "room-user", 4, 5, time.Second, 3, time.Minute); allowed {
+		t.Fatal("AllowNPair exceeded the second limit")
+	}
+	// The rejected pair must not leave a short-window token behind.
+	if allowed, _ := limiter.AllowNPair("chat-pair", "room-user", 3, 5, time.Second, 3, time.Minute); !allowed {
+		t.Fatal("AllowNPair did not accept a request at the limit")
+	}
+}

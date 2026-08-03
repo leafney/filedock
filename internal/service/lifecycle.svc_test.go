@@ -63,6 +63,51 @@ func TestLifecycleExpiresAndDestroysRoom(t *testing.T) {
 	}
 }
 
+func TestLifecycleCleanupDeletesChatRelationsIdempotently(t *testing.T) {
+	_, db, _ := newSessionTestService(t)
+	lifecycle, err := NewLifecycleSvc(db, NewStreamHub())
+	if err != nil {
+		t.Fatalf("NewLifecycleSvc() error = %v", err)
+	}
+	roomID := "01ROOMCHATCLEANUP01"
+	conversationID := "01CHATCLEANUPCONV01"
+	messageID := "01CHATCLEANUPMESSAGE1"
+	jobID := "01JOBCHATCLEANUP001"
+	if err := db.Create(&model.Room{ID: roomID, Code: "0098", Title: "聊天清理", OwnerUserID: "01USERCHATCLEANUP1", JoinMode: model.JoinModeOpen, Status: model.RoomStatusDestroyed, CreatedAt: 1, ExpiresAt: 2}).Error; err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	if err := db.Create(&model.ChatConversation{ID: conversationID, RoomID: roomID, UserAID: "01USERCHATCLEANUP1", UserBID: "01USERCHATCLEANUP2", LastSequence: 1, CreatedAt: 1, UpdatedAt: 1}).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	if err := db.Create(&model.ChatMessage{ID: messageID, RoomID: roomID, ConversationID: conversationID, SenderUserID: "01USERCHATCLEANUP1", RecipientUserID: "01USERCHATCLEANUP2", SenderDisplayName: "甲一", ClientMessageID: "cleanup", ContentText: "hello", Sequence: 1, CreatedAt: 1}).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	if err := db.Create(&model.ChatReadState{ConversationID: conversationID, UserID: "01USERCHATCLEANUP2", LastReadSequence: 1, LastReadAt: 1, UpdatedAt: 1}).Error; err != nil {
+		t.Fatalf("create read state: %v", err)
+	}
+	if err := db.Create(&model.ChatMessageDeletion{MessageID: messageID, UserID: "01USERCHATCLEANUP1", DeletedAt: 1}).Error; err != nil {
+		t.Fatalf("create deletion: %v", err)
+	}
+	if err := db.Create(&model.CleanupJob{ID: jobID, RoomID: roomID, Status: model.CleanupRunning, Phase: "running", ScheduledAt: 1}).Error; err != nil {
+		t.Fatalf("create cleanup job: %v", err)
+	}
+	if err := lifecycle.runCleanup(roomID, jobID, time.Unix(2, 0)); err != nil {
+		t.Fatalf("run chat cleanup: %v", err)
+	}
+	if err := lifecycle.runCleanup(roomID, jobID, time.Unix(3, 0)); err != nil {
+		t.Fatalf("repeat chat cleanup: %v", err)
+	}
+	for _, table := range []string{"chat_message_deletions", "chat_read_states", "chat_messages", "chat_conversations"} {
+		var count int64
+		if err := db.Table(table).Where("1 = 1").Count(&count).Error; err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("%s count = %d, want 0", table, count)
+		}
+	}
+}
+
 func TestLifecycleCleanupRetriesAtMostOnce(t *testing.T) {
 	_, db, _ := newSessionTestService(t)
 	lifecycle, err := NewLifecycleSvc(db, NewStreamHub())
