@@ -80,6 +80,65 @@ export interface StreamEvent<T = Record<string, unknown>> {
   payload?: T;
 }
 
+export type ChatDeliveryStatus = "sending" | "sent" | "read" | "failed";
+
+export interface ChatConversation {
+  peerUserId: string;
+  peerDisplayName: string;
+  peerRole: "owner" | "member" | string;
+  peerStatus: RoomMember["status"] | string;
+  peerOnlineStatus: RoomMember["onlineStatus"] | string;
+  unreadCount: number;
+  lastMessageAt?: number;
+  lastMessagePreview?: string;
+}
+
+export interface ChatMessage {
+  roomCode: string;
+  conversationId: string;
+  messageId: string;
+  clientMessageId: string;
+  senderUserId: string;
+  recipientUserId: string;
+  senderDisplayName: string;
+  contentText: string;
+  isForwarded: boolean;
+  sequence: number;
+  createdAt: number;
+  recalledAt?: number;
+  recallDeadline?: number;
+  read: boolean;
+  canCopy: boolean;
+  canRecall: boolean;
+  canRecallAndEdit: boolean;
+  canForward: boolean;
+  canDelete: boolean;
+  deliveryStatus?: ChatDeliveryStatus;
+  optimistic?: boolean;
+}
+
+export interface ChatMessagePage {
+  items: ChatMessage[];
+  previousCursor?: number;
+  hasMoreBefore: boolean;
+  currentReadSequence: number;
+  peerReadSequence: number;
+}
+
+export interface ChatReadState {
+  conversationId: string;
+  peerUserId: string;
+  userId: string;
+  lastReadSequence: number;
+  lastReadAt: number;
+}
+
+export interface ChatSearchPage {
+  items: ChatMessage[];
+  previousCursor?: number;
+  hasMoreBefore: boolean;
+}
+
 export type FileScope = "shared" | "direct";
 export type FileProjectionLevel = "full" | "anonymous";
 export type FileStatus = "reserved" | "uploading" | "available";

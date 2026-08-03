@@ -2,6 +2,11 @@ import { apiClient } from "../lib/api-client";
 import type { ApiResponse } from "../types/api";
 import type {
   DownloadTask,
+	ChatConversation,
+	ChatMessage,
+	ChatMessagePage,
+	ChatReadState,
+	ChatSearchPage,
   FileEventPage,
   FileIdentity,
   FileListResult,
@@ -101,6 +106,50 @@ export function approveJoinRequest(code: string, requestId: string) {
 
 export function rejectJoinRequest(code: string, requestId: string) {
   return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/join-requests/${requestId}/reject`));
+}
+
+export function listChatConversations(code: string) {
+  return unwrap<{ items: ChatConversation[] }>(apiClient.get<ApiResponse<{ items: ChatConversation[] }>>(`/api/v1/rooms/${code}/chat/conversations`));
+}
+
+export interface ChatHistoryParams {
+  beforeSequence?: number;
+  aroundSequence?: number;
+  limit?: number;
+}
+
+export function getChatMessages(code: string, peerUserId: string, params: ChatHistoryParams = {}) {
+  return unwrap<ChatMessagePage>(apiClient.get<ApiResponse<ChatMessagePage>>(`/api/v1/rooms/${code}/chat/conversations/${peerUserId}/messages`, { params }));
+}
+
+export function sendChatMessage(code: string, recipientUserId: string, clientMessageId: string, contentText: string) {
+  return unwrap<ChatMessage>(apiClient.post<ApiResponse<ChatMessage>>(`/api/v1/rooms/${code}/chat/messages`, { recipientUserId, clientMessageId, contentText }));
+}
+
+export function markChatRead(code: string, peerUserId: string, lastReadSequence: number) {
+  return unwrap<ChatReadState>(apiClient.post<ApiResponse<ChatReadState>>(`/api/v1/rooms/${code}/chat/conversations/${peerUserId}/read`, { lastReadSequence }));
+}
+
+export function recallChatMessage(code: string, messageId: string) {
+  return unwrap<ChatMessage>(apiClient.post<ApiResponse<ChatMessage>>(`/api/v1/rooms/${code}/chat/messages/${messageId}/recall`));
+}
+
+export function deleteChatMessage(code: string, messageId: string) {
+  return unwrap<null>(apiClient.delete<ApiResponse<null>>(`/api/v1/rooms/${code}/chat/messages/${messageId}`));
+}
+
+export function forwardChatMessage(code: string, messageId: string, clientMessageId: string, recipientUserIds: string[]) {
+  return unwrap<{ items: ChatMessage[] }>(apiClient.post<ApiResponse<{ items: ChatMessage[] }>>(`/api/v1/rooms/${code}/chat/messages/${messageId}/forward`, { clientMessageId, recipientUserIds }));
+}
+
+export interface ChatSearchParams {
+  query: string;
+  beforeSequence?: number;
+  limit?: number;
+}
+
+export function searchChatMessages(code: string, peerUserId: string, params: ChatSearchParams) {
+  return unwrap<ChatSearchPage>(apiClient.get<ApiResponse<ChatSearchPage>>(`/api/v1/rooms/${code}/chat/conversations/${peerUserId}/search`, { params: { q: params.query, beforeSequence: params.beforeSequence, limit: params.limit } }));
 }
 
 export interface FileListParams {
