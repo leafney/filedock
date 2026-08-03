@@ -93,7 +93,19 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 		return nil, err
 	}
 	rateLimiter := provideRateLimiter()
-	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, rateLimiter)
+	chatSvc, err := provideChatSvc(gormDBSvc, streamHub, rateLimiter, presenceSvc)
+	if err != nil {
+		return nil, err
+	}
+	chatBiz, err := provideChatBiz(chatSvc)
+	if err != nil {
+		return nil, err
+	}
+	chatAPI, err := provideChatAPI(chatBiz)
+	if err != nil {
+		return nil, err
+	}
+	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, rateLimiter, chatAPI)
 	if err != nil {
 		return nil, err
 	}

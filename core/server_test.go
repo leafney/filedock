@@ -111,11 +111,76 @@ func newTestServerWithConfig(t *testing.T, cfg *config.Config) *Server {
 	if err != nil {
 		t.Fatalf("NewFileAPI() error = %v", err)
 	}
-	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, service.NewRateLimiter())
+	limiter := service.NewRateLimiter()
+	chatSvc, err := service.NewChatSvc(db, hub, limiter, presence)
+	if err != nil {
+		t.Fatalf("NewChatSvc() error = %v", err)
+	}
+	chatBiz, err := biz.NewChatBiz(chatSvc)
+	if err != nil {
+		t.Fatalf("NewChatBiz() error = %v", err)
+	}
+	chatAPI, err := api.NewChatAPI(chatBiz)
+	if err != nil {
+		t.Fatalf("NewChatAPI() error = %v", err)
+	}
+	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, limiter, chatAPI)
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 	return server
+}
+
+func TestServerChatRoutes(t *testing.T) {
+	server := newTestServer(t)
+	createSession := func(name string) string {
+		t.Helper()
+		request := httptest.NewRequest(fiber.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"displayName":"`+name+`"}`))
+		request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+		response, err := server.App().Test(request)
+		if err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != fiber.StatusOK {
+			body, _ := io.ReadAll(response.Body)
+			t.Fatalf("create session status=%d body=%s", response.StatusCode, body)
+		}
+		return response.Header.Get(fiber.HeaderSetCookie)
+	}
+	ownerCookie := createSession("聊天甲")
+	guestCookie := createSession("聊天乙")
+	request := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms", bytes.NewBufferString(`{"joinMode":"open"}`))
+	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	request.Header.Set(fiber.HeaderCookie, ownerCookie)
+	response, err := server.App().Test(request)
+	if err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	defer response.Body.Close()
+	var roomBody struct {
+		Data struct {
+			RoomCode string `json:"roomCode"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&roomBody); err != nil || roomBody.Data.RoomCode == "" {
+		t.Fatalf("decode room: code=%q error=%v", roomBody.Data.RoomCode, err)
+	}
+	join := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/join", bytes.NewBufferString(`{"confirmed":true}`))
+	join.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	join.Header.Set(fiber.HeaderCookie, guestCookie)
+	joinResponse, err := server.App().Test(join)
+	if err != nil || joinResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("join room status=%v response=%v", joinResponse.StatusCode, err)
+	}
+	_ = joinResponse.Body.Close()
+	list := httptest.NewRequest(fiber.MethodGet, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/chat/conversations", nil)
+	list.Header.Set(fiber.HeaderCookie, ownerCookie)
+	listResponse, err := server.App().Test(list)
+	if err != nil || listResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("list conversations status=%v response=%v", listResponse.StatusCode, err)
+	}
+	_ = listResponse.Body.Close()
 }
 
 func TestServerVersionRoute(t *testing.T) {
