@@ -3,7 +3,7 @@
 Related discussion: [docs/discuss/2026-08-04-homepage-pairdrop-canvas-radar.md](../discuss/2026-08-04-homepage-pairdrop-canvas-radar.md)
 
 - 日期：2026-08-04
-- 状态：待批准
+- 状态：已完成，待人工验收
 - 变更类型：前端装饰渲染架构与动效修订
 - 前置规格：`docs/plan/2026-08-04-homepage-subtle-radar.md`
 - 外部参考：[PairDrop](https://pairdrop.net/)
