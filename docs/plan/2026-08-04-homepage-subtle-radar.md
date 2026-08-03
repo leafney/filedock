@@ -3,7 +3,7 @@
 Related discussion: [docs/discuss/2026-08-04-homepage-subtle-radar.md](../discuss/2026-08-04-homepage-subtle-radar.md)
 
 - 日期：2026-08-04
-- 状态：待批准
+- 状态：已完成，待人工验收
 - 变更类型：前端视觉动效增量修订
 - 前置规格：`docs/plan/2026-08-03-homepage-water-ripple.md`
 - 影响范围：首页雷达波、雷达范围计算、移动端动效、减少动态效果、装饰节点呼吸
