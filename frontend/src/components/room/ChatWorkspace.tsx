@@ -233,10 +233,15 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
     const recipient = activePeerUserId;
     const content = draft.trim();
     if (!content || !recipient || !conversationReady) return;
+    const sendingFromHistory = chat.historyMode === "history";
     setActionError(undefined);
     updateDraft(recipient, "");
     try {
       await chat.send(content, recipient);
+      if (sendingFromHistory) {
+        wasNearBottom.current = true;
+        window.requestAnimationFrame(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; });
+      }
     } catch (error) {
       restoreFailedDraft(recipient, content);
       if (activePeerUserIdRef.current === recipient) setActionError(error);

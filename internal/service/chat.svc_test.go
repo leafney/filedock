@@ -220,6 +220,10 @@ func TestChatHistoryAroundAndAfterPagination(t *testing.T) {
 	if err != nil || len(latest.Items) != 5 || latest.Items[0].Sequence != 46 || latest.Items[4].Sequence != 50 || !latest.HasMoreBefore || latest.HasMoreAfter || latest.NextCursor != nil {
 		t.Fatalf("latest after page = %+v error=%v", latest, err)
 	}
+	defaultLatest, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{Limit: 5})
+	if err != nil || len(defaultLatest.Items) != 5 || defaultLatest.Items[0].Sequence != 46 || defaultLatest.Items[4].Sequence != 50 || !defaultLatest.HasMoreBefore || defaultLatest.HasMoreAfter || defaultLatest.NextCursor != nil {
+		t.Fatalf("default latest page = %+v error=%v", defaultLatest, err)
+	}
 
 	before := int64(40)
 	if _, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{BeforeSequence: &before, AfterSequence: &after}); err == nil || errx.Code(err) != errc.ErrParams {

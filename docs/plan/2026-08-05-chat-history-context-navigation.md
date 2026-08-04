@@ -2,7 +2,7 @@ Related discussion: [docs/discuss/2026-08-05-chat-history-context-navigation.md]
 
 # FileDock 聊天历史上下文定位优化 PRD
 
-状态：已批准，实施中
+状态：实现完成，待人工验收
 
 ## Problem Statement
 
@@ -299,6 +299,18 @@ Related discussion: [docs/discuss/2026-08-05-chat-history-context-navigation.md]
 - 无限缓存所有历史消息、IndexedDB 历史缓存或离线搜索。
 - 改造现有撤回、本地删除、转发和草稿业务规则。
 - 使用 Playwright 做浏览器验收。
+
+## Implementation Result
+
+- 已修复上下文查询复用 GORM 对象导致条件串联的问题，目标前文、目标消息和目标后文改为独立查询。
+- 已扩展原消息历史接口，支持 `afterSequence`、`nextCursor` 和 `hasMoreAfter`，并保持原路由与数据表不变。
+- 已实现最多 31 条的搜索定位窗口、顶部手动加载旧消息和底部自动加载更新消息。
+- 已实现实时、定位加载中、历史定位三种前端状态，以及历史期间 SSE 新消息暂存和已读门控。
+- 已实现历史状态条、“回到最新”／新消息悬浮按钮、目标 2 秒高亮、搜索结果自动分页和失败重试。
+- 已实现桌面与移动端共用行为，并同步补齐简体中文与 English 文案。
+- 已增加后端上下文与双向游标测试、前端历史状态与分页纯逻辑测试。
+- 全量 Go 测试通过；前端 23 项测试通过；历史原型 35 项测试通过；TypeScript 编译与 Vite 生产构建通过。
+- 按项目约定未使用 Playwright。视觉、滚动手感和响应式效果保留给用户人工浏览器验收。
 
 ## Further Notes
 

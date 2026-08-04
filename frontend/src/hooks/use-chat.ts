@@ -200,7 +200,13 @@ export function useChatRoom(code: string, selfId: string) {
       setPendingMessages((current) => { const next = { ...current }; delete next[clientMessageId]; return next; });
       if (!sendingFromHistory && activePeerRef.current === recipient) setMessages((current) => mergeChatMessage(current, { ...result, deliveryStatus: result.read ? "read" : "sent" }));
       void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
-      if (sendingFromHistory) void loadMessages(recipient).catch(setMessageError);
+      if (sendingFromHistory) {
+        try {
+          await loadMessages(recipient);
+        } catch {
+          // Sending succeeded; the existing history controls can retry loading the latest page.
+        }
+      }
       return result;
     } catch (error) {
       if (!sendingFromHistory) {
