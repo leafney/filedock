@@ -139,6 +139,8 @@ export interface ChatMessagePage {
   items: ChatMessage[];
   previousCursor?: number;
   hasMoreBefore: boolean;
+  nextCursor?: number;
+  hasMoreAfter: boolean;
   currentReadSequence: number;
   peerReadSequence: number;
 }

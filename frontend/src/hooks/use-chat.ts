@@ -5,6 +5,7 @@ import { streamEventName, type StreamEventMessage } from "./use-stream";
 import { deleteChatMessage, forwardChatMessage, getChatMessages, listChatConversations, markChatRead, recallChatMessage, searchChatMessages, sendChatMessage } from "../services/api";
 import type { ChatConversation, ChatMessage, ChatMessagePage, ChatSearchPage } from "../types/domain";
 import { mergeChatMessage, mergeChatMessages, markChatMessagesRead, mergeReadSequence, newChatClientMessageID } from "../utils/chat";
+import { addPendingHistoryMessage, containsHistoryTarget, isIncomingForHistory, mergeChatMessagePage, type ChatHistoryAnchor, type ChatHistoryMode, type ChatPageDirection } from "../utils/chat-history";
 
 interface ChatPayload extends Record<string, unknown> {
   roomCode?: string;
@@ -60,74 +61,153 @@ export function useChatRoom(code: string, selfId: string) {
   const [messagePage, setMessagePage] = useState<ChatMessagePage>();
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState<unknown>();
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const [newerError, setNewerError] = useState<unknown>();
   const [pendingMessages, setPendingMessages] = useState<Record<string, ChatMessage>>({});
+  const [historyMode, setHistoryMode] = useState<ChatHistoryMode>("live");
+  const [historyAnchor, setHistoryAnchor] = useState<ChatHistoryAnchor>();
+  const [pendingHistoryMessageIds, setPendingHistoryMessageIds] = useState<string[]>([]);
   const activePeerRef = useRef(peerUserId);
+  const historyModeRef = useRef<ChatHistoryMode>("live");
+  const historyAnchorRef = useRef<ChatHistoryAnchor>();
   const messageLoadGeneration = useRef(0);
+  const loadingNewerRef = useRef(false);
   activePeerRef.current = peerUserId;
   const conversationsQuery = useQuery({ queryKey: ["chat-conversations", code], queryFn: () => listChatConversations(code), enabled: Boolean(code), retry: false, staleTime: 2_000 });
 
-  const loadMessages = useCallback(async (peer: string, params: { beforeSequence?: number; aroundSequence?: number } = {}) => {
+  const updateHistoryMode = useCallback((mode: ChatHistoryMode, anchor?: ChatHistoryAnchor) => {
+    historyModeRef.current = mode;
+    historyAnchorRef.current = anchor;
+    setHistoryMode(mode);
+    setHistoryAnchor(anchor);
+  }, []);
+
+  const clearPendingHistoryMessages = useCallback(() => setPendingHistoryMessageIds([]), []);
+
+  const loadMessages = useCallback(async (peer: string, params: { beforeSequence?: number; afterSequence?: number; aroundSequence?: number } = {}) => {
+    const direction: ChatPageDirection = params.beforeSequence !== undefined ? "before" : params.afterSequence !== undefined ? "after" : "replace";
+    if (direction === "replace") messageLoadGeneration.current += 1;
     const generation = messageLoadGeneration.current;
     const isCurrentConversation = () => activePeerRef.current === peer && messageLoadGeneration.current === generation;
     setLoadingMessages(true);
     setMessageError(undefined);
     try {
-      const page = await getChatMessages(code, peer, { ...params, limit: 30 });
+      const page = await getChatMessages(code, peer, { ...params, limit: params.aroundSequence !== undefined ? 31 : 30 });
       if (!isCurrentConversation()) return page;
       const loadedItems = normalizeMessages(page.items);
-      if (params.beforeSequence !== undefined) {
-        setMessages((current) => mergeChatMessages(loadedItems, current));
-      } else {
-        setMessages(loadedItems);
+      const normalizedPage = { ...page, items: loadedItems };
+      setMessages((current) => direction === "before" ? mergeChatMessages(loadedItems, current) : direction === "after" ? mergeChatMessages(current, loadedItems) : loadedItems);
+      setMessagePage((current) => mergeChatMessagePage(current, normalizedPage, direction));
+      if (direction === "replace" && params.aroundSequence === undefined) {
+        updateHistoryMode("live");
+        clearPendingHistoryMessages();
       }
-      setMessagePage((current) => params.beforeSequence !== undefined && current ? { ...page, items: mergeChatMessages(loadedItems, current.items) } : { ...page, items: loadedItems });
-      return page;
+      return normalizedPage;
     } catch (error) {
       if (isCurrentConversation()) setMessageError(error);
       throw error;
     } finally {
       if (isCurrentConversation()) setLoadingMessages(false);
     }
-  }, [code]);
+  }, [clearPendingHistoryMessages, code, updateHistoryMode]);
 
   const openConversation = useCallback((peer: string) => {
     messageLoadGeneration.current += 1;
     activePeerRef.current = peer || undefined;
+    setMessagePage(undefined);
+    setLoadingMessages(false);
+    setMessageError(undefined);
+    setLoadingNewer(false);
+    setNewerError(undefined);
+    loadingNewerRef.current = false;
+    updateHistoryMode("live");
+    clearPendingHistoryMessages();
     if (!peer) {
       setPeerUserId(undefined);
       setMessages([]);
-      setMessagePage(undefined);
-      setLoadingMessages(false);
-      setMessageError(undefined);
       return;
     }
     setPeerUserId(peer);
     setMessages([]);
-    setMessagePage(undefined);
     void loadMessages(peer).catch(() => undefined);
+  }, [clearPendingHistoryMessages, loadMessages, updateHistoryMode]);
+
+  const locateMessage = useCallback(async (message: ChatMessage) => {
+    const peer = activePeerRef.current;
+    if (!peer) throw new Error("chat recipient is required");
+    const previousMode = historyModeRef.current;
+    const previousAnchor = historyAnchorRef.current;
+    updateHistoryMode("locating", previousAnchor);
+    try {
+      const page = await loadMessages(peer, { aroundSequence: message.sequence });
+      if (!containsHistoryTarget(page, message.sequence, message.messageId)) throw new Error("chat history target unavailable");
+      const anchor = { messageId: message.messageId, sequence: message.sequence, createdAt: message.createdAt };
+      if (page.hasMoreAfter) updateHistoryMode("history", anchor);
+      else updateHistoryMode("live");
+      clearPendingHistoryMessages();
+      return page;
+    } catch (error) {
+      updateHistoryMode(previousMode, previousAnchor);
+      throw error;
+    }
+  }, [clearPendingHistoryMessages, loadMessages, updateHistoryMode]);
+
+  const returnLatest = useCallback(async () => {
+    const peer = activePeerRef.current;
+    if (!peer) return undefined;
+    return loadMessages(peer);
   }, [loadMessages]);
+
+  const loadNewer = useCallback(async () => {
+    const peer = activePeerRef.current;
+    const page = messagePage;
+    if (!peer || historyModeRef.current !== "history" || !page?.hasMoreAfter || !page.nextCursor || loadingNewerRef.current) return undefined;
+    loadingNewerRef.current = true;
+    setLoadingNewer(true);
+    setNewerError(undefined);
+    try {
+      const result = await loadMessages(peer, { afterSequence: page.nextCursor });
+      if (!result.hasMoreAfter) {
+        updateHistoryMode("live");
+        clearPendingHistoryMessages();
+      }
+      return result;
+    } catch (error) {
+      setNewerError(error);
+      return undefined;
+    } finally {
+      loadingNewerRef.current = false;
+      setLoadingNewer(false);
+    }
+  }, [clearPendingHistoryMessages, loadMessages, messagePage, updateHistoryMode]);
 
   const send = useCallback(async (contentText: string, recipient = peerUserId) => {
     if (!recipient) throw new Error("chat recipient is required");
+    const sendingFromHistory = historyModeRef.current === "history" && activePeerRef.current === recipient;
     const clientMessageId = newChatClientMessageID();
     const optimistic: ChatMessage = { roomCode: code, conversationId: "", messageId: `optimistic-${clientMessageId}`, clientMessageId, senderUserId: selfId, recipientUserId: recipient, senderDisplayName: "", contentText, isForwarded: false, sequence: Number.MAX_SAFE_INTEGER, createdAt: Math.floor(Date.now() / 1000), read: false, canCopy: true, canRecall: false, canRecallAndEdit: false, canForward: true, canDelete: true, deliveryStatus: "sending", optimistic: true };
-    setPendingMessages((current) => ({ ...current, [clientMessageId]: optimistic }));
-    if (activePeerRef.current === recipient) setMessages((current) => [...current, optimistic]);
+    if (!sendingFromHistory) {
+      setPendingMessages((current) => ({ ...current, [clientMessageId]: optimistic }));
+      if (activePeerRef.current === recipient) setMessages((current) => [...current, optimistic]);
+    }
     try {
       const result = await sendChatMessage(code, recipient, clientMessageId, contentText);
       setPendingMessages((current) => { const next = { ...current }; delete next[clientMessageId]; return next; });
-      if (activePeerRef.current === recipient) setMessages((current) => mergeChatMessage(current, { ...result, deliveryStatus: result.read ? "read" : "sent" }));
+      if (!sendingFromHistory && activePeerRef.current === recipient) setMessages((current) => mergeChatMessage(current, { ...result, deliveryStatus: result.read ? "read" : "sent" }));
       void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
+      if (sendingFromHistory) void loadMessages(recipient).catch(setMessageError);
       return result;
     } catch (error) {
-      setPendingMessages((current) => ({ ...current, [clientMessageId]: { ...optimistic, deliveryStatus: "failed" } }));
-      if (activePeerRef.current === recipient) setMessages((current) => current.map((message) => message.clientMessageId === clientMessageId ? { ...message, deliveryStatus: "failed" } : message));
+      if (!sendingFromHistory) {
+        setPendingMessages((current) => ({ ...current, [clientMessageId]: { ...optimistic, deliveryStatus: "failed" } }));
+        if (activePeerRef.current === recipient) setMessages((current) => current.map((message) => message.clientMessageId === clientMessageId ? { ...message, deliveryStatus: "failed" } : message));
+      }
       throw error;
     }
-  }, [code, peerUserId, queryClient, selfId]);
+  }, [code, loadMessages, peerUserId, queryClient, selfId]);
 
   const markRead = useCallback(async (sequence: number) => {
-    if (!peerUserId) return;
+    if (!peerUserId || historyModeRef.current !== "live") return;
     const state = await markChatRead(code, peerUserId, sequence);
     setMessagePage((current) => current ? { ...current, currentReadSequence: mergeReadSequence(current.currentReadSequence, state.lastReadSequence) } : current);
     void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
@@ -167,7 +247,13 @@ export function useChatRoom(code: string, selfId: string) {
         const item = eventMessage(payload);
         const peer = activePeerRef.current;
         const belongsToActiveConversation = Boolean(item && peer && ((item.senderUserId === peer && item.recipientUserId === selfId) || (item.senderUserId === selfId && item.recipientUserId === peer)));
-        if (item && belongsToActiveConversation) setMessages((current) => mergeChatMessage(current, item));
+        if (item && belongsToActiveConversation) {
+          if (historyModeRef.current === "history" && isIncomingForHistory(item, peer, selfId)) {
+            setPendingHistoryMessageIds((current) => addPendingHistoryMessage(current, item.messageId));
+          } else if (historyModeRef.current !== "locating") {
+            setMessages((current) => mergeChatMessage(current, item));
+          }
+        }
         void queryClient.invalidateQueries({ queryKey: ["chat-conversations", code] });
       } else if (event.type === "chat.message_recalled" && payload.messageId) {
         setMessages((current) => current.map((message) => message.messageId === payload.messageId ? { ...message, contentText: "", recalledAt: payload.recalledAt, canCopy: false, canForward: false } : message));
@@ -188,5 +274,5 @@ export function useChatRoom(code: string, selfId: string) {
 
   const conversationItems = conversationsQuery.data?.items ?? [];
   const visibleMessages = useMemo(() => mergeChatMessages(messages, Object.values(pendingMessages).filter((message) => message.recipientUserId === peerUserId || message.senderUserId === peerUserId)), [messages, peerUserId, pendingMessages]);
-  return { conversations: conversationItems, conversationsQuery, peerUserId, openConversation, messages: visibleMessages, messagePage, loadingMessages, messageError, loadMessages, loadOlder: () => peerUserId && messagePage?.hasMoreBefore && messagePage.previousCursor ? loadMessages(peerUserId, { beforeSequence: messagePage.previousCursor }) : Promise.resolve(undefined), send, markRead, recall, remove, forward, search, refresh: () => void conversationsQuery.refetch() };
+  return { conversations: conversationItems, conversationsQuery, peerUserId, openConversation, messages: visibleMessages, messagePage, loadingMessages, messageError, loadingNewer, newerError, historyMode, historyAnchor, pendingHistoryMessageCount: pendingHistoryMessageIds.length, locateMessage, returnLatest, loadMessages, loadOlder: () => peerUserId && messagePage?.hasMoreBefore && messagePage.previousCursor ? loadMessages(peerUserId, { beforeSequence: messagePage.previousCursor }) : Promise.resolve(undefined), loadNewer, send, markRead, recall, remove, forward, search, refresh: () => void conversationsQuery.refetch() };
 }

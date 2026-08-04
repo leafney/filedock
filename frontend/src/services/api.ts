@@ -114,6 +114,7 @@ export function listChatConversations(code: string) {
 
 export interface ChatHistoryParams {
   beforeSequence?: number;
+  afterSequence?: number;
   aroundSequence?: number;
   limit?: number;
 }
