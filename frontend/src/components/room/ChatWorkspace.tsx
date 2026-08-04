@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock3, Copy, Edit3, Forward, History, Loader2, MessageSquare, Search, Send, Trash2, Undo2, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowLeft, Check, CheckCheck, Clock3, Copy, Edit3, Forward, History, Loader2, MessageSquare, Search, Send, Trash2, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,6 +8,7 @@ import type { ChatMessage, RoomMember } from "../../types/domain";
 import { chatMessageCapabilities, chatDateKey, chatTimeBucket, isChatNearBottom, shouldMarkChatRead } from "../../utils/chat";
 import { readChatDraft, writeChatDraft } from "../../utils/chat-drafts";
 import { copyText } from "../../utils/clipboard";
+import { appendUniqueChatMessages } from "../../utils/chat-history";
 
 interface Props {
   roomId: string;
@@ -41,12 +42,18 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
   const [historyResults, setHistoryResults] = useState<ChatMessage[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<unknown>();
+  const [historyResultQuery, setHistoryResultQuery] = useState("");
+  const [historyPreviousCursor, setHistoryPreviousCursor] = useState<number>();
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyMoreError, setHistoryMoreError] = useState<unknown>();
   const [forwardMessage, setForwardMessage] = useState<ChatMessage>();
   const [forwardTargets, setForwardTargets] = useState<string[]>([]);
   const [highlightMessageId, setHighlightMessageId] = useState<string>();
   const listRef = useRef<HTMLDivElement>(null);
   const wasNearBottom = useRef(true);
   const handledLaunchToken = useRef<string>();
+  const historySearchGeneration = useRef(0);
 
   useEffect(() => {
     if (!desktop) return;
@@ -72,6 +79,8 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
   const conversationReady = Boolean(activePeerUserId && chat.peerUserId === activePeerUserId);
   const draft = desktop && activePeerUserId ? desktopDrafts[activePeerUserId] ?? "" : mobileDraft;
   const unreadByPeer = useMemo(() => Object.fromEntries(peers.map(({ member, conversation }) => [member.userId, conversation?.unreadCount ?? 0])), [peers]);
+  const historyActive = chat.historyMode === "history" && chat.historyAnchor != null;
+  const historyAnchorTime = useMemo(() => chat.historyAnchor ? new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(chat.historyAnchor.createdAt * 1000)) : "", [chat.historyAnchor]);
   const activePeerUserIdRef = useRef(activePeerUserId);
   activePeerUserIdRef.current = activePeerUserId;
 
@@ -100,6 +109,12 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
     setHistoryQuery("");
     setHistoryResults([]);
     setHistoryError(undefined);
+    setHistoryResultQuery("");
+    setHistoryPreviousCursor(undefined);
+    setHistoryHasMore(false);
+    setHistoryLoadingMore(false);
+    setHistoryMoreError(undefined);
+    historySearchGeneration.current += 1;
     setForwardMessage(undefined);
     setForwardTargets([]);
     setActionError(undefined);
@@ -108,11 +123,11 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
   useEffect(() => {
     const element = listRef.current;
     if (!element) return;
-    if (wasNearBottom.current) element.scrollTop = element.scrollHeight;
-  }, [activePeerUserId, chat.messages.length]);
+    if (chat.historyMode === "live" && wasNearBottom.current) element.scrollTop = element.scrollHeight;
+  }, [activePeerUserId, chat.historyMode, chat.messages.length]);
 
   useEffect(() => {
-    if (!peer || !conversationReady || chat.messages.length === 0) return;
+    if (!peer || !conversationReady || chat.historyMode !== "live" || chat.messages.length === 0) return;
     const lastIncoming = [...chat.messages].reverse().find((message) => message.recipientUserId === selfId && !message.recalledAt);
     if (!lastIncoming) return;
     const mark = () => {
@@ -122,36 +137,78 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
     window.addEventListener("focus", mark);
     document.addEventListener("visibilitychange", mark);
     return () => { window.removeEventListener("focus", mark); document.removeEventListener("visibilitychange", mark); };
-  }, [chat.markRead, chat.messages, chat.peerUserId, conversationReady, peer, selfId]);
+  }, [chat.historyMode, chat.markRead, chat.messages, chat.peerUserId, conversationReady, peer, selfId]);
 
   useEffect(() => {
     if (!highlightMessageId) return;
-    const timer = window.setTimeout(() => {
+    const frame = window.requestAnimationFrame(() => {
       const target = listRef.current?.querySelector<HTMLElement>(`[data-message-id="${highlightMessageId}"]`);
-      target?.scrollIntoView({ block: "center", behavior: "smooth" });
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target?.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
       target?.classList.add("is-highlighted");
-      window.setTimeout(() => target?.classList.remove("is-highlighted"), 1_600);
+      window.setTimeout(() => target?.classList.remove("is-highlighted"), 2_000);
       setHighlightMessageId(undefined);
-    }, 0);
-    return () => window.clearTimeout(timer);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [chat.messages, highlightMessageId]);
 
   useEffect(() => {
     if (!historyOpen || !chat.peerUserId) return undefined;
-    const timer = window.setTimeout(() => {
-      const query = historyQuery.trim();
-      if (!query) {
-        setHistoryResults([]);
-        setHistoryLoading(false);
-        setHistoryError(undefined);
-        return;
-      }
-      setHistoryLoading(true);
+    const generation = ++historySearchGeneration.current;
+    const query = historyQuery.trim();
+    if (!query) {
+      setHistoryResults([]);
+      setHistoryResultQuery("");
+      setHistoryPreviousCursor(undefined);
+      setHistoryHasMore(false);
+      setHistoryLoading(false);
+      setHistoryLoadingMore(false);
       setHistoryError(undefined);
-      void chat.search(query).then((page) => setHistoryResults(page.items)).catch(setHistoryError).finally(() => setHistoryLoading(false));
+      setHistoryMoreError(undefined);
+      return undefined;
+    }
+    if (query === historyResultQuery) return undefined;
+    setHistoryResults([]);
+    setHistoryPreviousCursor(undefined);
+    setHistoryHasMore(false);
+    setHistoryLoadingMore(false);
+    setHistoryError(undefined);
+    setHistoryMoreError(undefined);
+    const timer = window.setTimeout(() => {
+      setHistoryLoading(true);
+      void chat.search(query).then((page) => {
+        if (generation !== historySearchGeneration.current) return;
+        setHistoryResults(page.items);
+        setHistoryResultQuery(query);
+        setHistoryPreviousCursor(page.previousCursor);
+        setHistoryHasMore(page.hasMoreBefore);
+      }).catch((error) => {
+        if (generation === historySearchGeneration.current) setHistoryError(error);
+      }).finally(() => {
+        if (generation === historySearchGeneration.current) setHistoryLoading(false);
+      });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [chat.peerUserId, chat.search, historyOpen, historyQuery]);
+  }, [chat.peerUserId, chat.search, historyOpen, historyQuery, historyResultQuery]);
+
+  const loadMoreHistoryResults = async () => {
+    const query = historyQuery.trim();
+    if (!query || !historyHasMore || !historyPreviousCursor || historyLoading || historyLoadingMore) return;
+    const generation = historySearchGeneration.current;
+    setHistoryLoadingMore(true);
+    setHistoryMoreError(undefined);
+    try {
+      const page = await chat.search(query, historyPreviousCursor);
+      if (generation !== historySearchGeneration.current) return;
+      setHistoryResults((current) => appendUniqueChatMessages(current, page.items));
+      setHistoryPreviousCursor(page.previousCursor);
+      setHistoryHasMore(page.hasMoreBefore);
+    } catch (error) {
+      if (generation === historySearchGeneration.current) setHistoryMoreError(error);
+    } finally {
+      if (generation === historySearchGeneration.current) setHistoryLoadingMore(false);
+    }
+  };
 
   const updateDraft = (peerUserId: string, value: string) => {
     if (!desktop) {
@@ -229,12 +286,40 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
 
   const chooseHistoryResult = async (message: ChatMessage) => {
     if (!chat.peerUserId) return;
+    setHistoryError(undefined);
     try {
-      await chat.loadMessages(chat.peerUserId, { aroundSequence: message.sequence });
+      const page = await chat.locateMessage(message);
+      if (!page) return;
       setHistoryOpen(false);
       setHighlightMessageId(message.messageId);
+    } catch {
+      setHistoryResults((current) => current.filter((item) => item.messageId !== message.messageId));
+      setHistoryError(new Error(t("chat.messageUnavailable")));
+    }
+  };
+
+  const loadOlderMessages = async () => {
+    const element = listRef.current;
+    const previousHeight = element?.scrollHeight ?? 0;
+    const previousTop = element?.scrollTop ?? 0;
+    try {
+      await chat.loadOlder();
+      window.requestAnimationFrame(() => {
+        if (element) element.scrollTop = previousTop + element.scrollHeight - previousHeight;
+      });
+    } catch {
+      // The hook exposes the localized API error through messageError.
+    }
+  };
+
+  const returnToLatest = async () => {
+    setActionError(undefined);
+    try {
+      await chat.returnLatest();
+      wasNearBottom.current = true;
+      window.requestAnimationFrame(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; });
     } catch (error) {
-      setHistoryError(error);
+      setActionError(error);
     }
   };
 
@@ -268,7 +353,7 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
     </aside>;
   }
 
-  return <aside className="room-chat-workspace room-chat-conversation">
+  return <aside className={`room-chat-workspace room-chat-conversation ${historyActive ? "is-history-mode" : ""}`}>
     <header className="chat-panel-heading chat-active-heading">
       {!desktop && <button className="chat-back-button" type="button" aria-label={t("chat.backToConversations")} onClick={() => { setMenu(undefined); chat.openConversation(""); }}><ArrowLeft aria-hidden="true" /></button>}
       <span className="room-avatar">{peer.displayName.slice(0, 1)}</span>
@@ -278,13 +363,24 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
         {desktop && <button className="chat-close-button" type="button" aria-label={t("chat.closeConversation")} title={t("chat.closeConversation")} onClick={() => { setMenu(undefined); setHistoryOpen(false); setForwardMessage(undefined); onCloseConversation?.(); }}><X aria-hidden="true" /></button>}
       </div>
     </header>
-    <div ref={listRef} className="chat-message-list" onScroll={(event) => { const element = event.currentTarget; wasNearBottom.current = isChatNearBottom(element.scrollTop, element.scrollHeight, element.clientHeight); }} onClick={() => setMenu(undefined)}>
-      {(!conversationReady || chat.loadingMessages) && <p className="chat-state-message">{t("chat.loading")}</p>}
-      {conversationReady && chat.messageError != null && <ErrorNotice error={chat.messageError} />}
-      {conversationReady && !chat.loadingMessages && chat.messages.length === 0 && <p className="chat-empty-state">{t("chat.empty")}</p>}
-      {conversationReady && chat.messagePage?.hasMoreBefore && <button className="chat-load-older" type="button" onClick={() => void chat.loadOlder()}>{t("chat.loadOlder")}</button>}
-      {conversationReady && chat.messages.map((message, index) => <ChatMessageRow key={message.messageId || message.clientMessageId} message={message} selfId={selfId} previous={chat.messages[index - 1]} onContextMenu={openMenu} onLongPress={(point, item) => openMenuAt(point, item)} />)}
-      {copied && <span className="chat-copy-toast">{t("chat.copied")}</span>}
+    {historyActive && <div className="chat-history-status" role="status"><Clock3 aria-hidden="true" /><span>{desktop ? t("chat.viewingHistoryAround", { time: historyAnchorTime }) : t("chat.viewingHistory")}</span><button type="button" onClick={() => void returnToLatest()}>{t("chat.returnLatest")}</button></div>}
+    <div className="chat-message-stage">
+      <div ref={listRef} className="chat-message-list" onScroll={(event) => {
+        const element = event.currentTarget;
+        wasNearBottom.current = isChatNearBottom(element.scrollTop, element.scrollHeight, element.clientHeight);
+        const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+        if (historyActive && distanceToBottom <= 120 && !chat.newerError) void chat.loadNewer();
+      }} onClick={() => setMenu(undefined)}>
+        {(!conversationReady || (chat.loadingMessages && !chat.loadingNewer)) && <p className="chat-state-message">{t("chat.loading")}</p>}
+        {conversationReady && chat.messageError != null && <ErrorNotice error={chat.messageError} />}
+        {conversationReady && !chat.loadingMessages && chat.messages.length === 0 && <p className="chat-empty-state">{t("chat.empty")}</p>}
+        {conversationReady && chat.messagePage?.hasMoreBefore && <button className="chat-load-older" type="button" disabled={chat.loadingMessages} onClick={() => void loadOlderMessages()}>{t("chat.loadMore")}</button>}
+        {conversationReady && chat.messages.map((message, index) => <ChatMessageRow key={message.messageId || message.clientMessageId} message={message} selfId={selfId} previous={chat.messages[index - 1]} onContextMenu={openMenu} onLongPress={(point, item) => openMenuAt(point, item)} />)}
+        {chat.loadingNewer && <p className="chat-load-newer-state"><Loader2 className="is-spinning" aria-hidden="true" />{t("chat.loadingNewer")}</p>}
+        {chat.newerError != null && <div className="chat-load-newer-state"><span>{t("chat.loadNewerFailed")}</span><button type="button" onClick={() => void chat.loadNewer()}>{t("chat.retry")}</button></div>}
+        {copied && <span className="chat-copy-toast">{t("chat.copied")}</span>}
+      </div>
+      {historyActive && <button className="chat-return-latest" type="button" onClick={() => void returnToLatest()}><ArrowDown aria-hidden="true" />{chat.pendingHistoryMessageCount > 99 ? t("chat.newMessagesOverflow") : chat.pendingHistoryMessageCount > 0 ? t("chat.newMessages", { count: chat.pendingHistoryMessageCount }) : t("chat.returnLatest")}</button>}
     </div>
     {actionError != null && <div className="chat-action-error"><ErrorNotice error={actionError} /></div>}
     <form className="chat-composer" onSubmit={(event) => void submit(event)}>
@@ -292,7 +388,7 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
       <div><span>{t("chat.inputHint")}</span><button type="submit" disabled={!conversationReady || !draft.trim()}><Send aria-hidden="true" />{t("chat.send")}</button></div>
     </form>
     {menu && <ChatContextMenu menu={menu} selfId={selfId} onClose={() => setMenu(undefined)} onCopy={() => void copyMessage(menu.message)} onRecall={() => void (async () => { setMenu(undefined); try { await chat.recall(menu.message.messageId); } catch (error) { setActionError(error); } })()} onRecallAndEdit={() => void runRecallAndEdit(menu.message)} onForward={() => { setMenu(undefined); setForwardMessage(menu.message); setForwardTargets([]); }} onDelete={() => void deleteMessage(menu.message)} />}
-    {historyOpen && <ChatHistoryDrawer query={historyQuery} results={historyResults} loading={historyLoading} error={historyError} onQueryChange={setHistoryQuery} onClose={() => setHistoryOpen(false)} onSelect={(message) => void chooseHistoryResult(message)} />}
+    {historyOpen && <ChatHistoryDrawer query={historyQuery} results={historyResults} loading={historyLoading} loadingMore={historyLoadingMore} hasMore={historyHasMore} error={historyError} moreError={historyMoreError} onQueryChange={setHistoryQuery} onLoadMore={() => void loadMoreHistoryResults()} onClose={() => setHistoryOpen(false)} onSelect={(message) => void chooseHistoryResult(message)} />}
     {forwardMessage && <ChatForwardPicker message={forwardMessage} members={members} selfId={selfId} selected={forwardTargets} onSelectedChange={setForwardTargets} onClose={() => setForwardMessage(undefined)} onSubmit={async () => { try { await chat.forward(forwardMessage.messageId, forwardTargets); setForwardMessage(undefined); } catch (error) { setActionError(error); } }} />}
   </aside>;
 }
@@ -321,7 +417,7 @@ function ChatMessageRow({ message, selfId, previous, onContextMenu, onLongPress 
   </>;
 }
 
-function ChatHistoryDrawer({ query, results, loading, error, onQueryChange, onClose, onSelect }: { query: string; results: ChatMessage[]; loading: boolean; error?: unknown; onQueryChange: (value: string) => void; onClose: () => void; onSelect: (message: ChatMessage) => void }) {
+function ChatHistoryDrawer({ query, results, loading, loadingMore, hasMore, error, moreError, onQueryChange, onLoadMore, onClose, onSelect }: { query: string; results: ChatMessage[]; loading: boolean; loadingMore: boolean; hasMore: boolean; error?: unknown; moreError?: unknown; onQueryChange: (value: string) => void; onLoadMore: () => void; onClose: () => void; onSelect: (message: ChatMessage) => void }) {
   const { t } = useTranslation();
   return <div className="chat-history-overlay" role="dialog" aria-modal="true" aria-label={t("chat.history")}>
     <section className="chat-history-drawer">
@@ -331,7 +427,14 @@ function ChatHistoryDrawer({ query, results, loading, error, onQueryChange, onCl
       {error != null && <div className="chat-history-error"><ErrorNotice error={error} /></div>}
       {!loading && error == null && query.trim() === "" && <p className="chat-history-state">{t("chat.historyHint")}</p>}
       {!loading && error == null && query.trim() !== "" && results.length === 0 && <p className="chat-history-state">{t("chat.searchNoResults")}</p>}
-      <div className="chat-history-results">{results.map((message) => <button key={message.messageId} type="button" onClick={() => onSelect(message)}><strong>{message.senderDisplayName}</strong><time>{chatTimeBucket(message.createdAt)}</time><span>{message.recalledAt ? t("chat.messageUnavailable") : message.contentText}</span></button>)}</div>
+      <div className="chat-history-results" onScroll={(event) => {
+        const element = event.currentTarget;
+        if (hasMore && !loadingMore && moreError == null && element.scrollHeight - element.scrollTop - element.clientHeight <= 80) onLoadMore();
+      }}>
+        {results.map((message) => <button key={message.messageId} type="button" onClick={() => onSelect(message)}><strong>{message.senderDisplayName}</strong><time>{chatTimeBucket(message.createdAt)}</time><span>{message.recalledAt ? t("chat.messageUnavailable") : message.contentText}</span></button>)}
+        {loadingMore && <p className="chat-history-more"><Loader2 className="is-spinning" aria-hidden="true" />{t("chat.loadingMoreResults")}</p>}
+        {moreError != null && <div className="chat-history-more"><span>{t("chat.loadMoreResultsFailed")}</span><button type="button" onClick={onLoadMore}>{t("chat.retry")}</button></div>}
+      </div>
     </section>
   </div>;
 }

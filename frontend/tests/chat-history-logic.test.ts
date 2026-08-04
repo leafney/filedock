@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ChatMessage, ChatMessagePage } from "../src/types/domain";
-import { addPendingHistoryMessage, containsHistoryTarget, isIncomingForHistory, mergeChatMessagePage } from "../src/utils/chat-history";
+import { addPendingHistoryMessage, appendUniqueChatMessages, containsHistoryTarget, historyModeAfterPage, isIncomingForHistory, mergeChatMessagePage } from "../src/utils/chat-history";
 
 function message(sequence: number, overrides: Partial<ChatMessage> = {}): ChatMessage {
   return {
@@ -51,6 +51,16 @@ describe("聊天历史定位逻辑", () => {
     expect(isIncomingForHistory(message(1), "peer", "self")).toBe(true);
     expect(isIncomingForHistory(message(1, { senderUserId: "self", recipientUserId: "peer" }), "peer", "self")).toBe(false);
     expect(isIncomingForHistory(message(1), "other", "self")).toBe(false);
+  });
+
+  test("搜索分页保留倒序顺序并按消息标识去重", () => {
+    const merged = appendUniqueChatMessages([message(5), message(4)], [message(4), message(3)]);
+    expect(merged.map((item) => item.sequence)).toEqual([5, 4, 3]);
+  });
+
+  test("仍有更新消息时保持历史模式，到达最新后恢复实时模式", () => {
+    expect(historyModeAfterPage(true)).toBe("history");
+    expect(historyModeAfterPage(false)).toBe("live");
   });
 
   test("定位响应必须包含未撤回的精确目标", () => {

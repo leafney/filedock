@@ -26,6 +26,15 @@ export function addPendingHistoryMessage(current: string[], messageId: string): 
   return current.includes(messageId) ? current : [...current, messageId];
 }
 
+export function appendUniqueChatMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const seen = new Set(current.map((message) => message.messageId));
+  return [...current, ...incoming.filter((message) => !seen.has(message.messageId))];
+}
+
+export function historyModeAfterPage(hasMoreAfter: boolean): ChatHistoryMode {
+  return hasMoreAfter ? "history" : "live";
+}
+
 export function isIncomingForHistory(message: ChatMessage, peerUserId: string | undefined, selfId: string): boolean {
   return Boolean(peerUserId && message.senderUserId === peerUserId && message.recipientUserId === selfId);
 }

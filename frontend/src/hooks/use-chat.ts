@@ -5,7 +5,7 @@ import { streamEventName, type StreamEventMessage } from "./use-stream";
 import { deleteChatMessage, forwardChatMessage, getChatMessages, listChatConversations, markChatRead, recallChatMessage, searchChatMessages, sendChatMessage } from "../services/api";
 import type { ChatConversation, ChatMessage, ChatMessagePage, ChatSearchPage } from "../types/domain";
 import { mergeChatMessage, mergeChatMessages, markChatMessagesRead, mergeReadSequence, newChatClientMessageID } from "../utils/chat";
-import { addPendingHistoryMessage, containsHistoryTarget, isIncomingForHistory, mergeChatMessagePage, type ChatHistoryAnchor, type ChatHistoryMode, type ChatPageDirection } from "../utils/chat-history";
+import { addPendingHistoryMessage, containsHistoryTarget, historyModeAfterPage, isIncomingForHistory, mergeChatMessagePage, type ChatHistoryAnchor, type ChatHistoryMode, type ChatPageDirection } from "../utils/chat-history";
 
 interface ChatPayload extends Record<string, unknown> {
   roomCode?: string;
@@ -71,6 +71,7 @@ export function useChatRoom(code: string, selfId: string) {
   const historyModeRef = useRef<ChatHistoryMode>("live");
   const historyAnchorRef = useRef<ChatHistoryAnchor>();
   const messageLoadGeneration = useRef(0);
+  const historyLocateGeneration = useRef(0);
   const loadingNewerRef = useRef(false);
   activePeerRef.current = peerUserId;
   const conversationsQuery = useQuery({ queryKey: ["chat-conversations", code], queryFn: () => listChatConversations(code), enabled: Boolean(code), retry: false, staleTime: 2_000 });
@@ -104,7 +105,7 @@ export function useChatRoom(code: string, selfId: string) {
       }
       return normalizedPage;
     } catch (error) {
-      if (isCurrentConversation()) setMessageError(error);
+      if (isCurrentConversation() && params.afterSequence === undefined && params.aroundSequence === undefined) setMessageError(error);
       throw error;
     } finally {
       if (isCurrentConversation()) setLoadingMessages(false);
@@ -113,6 +114,7 @@ export function useChatRoom(code: string, selfId: string) {
 
   const openConversation = useCallback((peer: string) => {
     messageLoadGeneration.current += 1;
+    historyLocateGeneration.current += 1;
     activePeerRef.current = peer || undefined;
     setMessagePage(undefined);
     setLoadingMessages(false);
@@ -137,16 +139,19 @@ export function useChatRoom(code: string, selfId: string) {
     if (!peer) throw new Error("chat recipient is required");
     const previousMode = historyModeRef.current;
     const previousAnchor = historyAnchorRef.current;
+    const generation = ++historyLocateGeneration.current;
     updateHistoryMode("locating", previousAnchor);
     try {
       const page = await loadMessages(peer, { aroundSequence: message.sequence });
+      if (generation !== historyLocateGeneration.current || activePeerRef.current !== peer) return undefined;
       if (!containsHistoryTarget(page, message.sequence, message.messageId)) throw new Error("chat history target unavailable");
       const anchor = { messageId: message.messageId, sequence: message.sequence, createdAt: message.createdAt };
-      if (page.hasMoreAfter) updateHistoryMode("history", anchor);
-      else updateHistoryMode("live");
+      const nextMode = historyModeAfterPage(page.hasMoreAfter);
+      updateHistoryMode(nextMode, nextMode === "history" ? anchor : undefined);
       clearPendingHistoryMessages();
       return page;
     } catch (error) {
+      if (generation !== historyLocateGeneration.current || activePeerRef.current !== peer) return undefined;
       updateHistoryMode(previousMode, previousAnchor);
       throw error;
     }
