@@ -8,7 +8,7 @@ export const notificationQueryKey = ["notifications"] as const;
 
 export function useNotifications(session: Session | undefined) {
   const query = useInfiniteQuery({
-    queryKey: notificationQueryKey,
+    queryKey: [...notificationQueryKey, session?.userId ?? "anonymous"],
     queryFn: ({ pageParam }) => listNotifications(pageParam),
     initialPageParam: "",
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,

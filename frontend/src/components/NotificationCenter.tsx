@@ -1,7 +1,7 @@
 import { MessageOutlined, UserAddOutlined } from "@ant-design/icons";
 import { Alert, Avatar, Button, Drawer, Empty, Space } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -36,6 +36,14 @@ export function NotificationCenterProvider({ session, children }: { session?: Se
   const [processingKey, setProcessingKey] = useState<string>();
   const [actionError, setActionError] = useState<unknown>();
   const triggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (session?.userId) return;
+    setDrawerOpen(false);
+    setProcessingKey(undefined);
+    setActionError(undefined);
+    triggerRef.current = null;
+  }, [session?.userId]);
 
   const open = (trigger: HTMLElement) => {
     triggerRef.current = trigger;

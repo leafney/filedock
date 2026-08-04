@@ -177,7 +177,7 @@ func (s *NotificationSvc) listJoinRequests(userID string, now int64) ([]joinRequ
 		Select("request.id AS request_id, request.user_id AS actor_user_id, request.display_name AS actor_display_name, room.code AS room_code, room.title AS room_title, request.created_at, request.expires_at").
 		Joins("JOIN rooms AS room ON room.id = request.room_id").
 		Joins("JOIN room_members AS owner_member ON owner_member.room_id = room.id AND owner_member.user_id = ? AND owner_member.role = ? AND owner_member.status = ?", userID, model.MemberRoleOwner, model.MemberStatusActive).
-		Where("room.owner_user_id = ? AND room.status = ? AND room.expires_at > ?", userID, model.RoomStatusActive, now).
+		Where("room.owner_user_id = ? AND room.join_mode = ? AND room.status = ? AND room.expires_at > ?", userID, model.JoinModeOwnerApproval, model.RoomStatusActive, now).
 		Where("request.status = ? AND request.expires_at > ?", model.JoinRequestPending, now).
 		Find(&rows).Error
 	return rows, err

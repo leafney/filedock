@@ -7,6 +7,7 @@ import (
 	"github.com/leafney/filedock/internal/model"
 	"github.com/leafney/filedock/pkg/errc"
 	"github.com/leafney/filedock/pkg/errx"
+	"gorm.io/gorm"
 )
 
 type notificationFixture struct {
@@ -19,6 +20,7 @@ type notificationFixture struct {
 	requester     Principal
 	room          RoomSnapshot
 	pending       JoinRequestView
+	db            *gorm.DB
 }
 
 func newNotificationFixture(t *testing.T) notificationFixture {
@@ -69,7 +71,7 @@ func newNotificationFixture(t *testing.T) notificationFixture {
 	if err != nil {
 		t.Fatalf("new notification service: %v", err)
 	}
-	return notificationFixture{notifications: notifications, chat: chat, rooms: rooms, owner: owner, guest: guest, third: third, requester: requester, room: room, pending: pending}
+	return notificationFixture{notifications: notifications, chat: chat, rooms: rooms, owner: owner, guest: guest, third: third, requester: requester, room: room, pending: pending, db: db}
 }
 
 func TestNotificationAggregatesApprovalsAndUnreadChats(t *testing.T) {
@@ -211,6 +213,53 @@ func TestNotificationLocalDeletionOnlyAffectsDeletingUser(t *testing.T) {
 	if page.TotalCount != 1 || len(page.Items) != 1 || page.Items[0].Type != NotificationTypeJoinRequest {
 		t.Fatalf("recipient deletion did not clear chat notification: %+v", page)
 	}
+}
+
+func TestNotificationFiltersInvalidRoomAndRequestLifecycle(t *testing.T) {
+	fixture := newNotificationFixture(t)
+	if _, err := fixture.chat.Send(fixture.guest.UserID, fixture.room.RoomCode, fixture.owner.UserID, "lifecycle", "生命周期消息"); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	assertTotal := func(want int64) {
+		t.Helper()
+		page, err := fixture.notifications.List(fixture.owner.UserID, "", 30)
+		if err != nil {
+			t.Fatalf("list notifications: %v", err)
+		}
+		if page.TotalCount != want {
+			t.Fatalf("total count = %d, want %d; page=%+v", page.TotalCount, want, page)
+		}
+	}
+	assertTotal(2)
+
+	if err := fixture.db.Model(&model.Room{}).Where("id = ?", fixture.room.RoomID).Update("status", model.RoomStatusDestroying).Error; err != nil {
+		t.Fatalf("mark room destroying: %v", err)
+	}
+	assertTotal(0)
+
+	if err := fixture.db.Model(&model.Room{}).Where("id = ?", fixture.room.RoomID).Updates(map[string]interface{}{
+		"status":     model.RoomStatusActive,
+		"expires_at": fixture.notifications.now().Add(-time.Second).Unix(),
+	}).Error; err != nil {
+		t.Fatalf("expire room: %v", err)
+	}
+	assertTotal(0)
+
+	if err := fixture.db.Model(&model.Room{}).Where("id = ?", fixture.room.RoomID).Updates(map[string]interface{}{
+		"expires_at": fixture.notifications.now().Add(time.Hour).Unix(),
+		"join_mode":  model.JoinModeOpen,
+	}).Error; err != nil {
+		t.Fatalf("change room join mode: %v", err)
+	}
+	assertTotal(1)
+
+	if err := fixture.db.Model(&model.Room{}).Where("id = ?", fixture.room.RoomID).Update("join_mode", model.JoinModeOwnerApproval).Error; err != nil {
+		t.Fatalf("restore room join mode: %v", err)
+	}
+	if err := fixture.db.Model(&model.JoinRequest{}).Where("id = ?", fixture.pending.RequestID).Update("expires_at", fixture.notifications.now().Add(-time.Second).Unix()).Error; err != nil {
+		t.Fatalf("expire join request: %v", err)
+	}
+	assertTotal(1)
 }
 
 func TestNotificationRejectsInvalidPagination(t *testing.T) {
