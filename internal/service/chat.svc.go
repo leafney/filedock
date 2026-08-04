@@ -16,14 +16,15 @@ import (
 )
 
 const (
-	ChatMessageMaxLength = 2000
-	ChatMessagePageSize  = 30
-	ChatMessageMaxPage   = 100
-	ChatRecallWindow     = 2 * time.Minute
-	ChatRateShortLimit   = 10
-	ChatRateShortWindow  = 10 * time.Second
-	ChatRateLongLimit    = 60
-	ChatRateLongWindow   = time.Minute
+	ChatMessageMaxLength   = 2000
+	ChatMessagePageSize    = 30
+	ChatMessageContextSize = 31
+	ChatMessageMaxPage     = 100
+	ChatRecallWindow       = 2 * time.Minute
+	ChatRateShortLimit     = 10
+	ChatRateShortWindow    = 10 * time.Second
+	ChatRateLongLimit      = 60
+	ChatRateLongWindow     = time.Minute
 )
 
 type ChatSvc struct {
@@ -69,6 +70,7 @@ type ChatConversationSummary struct {
 
 type ChatHistoryQuery struct {
 	BeforeSequence *int64
+	AfterSequence  *int64
 	AroundSequence *int64
 	Limit          int
 }
@@ -77,6 +79,8 @@ type ChatMessagePage struct {
 	Items               []ChatMessageView `json:"items"`
 	PreviousCursor      *int64            `json:"previousCursor,omitempty"`
 	HasMoreBefore       bool              `json:"hasMoreBefore"`
+	NextCursor          *int64            `json:"nextCursor,omitempty"`
+	HasMoreAfter        bool              `json:"hasMoreAfter"`
 	CurrentReadSequence int64             `json:"currentReadSequence"`
 	PeerReadSequence    int64             `json:"peerReadSequence"`
 }
@@ -229,7 +233,7 @@ func (s *ChatSvc) ListMessages(userID, roomCode, peerUserID string, query ChatHi
 	if err := s.validateRecipient(room.ID, userID, peerUserID); err != nil {
 		return ChatMessagePage{}, err
 	}
-	if query.BeforeSequence != nil && query.AroundSequence != nil {
+	if historyDirectionCount(query) > 1 {
 		return ChatMessagePage{}, errcError(errc.ErrParams)
 	}
 	limit := normalizeChatLimit(query.Limit)
@@ -242,10 +246,13 @@ func (s *ChatSvc) ListMessages(userID, roomCode, peerUserID string, query ChatHi
 	}
 	var messages []model.ChatMessage
 	hasMoreBefore := false
+	hasMoreAfter := false
 	if query.AroundSequence != nil {
-		messages, hasMoreBefore, err = s.loadAroundMessages(conversation.ID, userID, *query.AroundSequence, limit)
+		messages, hasMoreBefore, hasMoreAfter, err = s.loadAroundMessages(conversation.ID, userID, *query.AroundSequence)
+	} else if query.AfterSequence != nil {
+		messages, hasMoreBefore, hasMoreAfter, err = s.loadAfterMessages(conversation.ID, userID, *query.AfterSequence, limit)
 	} else {
-		messages, hasMoreBefore, err = s.loadBeforeMessages(conversation.ID, userID, query.BeforeSequence, limit)
+		messages, hasMoreBefore, hasMoreAfter, err = s.loadBeforeMessages(conversation.ID, userID, query.BeforeSequence, limit)
 	}
 	if err != nil {
 		return ChatMessagePage{}, err
@@ -262,10 +269,14 @@ func (s *ChatSvc) ListMessages(userID, roomCode, peerUserID string, query ChatHi
 	for _, message := range messages {
 		views = append(views, s.messageView(room.Code, message, userID, peerRead))
 	}
-	page := ChatMessagePage{Items: views, HasMoreBefore: hasMoreBefore, CurrentReadSequence: currentRead, PeerReadSequence: peerRead}
+	page := ChatMessagePage{Items: views, HasMoreBefore: hasMoreBefore, HasMoreAfter: hasMoreAfter, CurrentReadSequence: currentRead, PeerReadSequence: peerRead}
 	if hasMoreBefore && len(messages) > 0 {
 		cursor := messages[0].Sequence
 		page.PreviousCursor = &cursor
+	}
+	if hasMoreAfter && len(messages) > 0 {
+		cursor := messages[len(messages)-1].Sequence
+		page.NextCursor = &cursor
 	}
 	return page, nil
 }
@@ -638,50 +649,92 @@ func createChatMessage(tx *gorm.DB, conversation model.ChatConversation, roomID,
 	return message, nil
 }
 
-func (s *ChatSvc) loadBeforeMessages(conversationID, userID string, before *int64, limit int) ([]model.ChatMessage, bool, error) {
+func (s *ChatSvc) loadBeforeMessages(conversationID, userID string, before *int64, limit int) ([]model.ChatMessage, bool, bool, error) {
 	db := chatVisibleMessageQuery(s.db, userID).Where("chat_messages.conversation_id = ?", conversationID)
 	if before != nil {
 		db = db.Where("chat_messages.sequence < ?", *before)
 	}
 	var messages []model.ChatMessage
 	if err := db.Order("chat_messages.sequence DESC").Limit(limit + 1).Find(&messages).Error; err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 	hasMore := len(messages) > limit
 	if hasMore {
 		messages = messages[:limit]
 	}
 	reverseChatMessages(messages)
-	return messages, hasMore, nil
+	if before != nil && len(messages) > 0 {
+		hasMoreAfter, err := s.hasVisibleMessages(conversationID, userID, "chat_messages.sequence > ?", messages[len(messages)-1].Sequence)
+		if err != nil {
+			return nil, false, false, err
+		}
+		return messages, hasMore, hasMoreAfter, nil
+	}
+	return messages, hasMore, false, nil
 }
 
-func (s *ChatSvc) loadAroundMessages(conversationID, userID string, around int64, limit int) ([]model.ChatMessage, bool, error) {
-	leftLimit := (limit - 1) / 2
-	rightLimit := limit - leftLimit - 1
-	visible := chatVisibleMessageQuery(s.db, userID).Where("chat_messages.conversation_id = ?", conversationID)
+func (s *ChatSvc) loadAfterMessages(conversationID, userID string, after int64, limit int) ([]model.ChatMessage, bool, bool, error) {
+	db := chatVisibleMessageQuery(s.db, userID).Where("chat_messages.conversation_id = ? AND chat_messages.sequence > ?", conversationID, after)
+	var messages []model.ChatMessage
+	if err := db.Order("chat_messages.sequence ASC").Limit(limit + 1).Find(&messages).Error; err != nil {
+		return nil, false, false, err
+	}
+	hasMoreAfter := len(messages) > limit
+	if hasMoreAfter {
+		messages = messages[:limit]
+	}
+	hasMoreBefore := false
+	if len(messages) > 0 {
+		var err error
+		hasMoreBefore, err = s.hasVisibleMessages(conversationID, userID, "chat_messages.sequence < ?", messages[0].Sequence)
+		if err != nil {
+			return nil, false, false, err
+		}
+	}
+	return messages, hasMoreBefore, hasMoreAfter, nil
+}
+
+func (s *ChatSvc) loadAroundMessages(conversationID, userID string, around int64) ([]model.ChatMessage, bool, bool, error) {
+	const sideLimit = (ChatMessageContextSize - 1) / 2
+	var target model.ChatMessage
+	targetQuery := chatVisibleMessageQuery(s.db, userID).Where("chat_messages.conversation_id = ? AND chat_messages.sequence = ? AND chat_messages.recalled_at IS NULL", conversationID, around)
+	if err := targetQuery.First(&target).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, false, errcError(errc.ErrChatMessageNotFound)
+		}
+		return nil, false, false, err
+	}
 	var before []model.ChatMessage
-	if err := visible.Where("chat_messages.sequence < ?", around).Order("chat_messages.sequence DESC").Limit(leftLimit).Find(&before).Error; err != nil {
-		return nil, false, err
+	beforeQuery := chatVisibleMessageQuery(s.db, userID).Where("chat_messages.conversation_id = ? AND chat_messages.sequence < ?", conversationID, around)
+	if err := beforeQuery.Order("chat_messages.sequence DESC").Limit(sideLimit + 1).Find(&before).Error; err != nil {
+		return nil, false, false, err
+	}
+	hasMoreBefore := len(before) > sideLimit
+	if hasMoreBefore {
+		before = before[:sideLimit]
 	}
 	reverseChatMessages(before)
-	var target []model.ChatMessage
-	if err := visible.Where("chat_messages.sequence = ?", around).Find(&target).Error; err != nil {
-		return nil, false, err
-	}
 	var after []model.ChatMessage
-	if err := visible.Where("chat_messages.sequence > ?", around).Order("chat_messages.sequence ASC").Limit(rightLimit).Find(&after).Error; err != nil {
-		return nil, false, err
+	afterQuery := chatVisibleMessageQuery(s.db, userID).Where("chat_messages.conversation_id = ? AND chat_messages.sequence > ?", conversationID, around)
+	if err := afterQuery.Order("chat_messages.sequence ASC").Limit(sideLimit + 1).Find(&after).Error; err != nil {
+		return nil, false, false, err
 	}
-	messages := append(before, target...)
+	hasMoreAfter := len(after) > sideLimit
+	if hasMoreAfter {
+		after = after[:sideLimit]
+	}
+	messages := append(before, target)
 	messages = append(messages, after...)
-	if len(messages) == 0 {
-		return messages, false, nil
+	return messages, hasMoreBefore, hasMoreAfter, nil
+}
+
+func (s *ChatSvc) hasVisibleMessages(conversationID, userID, condition string, sequence int64) (bool, error) {
+	var count int64
+	db := chatVisibleMessageQuery(s.db.Model(&model.ChatMessage{}), userID).Where("chat_messages.conversation_id = ?", conversationID).Where(condition, sequence)
+	if err := db.Limit(1).Count(&count).Error; err != nil {
+		return false, err
 	}
-	var older int64
-	if err := visible.Where("chat_messages.sequence < ?", messages[0].Sequence).Count(&older).Error; err != nil {
-		return nil, false, err
-	}
-	return messages, older > 0, nil
+	return count > 0, nil
 }
 
 func (s *ChatSvc) messageView(roomCode string, message model.ChatMessage, viewerID string, peerRead ...int64) ChatMessageView {
@@ -772,6 +825,20 @@ func normalizeChatLimit(limit int) int {
 		return ChatMessageMaxPage
 	}
 	return limit
+}
+
+func historyDirectionCount(query ChatHistoryQuery) int {
+	count := 0
+	if query.BeforeSequence != nil {
+		count++
+	}
+	if query.AfterSequence != nil {
+		count++
+	}
+	if query.AroundSequence != nil {
+		count++
+	}
+	return count
 }
 
 func reverseChatMessages(messages []model.ChatMessage) {

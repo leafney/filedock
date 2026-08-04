@@ -52,6 +52,8 @@ type ChatMessagePageDTO struct {
 	Items               []ChatMessageDTO `json:"items"`
 	PreviousCursor      *int64           `json:"previousCursor,omitempty"`
 	HasMoreBefore       bool             `json:"hasMoreBefore"`
+	NextCursor          *int64           `json:"nextCursor,omitempty"`
+	HasMoreAfter        bool             `json:"hasMoreAfter"`
 	CurrentReadSequence int64            `json:"currentReadSequence"`
 	PeerReadSequence    int64            `json:"peerReadSequence"`
 }

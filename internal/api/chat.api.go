@@ -44,6 +44,10 @@ func (a *ChatAPI) HandleListMessages(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, errc.ErrParams, nil)
 	}
+	after, err := optionalSequence(c.Query("afterSequence"))
+	if err != nil {
+		return response.Error(c, errc.ErrParams, nil)
+	}
 	around, err := optionalSequence(c.Query("aroundSequence"))
 	if err != nil {
 		return response.Error(c, errc.ErrParams, nil)
@@ -52,7 +56,7 @@ func (a *ChatAPI) HandleListMessages(c *fiber.Ctx) error {
 	if err != nil {
 		return response.Error(c, errc.ErrParams, nil)
 	}
-	page, err := a.biz.ListMessages(principal.UserID, c.Params("code"), c.Params("peerUserId"), service.ChatHistoryQuery{BeforeSequence: before, AroundSequence: around, Limit: limit})
+	page, err := a.biz.ListMessages(principal.UserID, c.Params("code"), c.Params("peerUserId"), service.ChatHistoryQuery{BeforeSequence: before, AfterSequence: after, AroundSequence: around, Limit: limit})
 	if err != nil {
 		return response.Failed(c, err)
 	}

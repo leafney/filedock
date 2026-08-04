@@ -35,7 +35,7 @@ func (b *ChatBiz) ListMessages(userID, roomCode, peerUserID string, query servic
 	if err != nil {
 		return dto.ChatMessagePageDTO{}, err
 	}
-	return dto.ChatMessagePageDTO{Items: chatMessageDTOs(page.Items), PreviousCursor: page.PreviousCursor, HasMoreBefore: page.HasMoreBefore, CurrentReadSequence: page.CurrentReadSequence, PeerReadSequence: page.PeerReadSequence}, nil
+	return dto.ChatMessagePageDTO{Items: chatMessageDTOs(page.Items), PreviousCursor: page.PreviousCursor, HasMoreBefore: page.HasMoreBefore, NextCursor: page.NextCursor, HasMoreAfter: page.HasMoreAfter, CurrentReadSequence: page.CurrentReadSequence, PeerReadSequence: page.PeerReadSequence}, nil
 }
 
 func (b *ChatBiz) Send(userID, roomCode string, request dto.SendChatMessageRequest) (dto.ChatMessageDTO, error) {

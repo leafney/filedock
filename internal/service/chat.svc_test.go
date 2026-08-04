@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -180,6 +181,65 @@ func TestChatHistoryReadDeleteRecallAndSearch(t *testing.T) {
 	guestPage, err = chat.ListMessages(guest.UserID, room.RoomCode, owner.UserID, ChatHistoryQuery{})
 	if err != nil || len(guestPage.Items) != 2 {
 		t.Fatalf("peer history changed after local delete = %+v error=%v", guestPage, err)
+	}
+}
+
+func TestChatHistoryAroundAndAfterPagination(t *testing.T) {
+	chat, owner, guest, _, room, _ := newChatFixture(t)
+	chat.limiter = nil
+	base := time.Unix(3_000_000, 0)
+	chat.now = func() time.Time { return base }
+	messages := make([]ChatMessageView, 0, 50)
+	for index := 1; index <= 50; index++ {
+		item, err := chat.Send(owner.UserID, room.RoomCode, guest.UserID, fmt.Sprintf("context-%d", index), fmt.Sprintf("消息 %d", index))
+		if err != nil {
+			t.Fatalf("send message %d: %v", index, err)
+		}
+		messages = append(messages, item)
+	}
+
+	around := int64(25)
+	page, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{AroundSequence: &around})
+	if err != nil {
+		t.Fatalf("load around: %v", err)
+	}
+	if len(page.Items) != ChatMessageContextSize || page.Items[0].Sequence != 10 || page.Items[15].Sequence != around || page.Items[30].Sequence != 40 {
+		t.Fatalf("around page = %+v", page)
+	}
+	if !page.HasMoreBefore || page.PreviousCursor == nil || *page.PreviousCursor != 10 || !page.HasMoreAfter || page.NextCursor == nil || *page.NextCursor != 40 {
+		t.Fatalf("around cursors = %+v", page)
+	}
+
+	after := int64(40)
+	newer, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{AfterSequence: &after, Limit: 5})
+	if err != nil || len(newer.Items) != 5 || newer.Items[0].Sequence != 41 || newer.Items[4].Sequence != 45 || !newer.HasMoreBefore || !newer.HasMoreAfter || newer.NextCursor == nil || *newer.NextCursor != 45 {
+		t.Fatalf("newer page = %+v error=%v", newer, err)
+	}
+	after = 45
+	latest, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{AfterSequence: &after})
+	if err != nil || len(latest.Items) != 5 || latest.Items[0].Sequence != 46 || latest.Items[4].Sequence != 50 || !latest.HasMoreBefore || latest.HasMoreAfter || latest.NextCursor != nil {
+		t.Fatalf("latest after page = %+v error=%v", latest, err)
+	}
+
+	before := int64(40)
+	if _, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{BeforeSequence: &before, AfterSequence: &after}); err == nil || errx.Code(err) != errc.ErrParams {
+		t.Fatalf("mixed direction error = %v", err)
+	}
+
+	chat.now = func() time.Time { return base.Add(time.Minute) }
+	if _, err := chat.Recall(owner.UserID, room.RoomCode, messages[24].MessageID); err != nil {
+		t.Fatalf("recall target: %v", err)
+	}
+	if _, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{AroundSequence: &around}); err == nil || errx.Code(err) != errc.ErrChatMessageNotFound {
+		t.Fatalf("recalled target error = %v", err)
+	}
+
+	around = 26
+	if err := chat.DeleteMessage(owner.UserID, room.RoomCode, messages[25].MessageID); err != nil {
+		t.Fatalf("delete target: %v", err)
+	}
+	if _, err := chat.ListMessages(owner.UserID, room.RoomCode, guest.UserID, ChatHistoryQuery{AroundSequence: &around}); err == nil || errx.Code(err) != errc.ErrChatMessageNotFound {
+		t.Fatalf("deleted target error = %v", err)
 	}
 }
 
