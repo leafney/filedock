@@ -214,6 +214,21 @@ func provideChatAPI(chatBiz *biz.ChatBiz) (*api.ChatAPI, error) {
 	return api.NewChatAPI(chatBiz)
 }
 
+func provideNotificationSvc(db *gormx.GormDBSvc) (*service.NotificationSvc, error) {
+	if db == nil {
+		return nil, fmt.Errorf("notification database is required")
+	}
+	return service.NewNotificationSvc(db.DB)
+}
+
+func provideNotificationBiz(notifications *service.NotificationSvc) (*biz.NotificationBiz, error) {
+	return biz.NewNotificationBiz(notifications)
+}
+
+func provideNotificationAPI(notificationBiz *biz.NotificationBiz) (*api.NotificationAPI, error) {
+	return api.NewNotificationAPI(notificationBiz)
+}
+
 func provideStreamHub() *service.StreamHub {
 	return service.NewStreamHub()
 }
@@ -251,8 +266,8 @@ func provideRateLimiter() *service.RateLimiter {
 	return service.NewRateLimiter()
 }
 
-func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter, chatAPI *api.ChatAPI) (*core.Server, error) {
-	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, limiter, chatAPI)
+func provideServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter, chatAPI *api.ChatAPI, notificationAPI *api.NotificationAPI) (*core.Server, error) {
+	return core.NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, limiter, chatAPI, notificationAPI)
 }
 
 func provideApp(cfg *config.Config, log *zlogx.ZLogSvc, db *gormx.GormDBSvc, lifecycle *service.LifecycleSvc, server *core.Server) (*core.App, error) {

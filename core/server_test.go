@@ -124,7 +124,19 @@ func newTestServerWithConfig(t *testing.T, cfg *config.Config) *Server {
 	if err != nil {
 		t.Fatalf("NewChatAPI() error = %v", err)
 	}
-	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, limiter, chatAPI)
+	notificationSvc, err := service.NewNotificationSvc(db)
+	if err != nil {
+		t.Fatalf("NewNotificationSvc() error = %v", err)
+	}
+	notificationBiz, err := biz.NewNotificationBiz(notificationSvc)
+	if err != nil {
+		t.Fatalf("NewNotificationBiz() error = %v", err)
+	}
+	notificationAPI, err := api.NewNotificationAPI(notificationBiz)
+	if err != nil {
+		t.Fatalf("NewNotificationAPI() error = %v", err)
+	}
+	server, err := NewServer(cfg, log, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, limiter, chatAPI, notificationAPI)
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
@@ -133,7 +145,11 @@ func newTestServerWithConfig(t *testing.T, cfg *config.Config) *Server {
 
 func TestServerChatRoutes(t *testing.T) {
 	server := newTestServer(t)
-	createSession := func(name string) string {
+	type identity struct {
+		cookie string
+		userID string
+	}
+	createSession := func(name string) identity {
 		t.Helper()
 		request := httptest.NewRequest(fiber.MethodPost, "/api/v1/sessions", bytes.NewBufferString(`{"displayName":"`+name+`"}`))
 		request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
@@ -146,13 +162,21 @@ func TestServerChatRoutes(t *testing.T) {
 			body, _ := io.ReadAll(response.Body)
 			t.Fatalf("create session status=%d body=%s", response.StatusCode, body)
 		}
-		return response.Header.Get(fiber.HeaderSetCookie)
+		var body struct {
+			Data struct {
+				UserID string `json:"userId"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.Data.UserID == "" {
+			t.Fatalf("decode session: user=%q error=%v", body.Data.UserID, err)
+		}
+		return identity{cookie: response.Header.Get(fiber.HeaderSetCookie), userID: body.Data.UserID}
 	}
-	ownerCookie := createSession("聊天甲")
-	guestCookie := createSession("聊天乙")
+	owner := createSession("聊天甲")
+	guest := createSession("聊天乙")
 	request := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms", bytes.NewBufferString(`{"joinMode":"open"}`))
 	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	request.Header.Set(fiber.HeaderCookie, ownerCookie)
+	request.Header.Set(fiber.HeaderCookie, owner.cookie)
 	response, err := server.App().Test(request)
 	if err != nil {
 		t.Fatalf("create room: %v", err)
@@ -168,19 +192,65 @@ func TestServerChatRoutes(t *testing.T) {
 	}
 	join := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/join", bytes.NewBufferString(`{"confirmed":true}`))
 	join.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	join.Header.Set(fiber.HeaderCookie, guestCookie)
+	join.Header.Set(fiber.HeaderCookie, guest.cookie)
 	joinResponse, err := server.App().Test(join)
 	if err != nil || joinResponse.StatusCode != fiber.StatusOK {
 		t.Fatalf("join room status=%v response=%v", joinResponse.StatusCode, err)
 	}
 	_ = joinResponse.Body.Close()
 	list := httptest.NewRequest(fiber.MethodGet, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/chat/conversations", nil)
-	list.Header.Set(fiber.HeaderCookie, ownerCookie)
+	list.Header.Set(fiber.HeaderCookie, owner.cookie)
 	listResponse, err := server.App().Test(list)
 	if err != nil || listResponse.StatusCode != fiber.StatusOK {
 		t.Fatalf("list conversations status=%v response=%v", listResponse.StatusCode, err)
 	}
 	_ = listResponse.Body.Close()
+
+	sendBody := `{"recipientUserId":"` + owner.userID + `","clientMessageId":"notify-route","contentText":"跨页面通知"}`
+	send := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/chat/messages", bytes.NewBufferString(sendBody))
+	send.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	send.Header.Set(fiber.HeaderCookie, guest.cookie)
+	sendResponse, err := server.App().Test(send)
+	if err != nil || sendResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("send notification message status=%v response=%v", sendResponse.StatusCode, err)
+	}
+	_ = sendResponse.Body.Close()
+
+	notifications := httptest.NewRequest(fiber.MethodGet, "/api/v1/notifications?limit=1", nil)
+	notifications.Header.Set(fiber.HeaderCookie, owner.cookie)
+	notificationResponse, err := server.App().Test(notifications)
+	if err != nil || notificationResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("list notifications status=%v response=%v", notificationResponse.StatusCode, err)
+	}
+	defer notificationResponse.Body.Close()
+	var notificationBody struct {
+		Data struct {
+			TotalCount int `json:"totalCount"`
+			Items      []struct {
+				Type       string `json:"type"`
+				PeerUserID string `json:"peerUserId"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(notificationResponse.Body).Decode(&notificationBody); err != nil {
+		t.Fatalf("decode notifications: %v", err)
+	}
+	if notificationBody.Data.TotalCount != 1 || len(notificationBody.Data.Items) != 1 || notificationBody.Data.Items[0].Type != service.NotificationTypeChatConversation || notificationBody.Data.Items[0].PeerUserID != guest.userID {
+		t.Fatalf("notification response = %+v", notificationBody.Data)
+	}
+
+	invalid := httptest.NewRequest(fiber.MethodGet, "/api/v1/notifications?limit=0", nil)
+	invalid.Header.Set(fiber.HeaderCookie, owner.cookie)
+	invalidResponse, err := server.App().Test(invalid)
+	if err != nil || invalidResponse.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("invalid notification limit status=%v response=%v", invalidResponse.StatusCode, err)
+	}
+	_ = invalidResponse.Body.Close()
+	unauthorizedResponse, err := server.App().Test(httptest.NewRequest(fiber.MethodGet, "/api/v1/notifications", nil))
+	if err != nil || unauthorizedResponse.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("unauthorized notifications status=%v response=%v", unauthorizedResponse.StatusCode, err)
+	}
+	_ = unauthorizedResponse.Body.Close()
 }
 
 func TestServerVersionRoute(t *testing.T) {

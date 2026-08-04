@@ -8,13 +8,14 @@ import (
 	"github.com/leafney/filedock/internal/service"
 )
 
-func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter, chatAPIs ...*api.ChatAPI) {
+func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter, chatAPI *api.ChatAPI, notificationAPI *api.NotificationAPI) {
 	app.Get("/version", versionAPI.HandleVersion)
 	app.Get("/api/v1/nicknames/random", rateLimited(limiter, "nickname_random", 30, time.Minute, sessionAPI.HandleRandomNickname))
 	app.Post("/api/v1/sessions", rateLimited(limiter, "session_create", 10, time.Minute, sessionAPI.HandleCreate))
 	app.Get("/api/v1/sessions/me", sessionAPI.HandleCurrent)
 	app.Put("/api/v1/sessions/me", sessionAPI.HandleUpdate)
 	app.Delete("/api/v1/sessions/me", sessionAPI.HandleReset)
+	app.Get("/api/v1/notifications", notificationAPI.HandleList)
 	app.Get("/api/v1/rooms", roomAPI.HandleList)
 	app.Post("/api/v1/rooms", rateLimited(limiter, "room_create", 5, time.Hour, roomAPI.HandleCreate))
 	app.Get("/api/v1/rooms/:code/join-info", rateLimited(limiter, "room_join_info", 30, time.Minute, roomAPI.HandleJoinInfo))
@@ -43,16 +44,13 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.
 	app.Post("/api/v1/rooms/:code/files/:fileId/publish-shared", fileAPI.HandlePublishShared)
 	app.Post("/api/v1/rooms/:code/files/:fileId/downloads", fileAPI.HandleCreateDownload)
 	app.Get("/api/v1/rooms/:code/downloads/:taskId", fileAPI.HandleDownload)
-	if len(chatAPIs) > 0 && chatAPIs[0] != nil {
-		chatAPI := chatAPIs[0]
-		app.Get("/api/v1/rooms/:code/chat/conversations", chatAPI.HandleListConversations)
-		app.Get("/api/v1/rooms/:code/chat/conversations/:peerUserId/messages", chatAPI.HandleListMessages)
-		app.Post("/api/v1/rooms/:code/chat/messages", chatAPI.HandleSend)
-		app.Post("/api/v1/rooms/:code/chat/conversations/:peerUserId/read", chatAPI.HandleMarkRead)
-		app.Post("/api/v1/rooms/:code/chat/messages/:messageId/recall", chatAPI.HandleRecall)
-		app.Delete("/api/v1/rooms/:code/chat/messages/:messageId", chatAPI.HandleDelete)
-		app.Post("/api/v1/rooms/:code/chat/messages/:messageId/forward", chatAPI.HandleForward)
-		app.Get("/api/v1/rooms/:code/chat/conversations/:peerUserId/search", chatAPI.HandleSearch)
-	}
+	app.Get("/api/v1/rooms/:code/chat/conversations", chatAPI.HandleListConversations)
+	app.Get("/api/v1/rooms/:code/chat/conversations/:peerUserId/messages", chatAPI.HandleListMessages)
+	app.Post("/api/v1/rooms/:code/chat/messages", chatAPI.HandleSend)
+	app.Post("/api/v1/rooms/:code/chat/conversations/:peerUserId/read", chatAPI.HandleMarkRead)
+	app.Post("/api/v1/rooms/:code/chat/messages/:messageId/recall", chatAPI.HandleRecall)
+	app.Delete("/api/v1/rooms/:code/chat/messages/:messageId", chatAPI.HandleDelete)
+	app.Post("/api/v1/rooms/:code/chat/messages/:messageId/forward", chatAPI.HandleForward)
+	app.Get("/api/v1/rooms/:code/chat/conversations/:peerUserId/search", chatAPI.HandleSearch)
 	app.Get("/api/v1/stream", streamAPI.Handle)
 }

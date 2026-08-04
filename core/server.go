@@ -28,7 +28,7 @@ type Server struct {
 	app *fiber.App
 }
 
-func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter, chatAPIs ...*api.ChatAPI) (*Server, error) {
+func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, versionAPI *api.VersionAPI, sessionAPI *api.SessionAPI, sessionSvc *service.SessionSvc, roomAPI *api.RoomAPI, fileAPI *api.FileAPI, streamAPI *api.StreamAPI, limiter *service.RateLimiter, chatAPI *api.ChatAPI, notificationAPI *api.NotificationAPI) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("server config is required")
 	}
@@ -59,6 +59,12 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	if limiter == nil {
 		return nil, fmt.Errorf("rate limiter is required")
 	}
+	if chatAPI == nil {
+		return nil, fmt.Errorf("chat api is required")
+	}
+	if notificationAPI == nil {
+		return nil, fmt.Errorf("notification api is required")
+	}
 	if err := validateTLSConfig(cfg.HTTP); err != nil {
 		return nil, err
 	}
@@ -74,7 +80,7 @@ func NewServer(cfg *config.Config, log *zlogx.ZLogSvc, catalog *i18n.Catalog, ve
 	app.Use(requestLogger.Handle)
 	app.Use(localizationMiddleware(catalog))
 	app.Use(sessionMiddleware(sessionSvc, cfg.HTTP.CertFile != "" && cfg.HTTP.KeyFile != ""))
-	registerRoutes(app, versionAPI, sessionAPI, roomAPI, fileAPI, streamAPI, limiter, chatAPIs...)
+	registerRoutes(app, versionAPI, sessionAPI, roomAPI, fileAPI, streamAPI, limiter, chatAPI, notificationAPI)
 	if err := registerStatic(app); err != nil {
 		return nil, fmt.Errorf("register static resources: %w", err)
 	}

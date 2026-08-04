@@ -105,7 +105,19 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, rateLimiter, chatAPI)
+	notificationSvc, err := provideNotificationSvc(gormDBSvc)
+	if err != nil {
+		return nil, err
+	}
+	notificationBiz, err := provideNotificationBiz(notificationSvc)
+	if err != nil {
+		return nil, err
+	}
+	notificationAPI, err := provideNotificationAPI(notificationBiz)
+	if err != nil {
+		return nil, err
+	}
+	server, err := provideServer(config, zLogSvc, catalog, versionAPI, sessionAPI, sessionSvc, roomAPI, fileAPI, streamAPI, rateLimiter, chatAPI, notificationAPI)
 	if err != nil {
 		return nil, err
 	}
