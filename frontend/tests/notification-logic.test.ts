@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { NotificationItem } from "../src/types/domain";
-import { chatNotificationTarget, isChatNotification, shouldRefreshNotifications } from "../src/utils/notifications";
+import { chatNotificationTarget, formatNotificationCount, isChatNotification, readNotificationChatLaunch, shouldRefreshNotifications } from "../src/utils/notifications";
 
 const chatItem: NotificationItem = {
   key: "chat_conversation:one",
@@ -42,5 +42,17 @@ describe("全局通知纯逻辑", () => {
     };
     expect(isChatNotification(approval)).toBe(false);
     expect(chatNotificationTarget(approval)).toBeUndefined();
+  });
+
+  test("只接受完整的一次性聊天导航状态", () => {
+    expect(readNotificationChatLaunch({ notificationChatTarget: { peerUserId: "user-two", token: "launch-one" } })).toEqual({ peerUserId: "user-two", token: "launch-one" });
+    expect(readNotificationChatLaunch({ notificationChatTarget: { peerUserId: "user-two" } })).toBeUndefined();
+    expect(readNotificationChatLaunch(null)).toBeUndefined();
+  });
+
+  test("通知数量在九十九条后保持紧凑显示", () => {
+    expect(formatNotificationCount(0)).toBe("0");
+    expect(formatNotificationCount(99)).toBe("99");
+    expect(formatNotificationCount(100)).toBe("99+");
   });
 });

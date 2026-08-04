@@ -12,7 +12,6 @@ import type {
   FileListResult,
   FileRange,
   FileSort,
-  JoinRequestList,
   NotificationPage,
   RoomFile,
   RoomJoinInfo,
@@ -95,10 +94,6 @@ export function createJoinRequest(code: string) {
 
 export function cancelJoinRequest(code: string) {
   return unwrap<null>(apiClient.delete<ApiResponse<null>>(`/api/v1/rooms/${code}/join-requests/me`));
-}
-
-export function getJoinRequests(code: string) {
-  return unwrap<JoinRequestList>(apiClient.get<ApiResponse<JoinRequestList>>(`/api/v1/rooms/${code}/join-requests`));
 }
 
 export function approveJoinRequest(code: string, requestId: string) {

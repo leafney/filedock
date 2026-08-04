@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import type { Session } from "../types/domain";
 import { getAvatarInitial, getStableAvatarColor } from "../utils/avatar";
 import { normalizeLanguage } from "../i18n";
+import { openNotificationCenter, useNotificationCenter } from "./NotificationCenter";
 
 export interface RoomHeaderActions {
   role: "owner" | "member";
@@ -22,17 +23,15 @@ interface Props {
   session?: Session;
   fallbackName?: string;
   center?: ReactNode;
-  pendingCount?: number;
-  notificationDisabled?: boolean;
-  onOpenNotifications: () => void;
   onOpenProfile: () => void;
   onShare?: () => void;
   extraActions?: ReactNode;
   roomActions?: RoomHeaderActions;
 }
 
-export function GlobalHeader({ variant, session, fallbackName = "?", center, pendingCount = 0, notificationDisabled = false, onOpenNotifications, onOpenProfile, onShare, extraActions, roomActions }: Props) {
+export function GlobalHeader({ variant, session, fallbackName = "?", center, onOpenProfile, onShare, extraActions, roomActions }: Props) {
   const { t, i18n } = useTranslation();
+  const notifications = useNotificationCenter();
   const roomVariant = variant === "room";
   const displayName = session?.displayName || fallbackName || "?";
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language) ?? "zh-CN";
@@ -74,8 +73,8 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, pen
     <div className={actionClassName}>
       {extraActions}
       {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<ShareAltOutlined />} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
-      <Badge count={session && !notificationDisabled ? pendingCount : 0} size="small" overflowCount={99}>
-        <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={notificationDisabled ? t("room.workspace.notificationsDisabled") : t("room.notifications")} title={notificationDisabled ? t("room.workspace.notificationsDisabled") : undefined} disabled={!session || notificationDisabled} onClick={onOpenNotifications} />
+      <Badge count={session ? notifications.totalCount : 0} size="small" overflowCount={99}>
+        <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={t("notification.open")} disabled={!session || !notifications.enabled} onClick={(event) => openNotificationCenter(event, notifications.open)} />
       </Badge>
       <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} trigger={["click"]} placement="bottomRight">
         <button type="button" className={userClassName} aria-label={session ? t("home.profile") : t("language.label")}>

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Copy, Crown, DoorOpen, MessageSquare, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,9 +8,9 @@ import { ErrorNotice } from "../common";
 import { FileWorkspace } from "./FileWorkspace";
 import { ChatWorkspace } from "./ChatWorkspace";
 import { TransferBar } from "./TransferBar";
-import { approveJoinRequest, getJoinRequests, getRoomQRCode, rejectJoinRequest } from "../../services/api";
+import { getRoomQRCode } from "../../services/api";
 import type { RoomMember, RoomSnapshot, Session } from "../../types/domain";
-import { durationParts, formatBytes, formatDate } from "../../utils/format";
+import { durationParts, formatBytes } from "../../utils/format";
 import { useDialogFocus } from "../../hooks/use-dialog-focus";
 import { copyText } from "../../utils/clipboard";
 
@@ -27,15 +27,14 @@ interface Props {
   onKick: (userId: string) => void;
   onOpenProfile: () => void;
   actionError?: unknown;
+  chatLaunch?: { peerUserId: string; token: string };
 }
 
 export function RoomWorkspace(props: Props) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [membersOpen, setMembersOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [requestsOpen, setRequestsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<string>();
   const [chatMobileOpen, setChatMobileOpen] = useState(false);
@@ -48,11 +47,17 @@ export function RoomWorkspace(props: Props) {
   useEffect(() => {
     if (chatTarget && !props.room.members.some((member) => member.userId === chatTarget && member.status === "active")) setChatTarget(undefined);
   }, [chatTarget, props.room.members]);
+  useEffect(() => {
+    if (!props.chatLaunch) return;
+    const member = props.room.members.find((item) => item.userId === props.chatLaunch?.peerUserId && item.status === "active");
+    if (!member || member.userId === props.session.userId) return;
+    setChatTarget(member.userId);
+    if (window.matchMedia("(max-width: 760px)").matches) setChatMobileOpen(true);
+  }, [props.chatLaunch?.token, props.chatLaunch?.peerUserId, props.room.members, props.session.userId]);
   const expires = Math.max(0, props.room.expiresAt - now);
   const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;
   const capacityPercent = props.room.capacity.capacityBytes > 0 ? Math.min(100, props.room.capacity.usedBytes * 100 / props.room.capacity.capacityBytes) : 0;
-  const pending = props.room.pendingRequestCount ?? 0;
   return <main className="room-page">
     <GlobalHeader
       variant="room"
@@ -66,9 +71,6 @@ export function RoomWorkspace(props: Props) {
         </button>
       </div>}
       extraActions={<><button className="room-icon-button room-chat-mobile-trigger" type="button" aria-label={t("chat.openMobile")} onClick={() => setChatMobileOpen(true)}><MessageSquare aria-hidden="true" />{chatUnread > 0 && <b>{chatUnread > 99 ? "99+" : chatUnread}</b>}</button><button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button></>}
-      pendingCount={pending}
-      notificationDisabled={props.room.role !== "owner"}
-      onOpenNotifications={() => { if (props.room.role === "owner") setRequestsOpen(true); }}
       onOpenProfile={props.onOpenProfile}
       onShare={() => setShareOpen(true)}
       roomActions={props.room.role === "owner" ? { role: "owner", canExtend: props.room.canExtend, onExtend: props.onExtend, onDissolve: props.onDissolve } : { role: "member", onLeave: props.onLeave }}
@@ -83,9 +85,8 @@ export function RoomWorkspace(props: Props) {
 
     {membersOpen && <Overlay title={t("room.members")} onClose={() => setMembersOpen(false)}><MemberPanel room={props.room} session={props.session} onKick={props.onKick} drawer /></Overlay>}
     {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
-    {requestsOpen && props.room.role === "owner" && <RequestPanel code={props.code} onClose={() => setRequestsOpen(false)} onChanged={() => void queryClient.invalidateQueries({ queryKey: ["room", props.code] })} />}
     {capacityOpen && <Overlay title={t("room.workspace.capacityDetails")} onClose={() => setCapacityOpen(false)}><CapacityPanel room={props.room} /></Overlay>}
-    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="mobile" onUnreadCount={setChatUnread} /></section></div>}
+    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="mobile" launchPeerUserId={props.chatLaunch?.peerUserId} launchToken={props.chatLaunch?.token} onUnreadCount={setChatUnread} /></section></div>}
     {props.actionError != null && <div className="room-floating-error"><ErrorNotice error={props.actionError} /></div>}
     {(props.destroyAt || props.room.status === "destroying") && <div className="room-blocking-state"><RefreshCw aria-hidden="true" /><h2>{t("room.destroyingTitle")}</h2><p>{t("room.destroyingHint")}</p><strong>{t("room.destroyCountdown", { seconds: String(countdown) })}</strong></div>}
     {props.kicked && <div className="room-blocking-state"><DoorOpen aria-hidden="true" /><h2>{t("room.kickedTitle")}</h2><p>{t("room.kicked")}</p><button type="button" onClick={() => { props.setKicked(false); window.location.replace("/"); }}>{t("room.confirmOnly")}</button></div>}
@@ -156,16 +157,6 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
       {copyError && <p className="room-modal-message">{t("room.workspace.copyFailed")}</p>}
     </div>
   </Overlay>;
-}
-
-function RequestPanel({ code, onClose, onChanged }: { code: string; onClose: () => void; onChanged: () => void }) {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const requests = useQuery({ queryKey: ["join-requests", code], queryFn: () => getJoinRequests(code), retry: false });
-  const changed = () => { void queryClient.invalidateQueries({ queryKey: ["join-requests", code] }); onChanged(); };
-  const approve = useMutation({ mutationFn: (id: string) => approveJoinRequest(code, id), onSuccess: changed });
-  const reject = useMutation({ mutationFn: (id: string) => rejectJoinRequest(code, id), onSuccess: changed });
-  return <Overlay title={t("room.pendingRequests")} onClose={onClose}>{requests.isPending && <p className="room-modal-message">{t("room.loading")}</p>}{requests.isError && <ErrorNotice error={requests.error} />}{requests.data?.items.length === 0 && <p className="room-modal-message">{t("room.noRequests")}</p>}<div className="room-request-list">{requests.data?.items.map((request) => <article key={request.requestId}><div><strong>{request.displayName}</strong><span>{t("room.requestExpires", { time: formatDate(request.expiresAt) })}</span></div><button type="button" onClick={() => approve.mutate(request.requestId)}>{t("room.approve")}</button><button type="button" onClick={() => reject.mutate(request.requestId)}>{t("room.reject")}</button></article>)}</div></Overlay>;
 }
 
 function CapacityPanel({ room }: { room: RoomSnapshot }) {

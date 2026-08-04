@@ -57,21 +57,6 @@ export interface RoomJoinInfo {
   pendingRequest: boolean;
 }
 
-export interface JoinRequest {
-  requestId: string;
-  roomCode: string;
-  userId: string;
-  displayName: string;
-  status: string;
-  createdAt: number;
-  expiresAt: number;
-}
-
-export interface JoinRequestList {
-  items: JoinRequest[];
-  pendingCount: number;
-}
-
 interface NotificationBase {
   key: string;
   roomCode: string;

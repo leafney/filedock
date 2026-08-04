@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { message } from "antd";
 import { Check, Shield, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice, LanguageSelector, PinInput } from "../components/common";
@@ -24,10 +24,12 @@ import {
   resetSession,
 } from "../services/api";
 import type { RoomJoinInfo } from "../types/domain";
+import { readNotificationChatLaunch } from "../utils/notifications";
 
 export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSessionQuery> }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { code = "" } = useParams();
   const queryClient = useQueryClient();
   const session = sessionQuery.data;
@@ -36,12 +38,30 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const [kicked, setKicked] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [actionError, setActionError] = useState<unknown>();
+  const [chatLaunch, setChatLaunch] = useState<{ roomCode: string; peerUserId: string; token: string }>();
   const validCode = /^\d{4}$/.test(code);
   const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: listRooms, enabled: Boolean(session), retry: false });
   const ownerRoom = useMemo(() => roomsQuery.data?.items.find((room) => room.role === "owner"), [roomsQuery.data?.items]);
   const joinInfo = useQuery({ queryKey: ["room-join-info", code], queryFn: () => getJoinInfo(code), enabled: Boolean(session && validCode), retry: false });
   useEffect(() => { if (joinInfo.data?.alreadyMember) setJoined(true); }, [joinInfo.data?.alreadyMember]);
   const snapshot = useQuery({ queryKey: ["room", code], queryFn: () => getRoom(code), enabled: Boolean(session && joined), retry: false, refetchInterval: joined && !destroyAt ? 30_000 : false });
+  useEffect(() => {
+    const launch = readNotificationChatLaunch(location.state);
+    if (!launch) return;
+    setChatLaunch({ roomCode: code, ...launch });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [code, location.pathname, location.state, navigate]);
+  useEffect(() => {
+    setChatLaunch((current) => current?.roomCode === code ? current : undefined);
+  }, [code]);
+  useEffect(() => {
+    if (!chatLaunch || !snapshot.data || chatLaunch.roomCode !== code) return;
+    const target = snapshot.data.members.find((member) => member.userId === chatLaunch.peerUserId && member.status === "active");
+    if (target && target.userId !== session?.userId) return;
+    setChatLaunch(undefined);
+    message.warning(t("notification.unavailable"));
+    void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  }, [chatLaunch, code, queryClient, session?.userId, snapshot.data, t]);
   useEffect(() => {
     if (!joined || !session?.displayName) return;
     void queryClient.invalidateQueries({ queryKey: ["room", code] });
@@ -110,11 +130,13 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     onKick={(userId) => { setActionError(undefined); void kickMember(code, userId).then(() => queryClient.invalidateQueries({ queryKey: ["room", code] })).catch(setActionError); }}
     onOpenProfile={() => setProfileOpen(true)}
     actionError={actionError}
+    chatLaunch={chatLaunch?.roomCode === code ? chatLaunch : undefined}
   />{profileOpen && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={() => {
     if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
     void resetSession().then(() => {
       queryClient.removeQueries({ queryKey: ["session"] });
       queryClient.removeQueries({ queryKey: ["rooms"] });
+      queryClient.removeQueries({ queryKey: ["notifications"] });
       setProfileOpen(false);
       navigate("/", { replace: true });
     }).catch(setActionError);

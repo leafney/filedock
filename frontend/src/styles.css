@@ -287,11 +287,28 @@ body {
 .home-profile-details dt { color: #94a3b8; }
 .home-profile-details dd { margin: 0; color: #334155; }
 .home-profile-version-title { color: #334155; font-size: 0.8rem; margin: 1rem 0 0.55rem; }
-.home-notification-room { color: #64748b; font-family: ui-monospace, monospace; }
-.home-request-item { display: grid; gap: 0.4rem; border-bottom: 1px solid #f1f5f9; padding: 0.9rem 0; }
-.home-request-item strong { color: #0f172a; }
-.home-request-item span { color: #64748b; font-size: 0.75rem; }
 .home-mobile-actions { width: 100%; align-items: stretch; }
+
+.global-notification-drawer .ant-drawer-body { padding: 0.75rem 1rem 1rem; }
+.global-notification-state { color: #64748b; padding: 1.5rem 0; text-align: center; }
+.global-notification-error { margin-bottom: 0.75rem; }
+.global-notification-list { display: grid; }
+.global-notification-item { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; align-items: start; gap: 0.75rem; border: 0; border-bottom: 1px solid #eef2f7; background: transparent; color: #0f172a; padding: 0.9rem 0.25rem; text-align: left; }
+button.global-notification-item { border-radius: 0.65rem; cursor: pointer; transition: background-color 160ms ease; }
+button.global-notification-item:hover { background: #f0fdfa; }
+button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+.global-notification-content { display: grid; min-width: 0; gap: 0.28rem; }
+.global-notification-title { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
+.global-notification-title strong { overflow: hidden; font-size: 0.85rem; text-overflow: ellipsis; white-space: nowrap; }
+.global-notification-title time { flex: none; color: #94a3b8; font-size: 0.64rem; }
+.global-notification-room { display: flex; min-width: 0; align-items: center; gap: 0.3rem; overflow: hidden; color: #0f766e; font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
+.global-notification-room svg { flex: none; }
+.global-notification-preview { display: -webkit-box; overflow: hidden; color: #475569; font-size: 0.74rem; line-height: 1.45; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.global-notification-expiry { color: #94a3b8; font-size: 0.64rem; }
+.global-notification-count { min-width: 1.35rem; border-radius: 999px; background: #ef4444; color: #fff; font-size: 0.62rem; font-weight: 700; line-height: 1.35rem; padding: 0 0.35rem; text-align: center; }
+.global-notification-item.is-approval { grid-template-columns: auto minmax(0, 1fr); }
+.global-notification-item.is-approval .ant-space { margin-top: 0.35rem; }
+.global-notification-more { margin-top: 0.8rem; }
 
 @media (max-width: 900px) {
   .home-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
@@ -305,6 +322,11 @@ body {
   .home-header { min-height: 3rem; }
   .home-radar-panel .radar-canvas { min-height: 43vh; }
   .home-room-actions { display: none; }
+}
+
+@media (max-width: 760px) {
+  .global-notification-drawer .ant-drawer-content-wrapper { width: 100% !important; max-width: 100vw; }
+  .global-notification-drawer .ant-drawer-body { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
 
 /* Room entry and terminal states share the production light visual language. */
@@ -635,11 +657,6 @@ body {
 .room-share-actions button { min-height: 2.2rem; border: 1px solid var(--room-border); border-radius: 0.45rem; background: #fff; color: var(--room-primary); cursor: pointer; font-size: 0.66rem; padding: 0.35rem; }
 .room-share-actions button:hover, .room-share-actions button:focus-visible { border-color: #5eead4; background: #f0fdfa; outline: none; }
 .room-modal-message { color: var(--room-muted); padding: 1.5rem; text-align: center; }
-.room-request-list { padding: 0.5rem 1rem 1rem; }
-.room-request-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.5rem; border-bottom: 1px solid #f1f5f9; padding: 0.75rem 0; }
-.room-request-list article div { min-width: 0; }
-.room-request-list article span { display: block; color: var(--room-muted); font-size: 0.65rem; margin-top: 0.2rem; }
-.room-request-list button { border: 1px solid var(--room-border); border-radius: 0.45rem; background: #fff; cursor: pointer; padding: 0.4rem 0.55rem; }
 .room-capacity-details { display: grid; gap: 0.6rem; padding: 1rem; }
 .room-capacity-details div { display: flex; align-items: center; justify-content: space-between; border-radius: 0.6rem; background: #f8fafc; color: var(--room-muted); padding: 0.75rem; }
 .room-capacity-details dd { color: var(--room-text); font-weight: 650; }

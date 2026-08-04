@@ -14,19 +14,16 @@ import { isUnauthorized } from "../components/common";
 import { useSessionQuery } from "../hooks/use-session";
 import { getApiErrorMessage } from "../lib/api-error";
 import {
-  approveJoinRequest,
   createRoom,
   createSession,
-  getJoinRequests,
   getRandomNickname,
   listRooms,
   leaveRoom,
   dissolveRoom,
-  rejectJoinRequest,
   resetSession,
   updateSession,
 } from "../services/api";
-import type { JoinMode, JoinRequest, RoomSummary } from "../types/domain";
+import type { JoinMode, RoomSummary } from "../types/domain";
 
 type ModalKind = "create" | "join" | null;
 
@@ -72,11 +69,6 @@ function JoinRoomModal({ open, onClose, onJoined }: { open: boolean; onClose: ()
   return <Modal title={t("room.join")} open={open} onCancel={onClose} destroyOnHidden cancelText={t("room.backHome")} okText={t("room.join")} okButtonProps={{ disabled: !/^\d{4}$/.test(code) }} onOk={() => onJoined(code)}><Form layout="vertical"><Form.Item label={t("room.code")} required><Input.OTP length={4} value={code} onChange={setCode} inputMode="numeric" /></Form.Item></Form></Modal>;
 }
 
-function NotificationPanel({ open, onClose, roomCode, requests, loading, error, processingId, onApprove, onReject }: { open: boolean; onClose: () => void; roomCode?: string; requests: JoinRequest[]; loading: boolean; error?: unknown; processingId?: string; onApprove: (request: JoinRequest) => void; onReject: (request: JoinRequest) => void }) {
-  const { t } = useTranslation();
-  return <Drawer title={t("room.pendingRequests")} placement="right" open={open} onClose={onClose} size="default">{roomCode && <p className="home-notification-room">{t("room.code")} {roomCode}</p>}{loading && <p>{t("room.loading")}</p>}{error ? <ErrorAlert error={error} /> : null}{!loading && !error && requests.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("room.noRequests")} />}{requests.map((request) => <div className="home-request-item" key={request.requestId}><strong>{request.displayName}</strong><span>{t("room.requestExpires", { time: new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(request.expiresAt * 1000)) })}</span><Space><Button size="small" type="primary" loading={processingId === request.requestId} disabled={Boolean(processingId && processingId !== request.requestId)} onClick={() => onApprove(request)}>{t("room.approve")}</Button><Button size="small" loading={processingId === request.requestId} disabled={Boolean(processingId)} onClick={() => onReject(request)}>{t("room.reject")}</Button></Space></div>)}</Drawer>;
-}
-
 export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSessionQuery> }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -84,19 +76,15 @@ export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const [draftName, setDraftName] = useState("");
   const [modal, setModal] = useState<ModalKind>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomSummary>();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [processingRequestId, setProcessingRequestId] = useState<string>();
   const session = sessionQuery.error && isUnauthorized(sessionQuery.error) ? undefined : sessionQuery.data;
   const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: listRooms, enabled: Boolean(session), retry: false });
   const nicknameQuery = useQuery({ queryKey: ["random-nickname"], queryFn: getRandomNickname, enabled: false, retry: false });
   const createSessionMutation = useMutation({ mutationFn: () => createSession(draftName.trim()), onSuccess: (next) => queryClient.setQueryData(["session"], next) });
   const ownerRoom = useMemo(() => roomsQuery.data?.items.find((room) => room.role === "owner"), [roomsQuery.data?.items]);
   const memberRooms = useMemo(() => roomsQuery.data?.items.filter((room) => room.role === "member"), [roomsQuery.data?.items]);
-  const requestsQuery = useQuery({ queryKey: ["join-requests", "home", ownerRoom?.roomCode], queryFn: () => getJoinRequests(ownerRoom!.roomCode), enabled: Boolean(session && ownerRoom && ownerRoom.status === "active"), retry: false });
-  const approvalMutation = useMutation({ mutationFn: ({ request, approve }: { request: JoinRequest; approve: boolean }) => approve ? approveJoinRequest(request.roomCode, request.requestId) : rejectJoinRequest(request.roomCode, request.requestId), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["join-requests"] }); void queryClient.invalidateQueries({ queryKey: ["rooms"] }); }, onSettled: () => setProcessingRequestId(undefined) });
-  const resetMutation = useMutation({ mutationFn: resetSession, onSuccess: () => { queryClient.removeQueries({ queryKey: ["session"] }); queryClient.removeQueries({ queryKey: ["rooms"] }); setProfileOpen(false); } });
+  const resetMutation = useMutation({ mutationFn: resetSession, onSuccess: () => { queryClient.removeQueries({ queryKey: ["session"] }); queryClient.removeQueries({ queryKey: ["rooms"] }); queryClient.removeQueries({ queryKey: ["notifications"] }); setProfileOpen(false); } });
 
   useEffect(() => {
     if (!session && !draftName) void nicknameQuery.refetch().then((result) => { if (result.data?.displayName) setDraftName(result.data.displayName); });
@@ -119,5 +107,5 @@ export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const resetAccount = () => Modal.confirm({ title: t("home.resetConfirm"), okText: t("session.reset"), cancelText: t("room.backHome"), okButtonProps: { danger: true }, onOk: () => resetMutation.mutateAsync() });
   const submitName = (event: FormEvent) => { event.preventDefault(); if (draftName.trim()) createSessionMutation.mutate(); };
 
-  return <div className="home-page"><GlobalHeader variant="home" session={session} fallbackName={draftName} notificationDisabled={!session || !ownerRoom || ownerRoom.status !== "active"} pendingCount={requestsQuery.data?.pendingCount ?? 0} onOpenProfile={() => setProfileOpen(true)} onOpenNotifications={() => setNotificationsOpen(true)} /><main className="home-layout"><aside className="home-sidebar">{session ? <>{roomsQuery.isError && <ErrorAlert error={roomsQuery.error} />}{roomsQuery.isPending ? <div className="home-sidebar-card">{t("home.loading")}</div> : <RoomSection ownerRoom={ownerRoom} memberRooms={memberRooms ?? []} onCreate={() => setModal("create")} onJoin={() => setModal("join")} onEnter={openRoom} onAction={runRoomAction} />}</> : <NicknamePanel name={draftName} setName={setDraftName} onRandomize={() => void nicknameQuery.refetch().then((result) => { if (result.data?.displayName) setDraftName(result.data.displayName); })} onSubmit={submitName} pending={createSessionMutation.isPending} error={createSessionMutation.error} />}</aside><section className="home-radar-panel"><RadarCanvas displayName={session?.displayName ?? draftName} /></section></main><AppFooter /><CreateRoomModal open={modal === "create"} onClose={() => setModal(null)} onCreated={(roomCode) => { setModal(null); void queryClient.invalidateQueries({ queryKey: ["rooms"] }); navigate(`/rooms/${roomCode}`); }} /><JoinRoomModal open={modal === "join"} onClose={() => setModal(null)} onJoined={(roomCode) => navigate(`/rooms/${roomCode}`)} />{session && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={resetAccount} />}{session && <NotificationPanel open={notificationsOpen} onClose={() => setNotificationsOpen(false)} roomCode={ownerRoom?.roomCode} requests={requestsQuery.data?.items ?? []} loading={requestsQuery.isPending} error={requestsQuery.error} processingId={processingRequestId} onApprove={(request) => { setProcessingRequestId(request.requestId); approvalMutation.mutate({ request, approve: true }); }} onReject={(request) => { setProcessingRequestId(request.requestId); approvalMutation.mutate({ request, approve: false }); }} />}{selectedRoom && <Drawer title={`${t("room.code")} ${selectedRoom.roomCode}`} placement="bottom" height="auto" open={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} closeIcon={<CloseOutlined />}><Space direction="vertical" className="home-mobile-actions" size="middle"><Button block type="primary" onClick={() => runRoomAction(selectedRoom, "enter")}>{t("room.enter")}</Button>{selectedRoom.role === "owner" ? <Button block danger onClick={() => runRoomAction(selectedRoom, "dissolve")}>{t("room.dissolve")}</Button> : <Button block onClick={() => runRoomAction(selectedRoom, "leave")}>{t("room.leave")}</Button>}</Space></Drawer>}</div>;
+  return <div className="home-page"><GlobalHeader variant="home" session={session} fallbackName={draftName} onOpenProfile={() => setProfileOpen(true)} /><main className="home-layout"><aside className="home-sidebar">{session ? <>{roomsQuery.isError && <ErrorAlert error={roomsQuery.error} />}{roomsQuery.isPending ? <div className="home-sidebar-card">{t("home.loading")}</div> : <RoomSection ownerRoom={ownerRoom} memberRooms={memberRooms ?? []} onCreate={() => setModal("create")} onJoin={() => setModal("join")} onEnter={openRoom} onAction={runRoomAction} />}</> : <NicknamePanel name={draftName} setName={setDraftName} onRandomize={() => void nicknameQuery.refetch().then((result) => { if (result.data?.displayName) setDraftName(result.data.displayName); })} onSubmit={submitName} pending={createSessionMutation.isPending} error={createSessionMutation.error} />}</aside><section className="home-radar-panel"><RadarCanvas displayName={session?.displayName ?? draftName} /></section></main><AppFooter /><CreateRoomModal open={modal === "create"} onClose={() => setModal(null)} onCreated={(roomCode) => { setModal(null); void queryClient.invalidateQueries({ queryKey: ["rooms"] }); navigate(`/rooms/${roomCode}`); }} /><JoinRoomModal open={modal === "join"} onClose={() => setModal(null)} onJoined={(roomCode) => navigate(`/rooms/${roomCode}`)} />{session && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={resetAccount} />}{selectedRoom && <Drawer title={`${t("room.code")} ${selectedRoom.roomCode}`} placement="bottom" height="auto" open={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} closeIcon={<CloseOutlined />}><Space direction="vertical" className="home-mobile-actions" size="middle"><Button block type="primary" onClick={() => runRoomAction(selectedRoom, "enter")}>{t("room.enter")}</Button>{selectedRoom.role === "owner" ? <Button block danger onClick={() => runRoomAction(selectedRoom, "dissolve")}>{t("room.dissolve")}</Button> : <Button block onClick={() => runRoomAction(selectedRoom, "leave")}>{t("room.leave")}</Button>}</Space></Drawer>}</div>;
 }

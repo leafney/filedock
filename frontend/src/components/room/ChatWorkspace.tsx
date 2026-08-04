@@ -16,6 +16,8 @@ interface Props {
   selfId: string;
   mode: "desktop" | "mobile";
   selectedPeerUserId?: string;
+  launchPeerUserId?: string;
+  launchToken?: string;
   onCloseConversation?: () => void;
   onUnreadCount?: (count: number) => void;
   onUnreadByPeer?: (counts: Record<string, number>) => void;
@@ -23,7 +25,7 @@ interface Props {
 
 type MenuPoint = { clientX: number; clientY: number };
 
-export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPeerUserId, onCloseConversation, onUnreadCount, onUnreadByPeer }: Props) {
+export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPeerUserId, launchPeerUserId, launchToken, onCloseConversation, onUnreadCount, onUnreadByPeer }: Props) {
   const { t } = useTranslation();
   const chat = useChatRoom(code, selfId);
   const desktop = mode === "desktop";
@@ -44,6 +46,7 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
   const [highlightMessageId, setHighlightMessageId] = useState<string>();
   const listRef = useRef<HTMLDivElement>(null);
   const wasNearBottom = useRef(true);
+  const handledLaunchToken = useRef<string>();
 
   useEffect(() => {
     if (!desktop) return;
@@ -53,6 +56,12 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
     }
     if (!selectedPeerUserId && chat.peerUserId) chat.openConversation("");
   }, [chat.openConversation, chat.peerUserId, desktop, selectedPeerUserId]);
+
+  useEffect(() => {
+    if (desktop || !launchPeerUserId || !launchToken || handledLaunchToken.current === launchToken) return;
+    handledLaunchToken.current = launchToken;
+    chat.openConversation(launchPeerUserId);
+  }, [chat.openConversation, desktop, launchPeerUserId, launchToken]);
 
   const peers = useMemo(() => {
     const active = members.filter((member) => member.userId !== selfId && member.status === "active");
