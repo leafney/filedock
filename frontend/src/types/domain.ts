@@ -72,6 +72,39 @@ export interface JoinRequestList {
   pendingCount: number;
 }
 
+interface NotificationBase {
+  key: string;
+  roomCode: string;
+  roomTitle: string;
+}
+
+export interface JoinRequestNotification extends NotificationBase {
+  type: "join_request";
+  requestId: string;
+  actorUserId: string;
+  actorDisplayName: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface ChatConversationNotification extends NotificationBase {
+  type: "chat_conversation";
+  conversationId: string;
+  peerUserId: string;
+  peerDisplayName: string;
+  latestMessageText: string;
+  unreadCount: number;
+  latestMessageAt: number;
+}
+
+export type NotificationItem = JoinRequestNotification | ChatConversationNotification;
+
+export interface NotificationPage {
+  items: NotificationItem[];
+  totalCount: number;
+  nextCursor?: string;
+}
+
 export interface StreamEvent<T = Record<string, unknown>> {
   version: number;
   id: string;

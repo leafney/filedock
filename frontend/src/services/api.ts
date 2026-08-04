@@ -1,18 +1,19 @@
 import { apiClient } from "../lib/api-client";
 import type { ApiResponse } from "../types/api";
 import type {
+  ChatConversation,
+  ChatMessage,
+  ChatMessagePage,
+  ChatReadState,
+  ChatSearchPage,
   DownloadTask,
-	ChatConversation,
-	ChatMessage,
-	ChatMessagePage,
-	ChatReadState,
-	ChatSearchPage,
   FileEventPage,
   FileIdentity,
   FileListResult,
   FileRange,
   FileSort,
   JoinRequestList,
+  NotificationPage,
   RoomFile,
   RoomJoinInfo,
   RoomSnapshot,
@@ -106,6 +107,10 @@ export function approveJoinRequest(code: string, requestId: string) {
 
 export function rejectJoinRequest(code: string, requestId: string) {
   return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/join-requests/${requestId}/reject`));
+}
+
+export function listNotifications(cursor = "", limit = 30) {
+  return unwrap<NotificationPage>(apiClient.get<ApiResponse<NotificationPage>>("/api/v1/notifications", { params: { cursor: cursor || undefined, limit } }));
 }
 
 export function listChatConversations(code: string) {

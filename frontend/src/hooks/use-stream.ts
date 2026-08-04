@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import { currentLanguage } from "../i18n";
 import type { Session, StreamEvent } from "../types/domain";
+import { shouldRefreshNotifications } from "../utils/notifications";
 
 export const streamEventName = "filedock:stream-event";
 
@@ -21,13 +22,24 @@ export function useGlobalStream(session: Session | undefined) {
       return undefined;
     }
     const controller = new AbortController();
+    let notificationRefreshTimer: number | undefined;
+    const refreshNotifications = () => {
+      if (notificationRefreshTimer !== undefined) window.clearTimeout(notificationRefreshTimer);
+      notificationRefreshTimer = window.setTimeout(() => {
+        notificationRefreshTimer = undefined;
+        void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      }, 150);
+    };
     const handleEvent = (event: StreamEvent) => {
       window.dispatchEvent(new CustomEvent<StreamEventMessage>(streamEventName, { detail: { event } }));
       if (event.type === "session.revoked") {
+        if (notificationRefreshTimer !== undefined) window.clearTimeout(notificationRefreshTimer);
         queryClient.removeQueries({ queryKey: ["session"] });
         queryClient.removeQueries({ queryKey: ["rooms"] });
+        queryClient.removeQueries({ queryKey: ["notifications"] });
         return;
       }
+      if (shouldRefreshNotifications(event.type)) refreshNotifications();
       if (event.type.startsWith("room.") || event.type === "user.profile_changed") {
         void queryClient.invalidateQueries({ queryKey: ["rooms"] });
         void queryClient.invalidateQueries({ queryKey: ["room"] });
@@ -58,6 +70,7 @@ export function useGlobalStream(session: Session | undefined) {
       async onopen(response) {
         if (response.ok && response.headers.get("content-type")?.includes("text/event-stream")) {
           void queryClient.invalidateQueries({ queryKey: ["session"] });
+          void queryClient.invalidateQueries({ queryKey: ["notifications"] });
           return;
         }
         if (response.status === 401 || response.status === 403) {
@@ -88,6 +101,9 @@ export function useGlobalStream(session: Session | undefined) {
       // The component owns the AbortController; a later render reconnects.
     });
 
-    return () => controller.abort();
+    return () => {
+      if (notificationRefreshTimer !== undefined) window.clearTimeout(notificationRefreshTimer);
+      controller.abort();
+    };
   }, [queryClient, session?.userId]);
 }
