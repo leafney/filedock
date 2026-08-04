@@ -3,7 +3,7 @@
 Related discussion: [docs/discuss/2026-08-04-global-notification-center.md](../discuss/2026-08-04-global-notification-center.md)
 
 - 日期：2026-08-04
-- 状态：已批准，实施中
+- 状态：已完成，待人工验收
 - 阶段目标：统一首页与房间页通知入口，聚合待处理加入审批和跨房间未读私聊
 
 ## Problem Statement
