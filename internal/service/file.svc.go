@@ -94,12 +94,13 @@ type FileProjection struct {
 }
 
 type FileSvc struct {
-	db        *gorm.DB
-	hub       *StreamHub
-	storage   *FileStorage
-	uploads   *uploadRegistry
-	downloads *downloadRegistry
-	now       func() time.Time
+	db            *gorm.DB
+	hub           *StreamHub
+	storage       *FileStorage
+	uploads       *uploadRegistry
+	downloads     *downloadRegistry
+	notifications *FileNotificationRecorder
+	now           func() time.Time
 }
 
 type uploadRegistry struct {
@@ -123,7 +124,11 @@ func NewFileSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*FileSvc
 	if len(storages) > 0 {
 		storage = storages[0]
 	}
-	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]uploadActive), rooms: make(map[string]int), users: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}, now: time.Now}, nil
+	notifications, err := NewFileNotificationRecorder(db)
+	if err != nil {
+		return nil, err
+	}
+	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]uploadActive), rooms: make(map[string]int), users: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}, notifications: notifications, now: time.Now}, nil
 }
 
 // CreateUploadBatch validates and reserves the complete batch atomically.
@@ -211,7 +216,7 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 				if err != nil {
 					return err
 				}
-				if err := tx.Create(&model.FileRecipient{ID: relationID, FileID: fileID, RecipientUserID: recipient.UserID, Status: model.RecipientPending, SentAt: now}).Error; err != nil {
+				if err := tx.Create(&model.FileRecipient{ID: relationID, FileID: fileID, RecipientUserID: recipient.UserID, DeliveryVersion: 1, Status: model.RecipientPending, SentAt: now}).Error; err != nil {
 					return err
 				}
 			}
@@ -367,8 +372,20 @@ func (s *FileSvc) CompleteUpload(userID, fileID, detectedMIME string, actualSize
 		if fileResult.RowsAffected != 1 {
 			return errx.New(errc.ErrFileState, nil)
 		}
-		if err := createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventUploadCompleted, now); err != nil {
+		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventUploadCompleted, now)
+		if err != nil {
 			return err
+		}
+		if file.Scope == model.FileScopeDirect {
+			var recipients []model.FileRecipient
+			if err := tx.Where("file_id = ? AND status = ?", file.ID, model.RecipientPending).Find(&recipients).Error; err != nil {
+				return err
+			}
+			for _, recipient := range recipients {
+				if err := s.recordFileNotification(tx, NotificationTypeFileReceived, recipient.RecipientUserID, file.UploaderUserID, file, recipient, event); err != nil {
+					return err
+				}
+			}
 		}
 		return assertRoomCapacity(tx, file.RoomID)
 	})
@@ -665,11 +682,35 @@ func assertRoomCapacity(tx *gorm.DB, roomID string) error {
 }
 
 func createFileEvent(tx *gorm.DB, roomID, fileID, batchID, actorID, eventType string, now int64) error {
+	_, err := createFileEventRecord(tx, roomID, fileID, batchID, actorID, eventType, now)
+	return err
+}
+
+func createFileEventRecord(tx *gorm.DB, roomID, fileID, batchID, actorID, eventType string, now int64) (model.FileEvent, error) {
 	id, err := ulidx.New()
 	if err != nil {
-		return err
+		return model.FileEvent{}, err
 	}
-	return tx.Create(&model.FileEvent{ID: id, RoomID: roomID, FileID: fileID, BatchID: batchID, ActorUserID: actorID, Type: eventType, CreatedAt: now}).Error
+	event := model.FileEvent{ID: id, RoomID: roomID, FileID: fileID, BatchID: batchID, ActorUserID: actorID, Type: eventType, CreatedAt: now}
+	return event, tx.Create(&event).Error
+}
+
+func (s *FileSvc) recordFileNotification(tx *gorm.DB, notificationType, userID, counterpartUserID string, file model.RoomFile, recipient model.FileRecipient, event model.FileEvent) error {
+	if s == nil || s.notifications == nil {
+		return fmt.Errorf("file notification recorder is unavailable")
+	}
+	_, err := s.notifications.Record(tx, FileNotificationRecordInput{
+		UserID:            userID,
+		Type:              notificationType,
+		RoomID:            file.RoomID,
+		FileID:            file.ID,
+		CounterpartUserID: counterpartUserID,
+		FileRecipientID:   recipient.ID,
+		DeliveryVersion:   recipient.DeliveryVersion,
+		SourceEventID:     event.ID,
+		OccurredAtMS:      event.CreatedAt * 1000,
+	})
+	return err
 }
 
 func fileNotFound(err error) error {

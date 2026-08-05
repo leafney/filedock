@@ -172,20 +172,34 @@ func (s *FileSvc) changeRecipientStatus(userID, roomCode, fileID, from, to, even
 		if err := tx.Where("id = ? AND room_id = ? AND scope = ? AND status = ?", fileID, room.ID, model.FileScopeDirect, model.FileStatusAvailable).First(&file).Error; err != nil {
 			return fileNotFound(err)
 		}
+		var recipient model.FileRecipient
+		if err := tx.Where("file_id = ? AND recipient_user_id = ? AND status = ?", file.ID, userID, from).First(&recipient).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errx.New(errc.ErrFileRecipientState, nil)
+			}
+			return err
+		}
 		updates := map[string]interface{}{"status": to}
 		if to == model.RecipientAccepted {
 			updates["accepted_at"] = now
 		} else {
 			updates["declined_at"] = now
 		}
-		result := tx.Model(&model.FileRecipient{}).Where("file_id = ? AND recipient_user_id = ? AND status = ?", file.ID, userID, from).Updates(updates)
+		result := tx.Model(&model.FileRecipient{}).Where("id = ? AND status = ? AND delivery_version = ?", recipient.ID, from, recipient.DeliveryVersion).Updates(updates)
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
 			return errx.New(errc.ErrFileRecipientState, nil)
 		}
-		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, eventType, now)
+		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, eventType, now)
+		if err != nil {
+			return err
+		}
+		if to == model.RecipientDeclined {
+			return s.recordFileNotification(tx, NotificationTypeFileDeclined, file.UploaderUserID, userID, file, recipient, event)
+		}
+		return nil
 	})
 	if err == nil {
 		s.publishFileProjection(fileID, "file.recipient_changed", map[string]interface{}{"recipientUserId": userID, "status": to})
@@ -220,7 +234,7 @@ func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientI
 		}
 		now := s.now().Unix()
 		for _, file := range files {
-			fileChanged := false
+			changedRecipients := make([]model.FileRecipient, 0, len(recipients))
 			for _, recipient := range recipients {
 				var relation model.FileRecipient
 				err := tx.Where("file_id = ? AND recipient_user_id = ?", file.ID, recipient.UserID).First(&relation).Error
@@ -230,26 +244,50 @@ func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientI
 					if idErr != nil {
 						return idErr
 					}
-					if err := tx.Create(&model.FileRecipient{ID: id, FileID: file.ID, RecipientUserID: recipient.UserID, Status: model.RecipientPending, SentAt: now}).Error; err != nil {
+					relation = model.FileRecipient{ID: id, FileID: file.ID, RecipientUserID: recipient.UserID, DeliveryVersion: 1, Status: model.RecipientPending, SentAt: now}
+					if err := tx.Create(&relation).Error; err != nil {
 						return err
 					}
 					result.Changed++
-					fileChanged = true
+					changedRecipients = append(changedRecipients, relation)
 				case err != nil:
 					return err
 				case relation.Status == model.RecipientDeclined:
-					if err := tx.Model(&model.FileRecipient{}).Where("id = ? AND status = ?", relation.ID, model.RecipientDeclined).Updates(map[string]interface{}{"status": model.RecipientPending, "sent_at": now, "accepted_at": nil, "declined_at": nil}).Error; err != nil {
+					updates := map[string]interface{}{
+						"status":              model.RecipientPending,
+						"delivery_version":    gorm.Expr("delivery_version + 1"),
+						"sent_at":             now,
+						"accepted_at":         nil,
+						"declined_at":         nil,
+						"first_downloaded_at": nil,
+						"last_downloaded_at":  nil,
+						"download_count":      0,
+					}
+					update := tx.Model(&model.FileRecipient{}).Where("id = ? AND status = ? AND delivery_version = ?", relation.ID, model.RecipientDeclined, relation.DeliveryVersion).Updates(updates)
+					if update.Error != nil {
+						return update.Error
+					}
+					if update.RowsAffected != 1 {
+						return errx.New(errc.ErrFileRecipientState, nil)
+					}
+					if err := tx.First(&relation, "id = ?", relation.ID).Error; err != nil {
 						return err
 					}
 					result.Changed++
-					fileChanged = true
+					changedRecipients = append(changedRecipients, relation)
 				default:
 					result.Skipped++
 				}
 			}
-			if fileChanged {
-				if err := createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventReused, now); err != nil {
+			if len(changedRecipients) > 0 {
+				event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventReused, now)
+				if err != nil {
 					return err
+				}
+				for _, relation := range changedRecipients {
+					if err := s.recordFileNotification(tx, NotificationTypeFileReceived, relation.RecipientUserID, file.UploaderUserID, file, relation, event); err != nil {
+						return err
+					}
 				}
 			}
 		}

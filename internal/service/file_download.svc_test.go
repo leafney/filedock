@@ -93,6 +93,19 @@ func TestPrivateAcceptCreatesDownloadAndCompletionUpdatesReceipt(t *testing.T) {
 	if recipient.Status != model.RecipientDownloaded || recipient.DownloadCount != 1 || recipient.FirstDownloadedAt == nil || recipient.LastDownloadedAt == nil {
 		t.Fatalf("recipient after download = %+v", recipient)
 	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDownloaded, 1)
+	secondTask, err := fixture.svc.CreateDownloadTask(fixture.recipient.UserID, fixture.room.Code, file.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondStream, err := fixture.svc.BeginDownload(fixture.recipient.UserID, fixture.room.Code, secondTask.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := secondStream.WriteTo(context.Background(), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDownloaded, 1)
 }
 
 type failingDownloadWriter struct{}
@@ -124,6 +137,7 @@ func TestFailedDownloadDoesNotCompleteOrRollbackAcceptance(t *testing.T) {
 	if storedTask.Status != model.DownloadTaskFailed || recipient.Status != model.RecipientAccepted || recipient.DownloadCount != 0 {
 		t.Fatalf("failed task=%+v recipient=%+v", storedTask, recipient)
 	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDownloaded, 0)
 }
 
 func TestDownloadTaskIsBoundToCreatingUserAndExpires(t *testing.T) {

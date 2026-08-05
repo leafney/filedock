@@ -245,12 +245,29 @@ func (stream *DownloadStream) complete(transferred int64) error {
 		if result.RowsAffected != 1 {
 			return errx.New(errc.ErrDownloadExpired, nil)
 		}
+		var recipient model.FileRecipient
+		firstDownload := false
 		if stream.fileRecord.Scope == model.FileScopeDirect && stream.fileRecord.UploaderUserID != stream.task.UserID {
-			if err := tx.Model(&model.FileRecipient{}).Where("file_id = ? AND recipient_user_id = ? AND status IN ?", stream.fileRecord.ID, stream.task.UserID, []string{model.RecipientAccepted, model.RecipientDownloaded}).Updates(map[string]interface{}{"status": model.RecipientDownloaded, "first_downloaded_at": gorm.Expr("COALESCE(first_downloaded_at, ?)", now), "last_downloaded_at": now, "download_count": gorm.Expr("download_count + 1")}).Error; err != nil {
-				return err
+			if err := tx.Where("file_id = ? AND recipient_user_id = ? AND status IN ?", stream.fileRecord.ID, stream.task.UserID, []string{model.RecipientAccepted, model.RecipientDownloaded}).First(&recipient).Error; err != nil {
+				return fileNotFound(err)
+			}
+			firstDownload = recipient.FirstDownloadedAt == nil
+			update := tx.Model(&model.FileRecipient{}).Where("id = ? AND delivery_version = ? AND status IN ?", recipient.ID, recipient.DeliveryVersion, []string{model.RecipientAccepted, model.RecipientDownloaded}).Updates(map[string]interface{}{"status": model.RecipientDownloaded, "first_downloaded_at": gorm.Expr("COALESCE(first_downloaded_at, ?)", now), "last_downloaded_at": now, "download_count": gorm.Expr("download_count + 1")})
+			if update.Error != nil {
+				return update.Error
+			}
+			if update.RowsAffected != 1 {
+				return errx.New(errc.ErrFileRecipientState, nil)
 			}
 		}
-		return createFileEvent(tx, stream.fileRecord.RoomID, stream.fileRecord.ID, stream.fileRecord.BatchID, stream.task.UserID, FileEventDownloaded, now)
+		event, err := createFileEventRecord(tx, stream.fileRecord.RoomID, stream.fileRecord.ID, stream.fileRecord.BatchID, stream.task.UserID, FileEventDownloaded, now)
+		if err != nil {
+			return err
+		}
+		if firstDownload {
+			return stream.svc.recordFileNotification(tx, NotificationTypeFileDownloaded, stream.fileRecord.UploaderUserID, stream.task.UserID, stream.fileRecord, recipient, event)
+		}
+		return nil
 	})
 }
 

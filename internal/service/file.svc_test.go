@@ -12,6 +12,7 @@ import (
 	"github.com/leafney/filedock/internal/model"
 	"github.com/leafney/filedock/pkg/errc"
 	"github.com/leafney/filedock/pkg/errx"
+	"gorm.io/gorm"
 )
 
 type fileTestFixture struct {
@@ -268,6 +269,78 @@ func TestUploadCapacityStateTransitionsAreIdempotent(t *testing.T) {
 	fixture.svc.db.First(&room, "id = ?", fixture.room.ID)
 	if room.UsedBytes != 300 || room.ReservedBytes != 0 {
 		t.Fatalf("capacity after transitions = used %d reserved %d", room.UsedBytes, room.ReservedBytes)
+	}
+}
+
+func TestPrivateFileNotificationRecordsFollowDeliveryVersions(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "notify-direct", model.FileScopeDirect, []FileManifest{{OriginalName: "私密.txt", DeclaredSize: 10}}, []string{fixture.recipient.UserID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, "", 0)
+	if err := fixture.svc.MarkUploading(fixture.uploader.UserID, batch.Files[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.CompleteUpload(fixture.uploader.UserID, batch.Files[0].ID, "text/plain", 10); err != nil {
+		t.Fatal(err)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileReceived, 1)
+
+	if err := fixture.svc.DeclineFile(fixture.recipient.UserID, fixture.room.Code, batch.Files[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDeclined, 1)
+	var declined model.NotificationRecord
+	if err := fixture.svc.db.Where("type = ?", NotificationTypeFileDeclined).First(&declined).Error; err != nil {
+		t.Fatal(err)
+	}
+	if declined.UserID != fixture.uploader.UserID || declined.CounterpartUserID != fixture.recipient.UserID || declined.DeliveryVersion != 1 {
+		t.Fatalf("declined notification = %+v", declined)
+	}
+
+	result, err := fixture.svc.ReusePrivateFiles(fixture.uploader.UserID, fixture.room.Code, []string{batch.Files[0].ID}, []string{fixture.recipient.UserID})
+	if err != nil || result.Changed != 1 {
+		t.Fatalf("reuse result = %+v, %v", result, err)
+	}
+	var relation model.FileRecipient
+	if err := fixture.svc.db.Where("file_id = ? AND recipient_user_id = ?", batch.Files[0].ID, fixture.recipient.UserID).First(&relation).Error; err != nil {
+		t.Fatal(err)
+	}
+	if relation.DeliveryVersion != 2 || relation.Status != model.RecipientPending || relation.DeclinedAt != nil || relation.DownloadCount != 0 {
+		t.Fatalf("reused relation = %+v", relation)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileReceived, 2)
+	if _, err := fixture.svc.ReusePrivateFiles(fixture.uploader.UserID, fixture.room.Code, []string{batch.Files[0].ID}, []string{fixture.recipient.UserID}); errx.Code(err) != errc.ErrFileRecipientState {
+		t.Fatalf("duplicate reuse error = %v", err)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, "", 3)
+}
+
+func TestFailedPrivateUploadDoesNotCreateNotificationRecord(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "notify-failed", model.FileScopeDirect, []FileManifest{{OriginalName: "失败.txt", DeclaredSize: 10}}, []string{fixture.recipient.UserID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.ReleaseUpload(fixture.uploader.UserID, batch.Files[0].ID, model.FileStatusFailed, errc.ErrFileStorage); err != nil {
+		t.Fatal(err)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, "", 0)
+}
+
+func assertNotificationRecordCount(t *testing.T, db *gorm.DB, notificationType string, want int64) {
+	t.Helper()
+	query := db.Model(&model.NotificationRecord{})
+	if notificationType != "" {
+		query = query.Where("type = ?", notificationType)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		t.Fatalf("count notification records: %v", err)
+	}
+	if count != want {
+		t.Fatalf("notification record count = %d, want %d", count, want)
 	}
 }
 
