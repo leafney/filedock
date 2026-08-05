@@ -24,7 +24,7 @@ import {
   resetSession,
 } from "../services/api";
 import type { RoomJoinInfo } from "../types/domain";
-import { readNotificationChatLaunch } from "../utils/notifications";
+import { readNotificationChatLaunch, readNotificationFileLaunch } from "../utils/notifications";
 
 export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSessionQuery> }) {
   const { t } = useTranslation();
@@ -39,6 +39,7 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const [profileOpen, setProfileOpen] = useState(false);
   const [actionError, setActionError] = useState<unknown>();
   const [chatLaunch, setChatLaunch] = useState<{ roomCode: string; peerUserId: string; token: string }>();
+  const [fileLaunch, setFileLaunch] = useState<{ roomCode: string; token: string }>();
   const validCode = /^\d{4}$/.test(code);
   const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: listRooms, enabled: Boolean(session), retry: false });
   const ownerRoom = useMemo(() => roomsQuery.data?.items.find((room) => room.role === "owner"), [roomsQuery.data?.items]);
@@ -46,13 +47,21 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   useEffect(() => { if (joinInfo.data?.alreadyMember) setJoined(true); }, [joinInfo.data?.alreadyMember]);
   const snapshot = useQuery({ queryKey: ["room", code], queryFn: () => getRoom(code), enabled: Boolean(session && joined), retry: false, refetchInterval: joined && !destroyAt ? 30_000 : false });
   useEffect(() => {
-    const launch = readNotificationChatLaunch(location.state);
-    if (!launch) return;
-    setChatLaunch({ roomCode: code, ...launch });
+    const chatTarget = readNotificationChatLaunch(location.state);
+    const fileTarget = readNotificationFileLaunch(location.state);
+    if (!chatTarget && !fileTarget) return;
+    if (chatTarget) setChatLaunch({ roomCode: code, ...chatTarget });
+    if (fileTarget) {
+      setFileLaunch({ roomCode: code, ...fileTarget });
+      void queryClient.invalidateQueries({ queryKey: ["room-files", code] });
+      void queryClient.invalidateQueries({ queryKey: ["file-events", code] });
+      void queryClient.invalidateQueries({ queryKey: ["room", code] });
+    }
     navigate(location.pathname, { replace: true, state: null });
-  }, [code, location.pathname, location.state, navigate]);
+  }, [code, location.pathname, location.state, navigate, queryClient]);
   useEffect(() => {
     setChatLaunch((current) => current?.roomCode === code ? current : undefined);
+    setFileLaunch((current) => current?.roomCode === code ? current : undefined);
   }, [code]);
   useEffect(() => {
     if (!chatLaunch || !snapshot.data || chatLaunch.roomCode !== code) return;
@@ -131,6 +140,7 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     onOpenProfile={() => setProfileOpen(true)}
     actionError={actionError}
     chatLaunch={chatLaunch?.roomCode === code ? chatLaunch : undefined}
+    fileLaunchToken={fileLaunch?.roomCode === code ? fileLaunch.token : undefined}
   />{profileOpen && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={() => {
     if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
     void resetSession().then(() => {

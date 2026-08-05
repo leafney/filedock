@@ -28,6 +28,7 @@ interface Props {
   onOpenProfile: () => void;
   actionError?: unknown;
   chatLaunch?: { peerUserId: string; token: string };
+  fileLaunchToken?: string;
 }
 
 export function RoomWorkspace(props: Props) {
@@ -54,6 +55,9 @@ export function RoomWorkspace(props: Props) {
     setChatTarget(member.userId);
     if (window.matchMedia("(max-width: 760px)").matches) setChatMobileOpen(true);
   }, [props.chatLaunch?.token, props.chatLaunch?.peerUserId, props.room.members, props.session.userId]);
+  useEffect(() => {
+    if (props.fileLaunchToken) setChatMobileOpen(false);
+  }, [props.fileLaunchToken]);
   const expires = Math.max(0, props.room.expiresAt - now);
   const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;

@@ -1,4 +1,4 @@
-import { MessageOutlined, UserAddOutlined } from "@ant-design/icons";
+import { CloseCircleOutlined, DownloadOutlined, FileOutlined, MessageOutlined, UserAddOutlined } from "@ant-design/icons";
 import { Alert, Avatar, Button, Drawer, Empty, Space } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -7,11 +7,11 @@ import { useNavigate } from "react-router-dom";
 
 import { useNotifications } from "../hooks/use-notifications";
 import { getApiErrorMessage } from "../lib/api-error";
-import { approveJoinRequest, rejectJoinRequest } from "../services/api";
-import type { JoinRequestNotification, NotificationItem, Session } from "../types/domain";
+import { approveJoinRequest, markNotificationRead, rejectJoinRequest } from "../services/api";
+import type { FileNotification, JoinRequestNotification, NotificationItem, Session } from "../types/domain";
 import { getAvatarInitial, getStableAvatarColor } from "../utils/avatar";
 import { formatDate } from "../utils/format";
-import { chatNotificationTarget, formatNotificationCount } from "../utils/notifications";
+import { chatNotificationTarget, fileNotificationTarget, formatNotificationCount, isFileResultNotification } from "../utils/notifications";
 
 interface NotificationCenterValue {
   enabled: boolean;
@@ -84,6 +84,34 @@ export function NotificationCenterProvider({ session, children }: { session?: Se
       },
     });
   };
+  const openFile = async (item: FileNotification) => {
+    const target = fileNotificationTarget(item);
+    if (!target) return;
+    setActionError(undefined);
+    if (isFileResultNotification(item)) {
+      setProcessingKey(item.key);
+      try {
+        await markNotificationRead(item.key, item.readToken);
+      } catch (error) {
+        setActionError(error);
+        setProcessingKey(undefined);
+        return;
+      }
+      setProcessingKey(undefined);
+    }
+    void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    void queryClient.invalidateQueries({ queryKey: ["room-files", target.roomCode] });
+    void queryClient.invalidateQueries({ queryKey: ["file-events", target.roomCode] });
+    void queryClient.invalidateQueries({ queryKey: ["room", target.roomCode] });
+    close();
+    navigate(`/rooms/${target.roomCode}`, {
+      state: {
+        notificationFileTarget: {
+          token: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
+      },
+    });
+  };
 
   return <NotificationCenterContext.Provider value={{ enabled: Boolean(session?.userId), totalCount: notifications.totalCount, open }}>
     {children}
@@ -103,7 +131,7 @@ export function NotificationCenterProvider({ session, children }: { session?: Se
       <div className="global-notification-list">
         {notifications.items.map((item) => item.type === "join_request"
           ? <ApprovalNotificationItem key={item.key} item={item} processing={processingKey === item.key} onProcess={processApproval} />
-          : <button className="global-notification-item is-chat" type="button" key={item.key} onClick={() => openChat(item)} aria-label={t("notification.openChat", { name: item.peerDisplayName, room: item.roomTitle })}>
+          : item.type === "chat_conversation" ? <button className="global-notification-item is-chat" type="button" key={item.key} onClick={() => openChat(item)} aria-label={t("notification.openChat", { name: item.peerDisplayName, room: item.roomTitle })}>
             <Avatar size={42} style={{ backgroundColor: getStableAvatarColor(item.peerDisplayName) }}>{getAvatarInitial(item.peerDisplayName)}</Avatar>
             <span className="global-notification-content">
               <span className="global-notification-title"><strong>{item.peerDisplayName}</strong><time>{formatDate(item.latestMessageAt)}</time></span>
@@ -111,11 +139,26 @@ export function NotificationCenterProvider({ session, children }: { session?: Se
               <span className="global-notification-preview">{item.latestMessageText}</span>
             </span>
             <span className="global-notification-count" aria-label={t("notification.unreadCount", { count: item.unreadCount })}>{formatNotificationCount(item.unreadCount)}</span>
-          </button>)}
+          </button> : <FileNotificationItem key={item.key} item={item} processing={processingKey === item.key} onOpen={openFile} />)}
       </div>
       {notifications.hasNextPage && <Button className="global-notification-more" block loading={notifications.isFetchingNextPage} onClick={() => void notifications.fetchNextPage()}>{t("notification.loadMore")}</Button>}
     </Drawer>
   </NotificationCenterContext.Provider>;
+}
+
+function FileNotificationItem({ item, processing, onOpen }: { item: FileNotification; processing: boolean; onOpen: (item: FileNotification) => Promise<void> }) {
+  const { t } = useTranslation();
+  const icon = item.type === "file_declined" ? <CloseCircleOutlined aria-hidden="true" /> : item.type === "file_downloaded" ? <DownloadOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />;
+  const previewKey = item.type === "file_received" ? "notification.fileReceived" : item.type === "file_declined" ? "notification.fileDeclined" : "notification.fileDownloaded";
+  return <button className={`global-notification-item is-file ${item.type}`} type="button" disabled={processing} onClick={() => void onOpen(item)} aria-label={t("notification.openFile", { name: item.counterpartDisplayName, room: item.roomTitle, count: item.fileCount })}>
+    <Avatar size={42} style={{ backgroundColor: getStableAvatarColor(item.counterpartDisplayName) }}>{getAvatarInitial(item.counterpartDisplayName)}</Avatar>
+    <span className="global-notification-content">
+      <span className="global-notification-title"><strong>{item.counterpartDisplayName}</strong><time>{formatDate(item.latestFileEventAt)}</time></span>
+      <span className="global-notification-room">{icon}{item.roomTitle} · {item.roomCode}</span>
+      <span className="global-notification-preview">{t(previewKey, { count: item.fileCount, file: item.latestFileName })}</span>
+    </span>
+    <span className="global-notification-count" aria-label={t("notification.fileCount", { count: item.fileCount })}>{formatNotificationCount(item.fileCount)}</span>
+  </button>;
 }
 
 function ApprovalNotificationItem({ item, processing, onProcess }: { item: JoinRequestNotification; processing: boolean; onProcess: (item: JoinRequestNotification, approve: boolean) => Promise<void> }) {

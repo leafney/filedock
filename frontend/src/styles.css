@@ -296,6 +296,7 @@ body {
 .global-notification-item { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; width: 100%; align-items: start; gap: 0.75rem; border: 0; border-bottom: 1px solid #eef2f7; background: transparent; color: #0f172a; padding: 0.9rem 0.25rem; text-align: left; }
 button.global-notification-item { border-radius: 0.65rem; cursor: pointer; transition: background-color 160ms ease; }
 button.global-notification-item:hover { background: #f0fdfa; }
+button.global-notification-item:disabled { cursor: wait; opacity: 0.62; }
 button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .global-notification-content { display: grid; min-width: 0; gap: 0.28rem; }
 .global-notification-title { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
@@ -308,6 +309,8 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .global-notification-count { min-width: 1.35rem; border-radius: 999px; background: #ef4444; color: #fff; font-size: 0.62rem; font-weight: 700; line-height: 1.35rem; padding: 0 0.35rem; text-align: center; }
 .global-notification-item.is-approval { grid-template-columns: auto minmax(0, 1fr); }
 .global-notification-item.is-approval .ant-space { margin-top: 0.35rem; }
+.global-notification-item.file_declined .global-notification-room { color: #b45309; }
+.global-notification-item.file_downloaded .global-notification-room { color: #0369a1; }
 .global-notification-more { margin-top: 0.8rem; }
 
 @media (max-width: 900px) {

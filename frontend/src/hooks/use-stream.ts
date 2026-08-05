@@ -40,6 +40,7 @@ export function useGlobalStream(session: Session | undefined) {
         return;
       }
       if (shouldRefreshNotifications(event.type)) refreshNotifications();
+      if (event.type === "notification.changed") return;
       if (event.type.startsWith("room.") || event.type === "user.profile_changed") {
         void queryClient.invalidateQueries({ queryKey: ["rooms"] });
         void queryClient.invalidateQueries({ queryKey: ["room"] });

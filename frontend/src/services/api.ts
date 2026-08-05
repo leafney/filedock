@@ -13,6 +13,7 @@ import type {
   FileRange,
   FileSort,
   NotificationPage,
+  NotificationReadResult,
   RoomFile,
   RoomJoinInfo,
   RoomSnapshot,
@@ -106,6 +107,10 @@ export function rejectJoinRequest(code: string, requestId: string) {
 
 export function listNotifications(cursor = "", limit = 30) {
   return unwrap<NotificationPage>(apiClient.get<ApiResponse<NotificationPage>>("/api/v1/notifications", { params: { cursor: cursor || undefined, limit } }));
+}
+
+export function markNotificationRead(key: string, readToken: string) {
+  return unwrap<NotificationReadResult>(apiClient.post<ApiResponse<NotificationReadResult>>("/api/v1/notifications/read", { key, readToken }));
 }
 
 export function listChatConversations(code: string) {

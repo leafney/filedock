@@ -82,12 +82,40 @@ export interface ChatConversationNotification extends NotificationBase {
   latestMessageAt: number;
 }
 
-export type NotificationItem = JoinRequestNotification | ChatConversationNotification;
+interface FileNotificationBase extends NotificationBase {
+  counterpartUserId: string;
+  counterpartDisplayName: string;
+  latestFileName: string;
+  fileCount: number;
+  latestFileEventAt: number;
+}
+
+export interface FileReceivedNotification extends FileNotificationBase {
+  type: "file_received";
+}
+
+export interface FileDeclinedNotification extends FileNotificationBase {
+  type: "file_declined";
+  readToken: string;
+}
+
+export interface FileDownloadedNotification extends FileNotificationBase {
+  type: "file_downloaded";
+  readToken: string;
+}
+
+export type FileNotification = FileReceivedNotification | FileDeclinedNotification | FileDownloadedNotification;
+
+export type NotificationItem = JoinRequestNotification | ChatConversationNotification | FileNotification;
 
 export interface NotificationPage {
   items: NotificationItem[];
   totalCount: number;
   nextCursor?: string;
+}
+
+export interface NotificationReadResult {
+  updatedCount: number;
 }
 
 export interface StreamEvent<T = Record<string, unknown>> {
