@@ -88,6 +88,9 @@ func TestLifecycleCleanupDeletesChatRelationsIdempotently(t *testing.T) {
 	if err := db.Create(&model.ChatMessageDeletion{MessageID: messageID, UserID: "01USERCHATCLEANUP1", DeletedAt: 1}).Error; err != nil {
 		t.Fatalf("create deletion: %v", err)
 	}
+	if err := db.Create(&model.NotificationRecord{ID: "01NOTIFYCHATCLEANUP01", UserID: "01USERCHATCLEANUP1", Type: NotificationTypeFileDeclined, RoomID: roomID, FileID: "01FILECHATCLEANUP001", CounterpartUserID: "01USERCHATCLEANUP2", FileRecipientID: "01RECIPIENTCLEANUP01", DeliveryVersion: 1, SourceEventID: "01EVENTCHATCLEANUP01", OccurredAtMS: 1000}).Error; err != nil {
+		t.Fatalf("create notification record: %v", err)
+	}
 	if err := db.Create(&model.CleanupJob{ID: jobID, RoomID: roomID, Status: model.CleanupRunning, Phase: "running", ScheduledAt: 1}).Error; err != nil {
 		t.Fatalf("create cleanup job: %v", err)
 	}
@@ -97,7 +100,7 @@ func TestLifecycleCleanupDeletesChatRelationsIdempotently(t *testing.T) {
 	if err := lifecycle.runCleanup(roomID, jobID, time.Unix(3, 0)); err != nil {
 		t.Fatalf("repeat chat cleanup: %v", err)
 	}
-	for _, table := range []string{"chat_message_deletions", "chat_read_states", "chat_messages", "chat_conversations"} {
+	for _, table := range []string{"chat_message_deletions", "chat_read_states", "chat_messages", "chat_conversations", "notification_records"} {
 		var count int64
 		if err := db.Table(table).Where("1 = 1").Count(&count).Error; err != nil {
 			t.Fatalf("count %s: %v", table, err)
@@ -105,6 +108,13 @@ func TestLifecycleCleanupDeletesChatRelationsIdempotently(t *testing.T) {
 		if count != 0 {
 			t.Fatalf("%s count = %d, want 0", table, count)
 		}
+	}
+	var job model.CleanupJob
+	if err := db.First(&job, "id = ?", jobID).Error; err != nil {
+		t.Fatalf("load cleanup job: %v", err)
+	}
+	if job.TotalNotifications != 1 || job.CleanedNotifications != 1 {
+		t.Fatalf("notification cleanup stats = %+v", job)
 	}
 }
 

@@ -105,7 +105,7 @@ func InitializeApp(configPath string, build core.BuildInfo) (*core.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	notificationSvc, err := provideNotificationSvc(gormDBSvc)
+	notificationSvc, err := provideNotificationSvc(gormDBSvc, streamHub)
 	if err != nil {
 		return nil, err
 	}

@@ -16,6 +16,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.
 	app.Put("/api/v1/sessions/me", sessionAPI.HandleUpdate)
 	app.Delete("/api/v1/sessions/me", sessionAPI.HandleReset)
 	app.Get("/api/v1/notifications", notificationAPI.HandleList)
+	app.Post("/api/v1/notifications/read", notificationAPI.HandleMarkRead)
 	app.Get("/api/v1/rooms", roomAPI.HandleList)
 	app.Post("/api/v1/rooms", rateLimited(limiter, "room_create", 5, time.Hour, roomAPI.HandleCreate))
 	app.Get("/api/v1/rooms/:code/join-info", rateLimited(limiter, "room_join_info", 30, time.Minute, roomAPI.HandleJoinInfo))

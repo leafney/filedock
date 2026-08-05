@@ -214,11 +214,11 @@ func provideChatAPI(chatBiz *biz.ChatBiz) (*api.ChatAPI, error) {
 	return api.NewChatAPI(chatBiz)
 }
 
-func provideNotificationSvc(db *gormx.GormDBSvc) (*service.NotificationSvc, error) {
+func provideNotificationSvc(db *gormx.GormDBSvc, hub *service.StreamHub) (*service.NotificationSvc, error) {
 	if db == nil {
 		return nil, fmt.Errorf("notification database is required")
 	}
-	return service.NewNotificationSvc(db.DB)
+	return service.NewNotificationSvc(db.DB, hub)
 }
 
 func provideNotificationBiz(notifications *service.NotificationSvc) (*biz.NotificationBiz, error) {

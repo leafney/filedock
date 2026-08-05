@@ -21,6 +21,7 @@ type notificationFixture struct {
 	room          RoomSnapshot
 	pending       JoinRequestView
 	db            *gorm.DB
+	hub           *StreamHub
 }
 
 func newNotificationFixture(t *testing.T) notificationFixture {
@@ -67,11 +68,11 @@ func newNotificationFixture(t *testing.T) notificationFixture {
 	if err != nil {
 		t.Fatalf("new chat service: %v", err)
 	}
-	notifications, err := NewNotificationSvc(db)
+	notifications, err := NewNotificationSvc(db, hub)
 	if err != nil {
 		t.Fatalf("new notification service: %v", err)
 	}
-	return notificationFixture{notifications: notifications, chat: chat, rooms: rooms, owner: owner, guest: guest, third: third, requester: requester, room: room, pending: pending, db: db}
+	return notificationFixture{notifications: notifications, chat: chat, rooms: rooms, owner: owner, guest: guest, third: third, requester: requester, room: room, pending: pending, db: db, hub: hub}
 }
 
 func TestNotificationAggregatesApprovalsAndUnreadChats(t *testing.T) {
@@ -272,6 +273,125 @@ func TestNotificationRejectsInvalidPagination(t *testing.T) {
 	if _, err := fixture.notifications.List(fixture.owner.UserID, "not-a-cursor", 30); err == nil || errx.Code(err) != errc.ErrParams {
 		t.Fatalf("cursor error = %v, code=%d", err, errx.Code(err))
 	}
+}
+
+func TestNotificationAggregatesPendingPrivateFiles(t *testing.T) {
+	fixture := newNotificationFixture(t)
+	baseMS := time.Now().Add(-time.Minute).UnixMilli()
+	first := createFileNotificationFixture(t, fixture, "received-one", NotificationTypeFileReceived, fixture.guest.UserID, fixture.owner.UserID, model.RecipientPending, "第一份.txt", baseMS)
+	createFileNotificationFixture(t, fixture, "received-two", NotificationTypeFileReceived, fixture.guest.UserID, fixture.owner.UserID, model.RecipientPending, "第二份.txt", baseMS+1000)
+
+	page, err := fixture.notifications.List(fixture.guest.UserID, "", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TotalCount != 2 || len(page.Items) != 1 {
+		t.Fatalf("pending file page = %+v", page)
+	}
+	item := page.Items[0]
+	if item.Type != NotificationTypeFileReceived || item.FileCount != 2 || item.LatestFileName != "第二份.txt" || item.CounterpartUserID != fixture.owner.UserID || item.ReadToken != "" {
+		t.Fatalf("pending file item = %+v", item)
+	}
+	if err := fixture.db.Model(&model.FileRecipient{}).Where("id = ?", first.FileRecipientID).Update("status", model.RecipientAccepted).Error; err != nil {
+		t.Fatal(err)
+	}
+	page, err = fixture.notifications.List(fixture.guest.UserID, "", 30)
+	if err != nil || page.TotalCount != 1 || len(page.Items) != 1 || page.Items[0].FileCount != 1 {
+		t.Fatalf("pending file after accept = %+v, %v", page, err)
+	}
+}
+
+func TestNotificationMarksOnlyFileResultsThroughSnapshot(t *testing.T) {
+	fixture := newNotificationFixture(t)
+	baseMS := time.Now().Add(-time.Minute).UnixMilli()
+	createFileNotificationFixture(t, fixture, "declined-one", NotificationTypeFileDeclined, fixture.owner.UserID, fixture.guest.UserID, model.RecipientDeclined, "拒绝一.txt", baseMS)
+	createFileNotificationFixture(t, fixture, "declined-two", NotificationTypeFileDeclined, fixture.owner.UserID, fixture.guest.UserID, model.RecipientDeclined, "拒绝二.txt", baseMS+1000)
+	createFileNotificationFixture(t, fixture, "downloaded-one", NotificationTypeFileDownloaded, fixture.owner.UserID, fixture.guest.UserID, model.RecipientDownloaded, "完成一.txt", baseMS+2000)
+
+	page, err := fixture.notifications.List(fixture.owner.UserID, "", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.TotalCount != 4 || len(page.Items) != 3 || page.Items[0].Type != NotificationTypeJoinRequest {
+		t.Fatalf("file result page = %+v", page)
+	}
+	declined := findFileNotification(t, page.Items, NotificationTypeFileDeclined)
+	if declined.FileCount != 2 || declined.ReadToken == "" || declined.LatestFileName != "拒绝二.txt" {
+		t.Fatalf("declined group = %+v", declined)
+	}
+	createFileNotificationFixture(t, fixture, "declined-three", NotificationTypeFileDeclined, fixture.owner.UserID, fixture.guest.UserID, model.RecipientDeclined, "拒绝三.txt", baseMS+3000)
+
+	events, stop := fixture.hub.Subscribe(fixture.owner.UserID)
+	defer stop()
+	updated, err := fixture.notifications.MarkFileResultsRead(fixture.owner.UserID, declined.Key, declined.ReadToken)
+	if err != nil || updated != 2 {
+		t.Fatalf("mark file results = %d, %v", updated, err)
+	}
+	updated, err = fixture.notifications.MarkFileResultsRead(fixture.owner.UserID, declined.Key, declined.ReadToken)
+	if err != nil || updated != 0 {
+		t.Fatalf("repeat mark file results = %d, %v", updated, err)
+	}
+	foundChanged := false
+	for len(events) > 0 {
+		if event := <-events; event.Type == "notification.changed" {
+			foundChanged = true
+		}
+	}
+	if !foundChanged {
+		t.Fatal("notification.changed was not published")
+	}
+
+	page, err = fixture.notifications.List(fixture.owner.UserID, "", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remainingDeclined := findFileNotification(t, page.Items, NotificationTypeFileDeclined)
+	if page.TotalCount != 3 || remainingDeclined.FileCount != 1 || remainingDeclined.LatestFileName != "拒绝三.txt" {
+		t.Fatalf("remaining file result page = %+v", page)
+	}
+	if _, err := fixture.notifications.MarkFileResultsRead(fixture.owner.UserID, remainingDeclined.Key, "invalid"); errx.Code(err) != errc.ErrParams {
+		t.Fatalf("invalid read token error = %v", err)
+	}
+}
+
+func createFileNotificationFixture(t *testing.T, fixture notificationFixture, suffix, notificationType, notificationUserID, counterpartUserID, recipientStatus, fileName string, occurredAtMS int64) model.NotificationRecord {
+	t.Helper()
+	fileID := "file-" + suffix
+	relationID := "relation-" + suffix
+	file := model.RoomFile{ID: fileID, RoomID: fixture.room.RoomID, BatchID: "batch-" + suffix, UploaderUserID: fixture.owner.UserID, StorageName: "storage-" + suffix, OriginalName: fileName, DeclaredSize: 1, ActualSize: 1, Scope: model.FileScopeDirect, Status: model.FileStatusAvailable, Progress: 100, CreatedAt: occurredAtMS / 1000}
+	if err := fixture.db.Create(&file).Error; err != nil {
+		t.Fatalf("create notification file: %v", err)
+	}
+	recipient := model.FileRecipient{ID: relationID, FileID: fileID, RecipientUserID: fixture.guest.UserID, DeliveryVersion: 1, Status: recipientStatus, SentAt: occurredAtMS / 1000}
+	if recipientStatus == model.RecipientDeclined {
+		value := occurredAtMS / 1000
+		recipient.DeclinedAt = &value
+	}
+	if recipientStatus == model.RecipientDownloaded {
+		value := occurredAtMS / 1000
+		recipient.FirstDownloadedAt = &value
+		recipient.LastDownloadedAt = &value
+		recipient.DownloadCount = 1
+	}
+	if err := fixture.db.Create(&recipient).Error; err != nil {
+		t.Fatalf("create notification recipient: %v", err)
+	}
+	record := model.NotificationRecord{ID: "record-" + suffix, UserID: notificationUserID, Type: notificationType, RoomID: fixture.room.RoomID, FileID: fileID, CounterpartUserID: counterpartUserID, FileRecipientID: relationID, DeliveryVersion: 1, SourceEventID: "event-" + suffix, OccurredAtMS: occurredAtMS}
+	if err := fixture.db.Create(&record).Error; err != nil {
+		t.Fatalf("create notification record: %v", err)
+	}
+	return record
+}
+
+func findFileNotification(t *testing.T, items []NotificationItem, notificationType string) NotificationItem {
+	t.Helper()
+	for _, item := range items {
+		if item.Type == notificationType {
+			return item
+		}
+	}
+	t.Fatalf("file notification %s not found in %+v", notificationType, items)
+	return NotificationItem{}
 }
 
 func findChatNotification(t *testing.T, items []NotificationItem, peerUserID string) NotificationItem {
