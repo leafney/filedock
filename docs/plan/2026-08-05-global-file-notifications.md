@@ -2,7 +2,7 @@ Related discussion: [docs/discuss/2026-08-05-global-file-notifications.md](../di
 
 # FileDock 全局文件通知一期 PRD
 
-状态：已批准，实施中
+状态：实现完成，待人工验收
 
 日期：2026-08-05
 
