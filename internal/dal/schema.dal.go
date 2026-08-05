@@ -24,6 +24,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.FileRecipient{},
 		&model.FileEvent{},
 		&model.DownloadTask{},
+		&model.NotificationRecord{},
 		&model.ChatConversation{},
 		&model.ChatMessage{},
 		&model.ChatReadState{},

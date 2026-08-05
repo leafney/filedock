@@ -45,6 +45,7 @@ type FileRecipient struct {
 	ID                string `gorm:"type:text;primaryKey;size:26"`
 	FileID            string `gorm:"type:text;not null;uniqueIndex:idx_file_recipients_file_user"`
 	RecipientUserID   string `gorm:"type:text;not null;uniqueIndex:idx_file_recipients_file_user;index:idx_file_recipients_user_status"`
+	DeliveryVersion   int64  `gorm:"not null;default:1"`
 	Status            string `gorm:"type:text;not null;index:idx_file_recipients_user_status"`
 	SentAt            int64  `gorm:"not null"`
 	AcceptedAt        *int64
