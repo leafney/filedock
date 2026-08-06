@@ -1280,6 +1280,69 @@ html[data-theme="dark"] .file-batch-bar button:disabled {
 }
 html[data-theme="dark"] .file-row > input { accent-color: var(--fd-primary); }
 
+html[data-theme="dark"] .room-overlay > section {
+  border: 1px solid var(--fd-border);
+  background: var(--fd-surface);
+  box-shadow: 0 16px 40px rgb(2 6 23 / 48%);
+}
+html[data-theme="dark"] .room-overlay > section > header {
+  border-bottom-color: var(--fd-border);
+  background: var(--fd-surface);
+}
+html[data-theme="dark"] .room-overlay > section > header h2 { color: var(--fd-text-strong); }
+html[data-theme="dark"] .room-overlay > section > header button { color: var(--fd-text-muted); }
+html[data-theme="dark"] .room-overlay > section > header button:hover,
+html[data-theme="dark"] .room-overlay > section > header button:focus-visible {
+  background: var(--fd-surface-hover);
+  color: var(--fd-primary);
+  outline: none;
+}
+html[data-theme="dark"] .file-details dl div { background: var(--fd-surface-soft); }
+html[data-theme="dark"] .file-details dt { color: var(--fd-text-muted); }
+html[data-theme="dark"] .file-details dd { color: var(--fd-text-strong); }
+
+html[data-theme="dark"] .ant-modal-content,
+html[data-theme="dark"] .ant-modal-header,
+html[data-theme="dark"] .ant-modal-footer,
+html[data-theme="dark"] .ant-drawer-content,
+html[data-theme="dark"] .ant-drawer-header,
+html[data-theme="dark"] .ant-drawer-footer {
+  border-color: var(--fd-border) !important;
+  background: var(--fd-surface) !important;
+}
+html[data-theme="dark"] .ant-modal-title,
+html[data-theme="dark"] .ant-drawer-title { color: var(--fd-text-strong) !important; }
+html[data-theme="dark"] .ant-modal-body,
+html[data-theme="dark"] .ant-drawer-body,
+html[data-theme="dark"] .ant-modal-footer,
+html[data-theme="dark"] .ant-drawer-footer { color: var(--fd-text-secondary); }
+html[data-theme="dark"] .ant-modal-close,
+html[data-theme="dark"] .ant-drawer-close { color: var(--fd-text-muted) !important; }
+html[data-theme="dark"] .ant-modal-close:hover,
+html[data-theme="dark"] .ant-modal-close:focus-visible,
+html[data-theme="dark"] .ant-drawer-close:hover,
+html[data-theme="dark"] .ant-drawer-close:focus-visible { color: var(--fd-primary) !important; background: var(--fd-surface-hover) !important; }
+html[data-theme="dark"] .ant-input,
+html[data-theme="dark"] .ant-input-affix-wrapper,
+html[data-theme="dark"] .ant-input-number,
+html[data-theme="dark"] .ant-select-selector,
+html[data-theme="dark"] .ant-picker {
+  border-color: var(--fd-border) !important;
+  background: var(--fd-surface-soft) !important;
+  color: var(--fd-text) !important;
+}
+html[data-theme="dark"] .ant-input::placeholder,
+html[data-theme="dark"] .ant-input-affix-wrapper input::placeholder { color: var(--fd-text-faint) !important; }
+html[data-theme="dark"] .ant-form-item-label > label,
+html[data-theme="dark"] .ant-radio-wrapper,
+html[data-theme="dark"] .ant-checkbox-wrapper { color: var(--fd-text-secondary) !important; }
+html[data-theme="dark"] .ant-message-notice-content {
+  border: 1px solid var(--fd-border) !important;
+  background: var(--fd-surface) !important;
+  box-shadow: 0 8px 24px rgb(2 6 23 / 42%) !important;
+  color: var(--fd-text) !important;
+}
+
 .theme-menu-option { display: inline-flex; align-items: center; gap: 0.45rem; }
 .theme-menu-dot { display: inline-block; width: 0.5rem; height: 0.5rem; border: 1px solid currentColor; border-radius: 50%; opacity: 0.55; }
 .theme-menu-dot.is-selected { background: currentColor; opacity: 1; }
