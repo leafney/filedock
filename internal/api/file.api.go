@@ -195,3 +195,81 @@ func (a *FileAPI) HandleDownload(c *fiber.Ctx) error {
 	})
 	return nil
 }
+
+func (a *FileAPI) HandleTrashList(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	result, err := a.biz.TrashList(principal.UserID, c.Params("code"), service.FileTrashListQuery{Search: c.Query("search"), Cursor: c.Query("cursor"), Limit: limit})
+	if err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, result)
+}
+
+func (a *FileAPI) HandleTrash(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	var request dto.TrashFileRequest
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, errc.ErrBindParams, nil)
+	}
+	result, err := a.biz.Trash(principal.UserID, c.Params("code"), c.Params("fileId"), request)
+	if err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, result)
+}
+
+func (a *FileAPI) HandleRestore(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	result, err := a.biz.Restore(principal.UserID, c.Params("code"), c.Params("fileId"))
+	if err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, result)
+}
+
+func (a *FileAPI) HandleApproveRestore(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	if err := a.biz.ApproveRestore(principal.UserID, c.Params("code"), c.Params("requestId")); err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, nil)
+}
+
+func (a *FileAPI) HandleRejectRestore(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	var request dto.RejectFileRestoreRequest
+	if err := c.BodyParser(&request); err != nil {
+		return response.Error(c, errc.ErrBindParams, nil)
+	}
+	if err := a.biz.RejectRestore(principal.UserID, c.Params("code"), c.Params("requestId"), request); err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, nil)
+}
+
+func (a *FileAPI) HandlePurge(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	if err := a.biz.Purge(principal.UserID, c.Params("code"), c.Params("fileId")); err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, nil)
+}

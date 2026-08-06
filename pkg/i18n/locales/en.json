@@ -12,6 +12,7 @@
   "error.upload_size_mismatch": "The uploaded size does not match the declared size",
   "error.chat_content_invalid": "The chat content is empty or exceeds the length limit",
   "error.chat_recipient_invalid": "The chat recipient is invalid",
+  "error.file_lifecycle_reason_invalid": "The reason is invalid or exceeds 200 characters",
   "error.internal_server": "The server is busy. Please try again later",
   "error.unauthorized": "Authentication failed",
   "error.auth_expired": "Authorization has expired",
@@ -56,6 +57,8 @@
   "error.file_recipient_state_conflict": "The recipient state does not allow this action",
   "error.chat_message_state_conflict": "The message state does not allow this action",
   "error.chat_recall_expired": "The message recall window has expired",
+  "error.file_restore_request_state_conflict": "The restore request was processed or is no longer valid",
+  "error.download_cancelled_by_file_trash": "The file was moved to trash and the download was cancelled",
   "error.room_pin_invalid": "The room PIN is incorrect",
   "error.pin_paused": "Too many PIN attempts; try again later",
   "error.rate_limited": "Too many requests; try again later",
@@ -67,5 +70,6 @@
   "error.cache": "A cache error occurred",
   "error.jwt_key": "The session security key is invalid",
   "error.lifecycle": "A room lifecycle task failed",
-  "error.file_storage": "The file storage operation failed"
+  "error.file_storage": "The file storage operation failed",
+  "error.file_purge_failed": "The file could not be permanently deleted. Try again later"
 }

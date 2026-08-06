@@ -79,8 +79,8 @@ func TestSQLiteDSNAndPragmas(t *testing.T) {
 	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&tables).Error; err != nil {
 		t.Fatalf("table query error = %v", err)
 	}
-	if tables != 16 {
-		t.Fatalf("business table count = %d, want 16", tables)
+	if tables != 18 {
+		t.Fatalf("business table count = %d, want 18", tables)
 	}
 }
 

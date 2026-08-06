@@ -21,7 +21,7 @@ func TestTrashFileEnforcesOwnershipAndStartsGeneration(t *testing.T) {
 	if _, err := fixture.svc.TrashFile(fixture.outsider.UserID, fixture.room.Code, file.ID, ""); errx.Code(err) != errc.ErrFileNotFound {
 		t.Fatalf("outsider trash code=%d error=%v", errx.Code(err), err)
 	}
-	if _, err := fixture.svc.TrashFile(fixture.uploader.UserID, fixture.room.Code, file.ID, "self reason"); errx.Code(err) != errc.ErrFileManifest {
+	if _, err := fixture.svc.TrashFile(fixture.uploader.UserID, fixture.room.Code, file.ID, "self reason"); errx.Code(err) != errc.ErrFileLifecycleReason {
 		t.Fatalf("self reason code=%d error=%v", errx.Code(err), err)
 	}
 	cycle, err := fixture.svc.TrashFile(fixture.uploader.UserID, fixture.room.Code, file.ID, "")
@@ -84,13 +84,13 @@ func TestRestoreRequestRejectsRepeatUntilNewGeneration(t *testing.T) {
 	if err != nil || request.Status != FileRestoreActionPending || request.RequestID == "" {
 		t.Fatalf("request=%+v error=%v", request, err)
 	}
-	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileState {
+	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileRestoreRequestState {
 		t.Fatalf("duplicate request code=%d error=%v", errx.Code(err), err)
 	}
 	if err := fixture.svc.RejectFileRestore(fixture.owner.UserID, fixture.room.Code, request.RequestID, "  keep removed  "); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileState {
+	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileRestoreRequestState {
 		t.Fatalf("request after reject code=%d error=%v", errx.Code(err), err)
 	}
 	var rejected model.FileRestoreRequest
@@ -162,7 +162,7 @@ func TestInvalidatedRestoreRequestCanReactivateButRejectedCannot(t *testing.T) {
 	if err := fixture.svc.InvalidateMemberRestoreRequests(nil, fixture.room.ID, fixture.uploader.UserID, fixture.svc.now().Unix()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileState {
+	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileRestoreRequestState {
 		t.Fatalf("rejected reactivation code=%d error=%v", errx.Code(err), err)
 	}
 }
@@ -172,7 +172,7 @@ func TestTrashLifecycleReasonValidation(t *testing.T) {
 		t.Fatalf("normalized=%q error=%v", value, err)
 	}
 	for _, value := range []string{strings.Repeat("界", MaxFileLifecycleReasonRunes+1), "line\nbreak"} {
-		if _, err := normalizeFileLifecycleReason(value); errx.Code(err) != errc.ErrFileManifest {
+		if _, err := normalizeFileLifecycleReason(value); errx.Code(err) != errc.ErrFileLifecycleReason {
 			t.Fatalf("invalid reason code=%d error=%v", errx.Code(err), err)
 		}
 	}
@@ -245,7 +245,7 @@ func TestTrashCancelsPendingAndStreamingDownloads(t *testing.T) {
 	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.svc.BeginDownload(fixture.recipient.UserID, fixture.room.Code, pending.TaskID); errx.Code(err) != errc.ErrDownloadExpired {
+	if _, err := fixture.svc.BeginDownload(fixture.recipient.UserID, fixture.room.Code, pending.TaskID); errx.Code(err) != errc.ErrDownloadCancelled {
 		t.Fatalf("old task after restore error=%v", err)
 	}
 }
@@ -291,7 +291,7 @@ func TestPurgeFailureReturnsFileToTrashWithoutReleasingCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture.svc.storage = nil
-	if err := fixture.svc.PurgeFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFileStorage {
+	if err := fixture.svc.PurgeFile(fixture.uploader.UserID, fixture.room.Code, file.ID); errx.Code(err) != errc.ErrFilePurge {
 		t.Fatalf("purge without storage code=%d error=%v", errx.Code(err), err)
 	}
 	var stored model.RoomFile

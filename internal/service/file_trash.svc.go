@@ -48,7 +48,7 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 			return errx.New(errc.ErrFileNotFound, nil)
 		}
 		if file.UploaderUserID == userID && reason != "" {
-			return errx.New(errc.ErrFileManifest, nil)
+			return errx.New(errc.ErrFileLifecycleReason, nil)
 		}
 		version := file.TrashVersion + 1
 		update := tx.Model(&model.RoomFile{}).
@@ -88,6 +88,7 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 				s.hub.PublishUser(task.UserID, "file.download_cancelled", map[string]interface{}{"roomCode": roomCode, "fileId": fileID, "taskId": task.ID})
 			}
 		}
+		s.publishFileProjection(fileID, "file.trashed", nil)
 	}
 	return cycle, err
 }
@@ -122,11 +123,19 @@ func (s *FileSvc) RestoreFile(userID, roomCode, fileID string) (FileRestoreActio
 		result = FileRestoreActionResult{Status: FileRestoreActionPending, RequestID: request.ID}
 		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventRestoreRequested, request.CreatedAt)
 	})
+	if err == nil {
+		eventType := "file.restore_requested"
+		if result.Status == FileRestoreActionRestored {
+			eventType = "file.restored"
+		}
+		s.publishFileProjection(fileID, eventType, nil)
+	}
 	return result, err
 }
 
 func (s *FileSvc) ApproveFileRestore(ownerID, roomCode, requestID string) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	var fileID string
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, ownerID)
 		if err != nil {
 			return err
@@ -138,6 +147,7 @@ func (s *FileSvc) ApproveFileRestore(ownerID, roomCode, requestID string) error 
 		if err := tx.Where("id = ? AND room_id = ? AND status = ?", requestID, room.ID, model.FileRestorePending).First(&request).Error; err != nil {
 			return restoreRequestStateError(err)
 		}
+		fileID = request.FileID
 		file, cycle, err := loadCurrentTrash(tx, room.ID, request.FileID)
 		if err != nil || cycle.ID != request.TrashCycleID || cycle.Version != request.TrashVersion {
 			if err != nil {
@@ -145,11 +155,15 @@ func (s *FileSvc) ApproveFileRestore(ownerID, roomCode, requestID string) error 
 					return err
 				}
 			}
-			return errx.New(errc.ErrFileState, nil)
+			return errx.New(errc.ErrFileRestoreRequestState, nil)
 		}
 		now := s.now().Unix()
 		return restoreTrashCycle(tx, file, cycle, ownerID, &request, now)
 	})
+	if err == nil {
+		s.publishFileProjection(fileID, "file.restored", nil)
+	}
+	return err
 }
 
 func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string) error {
@@ -157,7 +171,8 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 	if err != nil {
 		return err
 	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	var fileID string
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, ownerID)
 		if err != nil {
 			return err
@@ -169,6 +184,7 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 		if err := tx.Where("id = ? AND room_id = ? AND status = ?", requestID, room.ID, model.FileRestorePending).First(&request).Error; err != nil {
 			return restoreRequestStateError(err)
 		}
+		fileID = request.FileID
 		file, cycle, err := loadCurrentTrash(tx, room.ID, request.FileID)
 		if err != nil || cycle.ID != request.TrashCycleID || cycle.Version != request.TrashVersion {
 			if err != nil {
@@ -176,7 +192,7 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 					return err
 				}
 			}
-			return errx.New(errc.ErrFileState, nil)
+			return errx.New(errc.ErrFileRestoreRequestState, nil)
 		}
 		now := s.now().Unix()
 		update := tx.Model(&model.FileRestoreRequest{}).
@@ -186,10 +202,14 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 			return update.Error
 		}
 		if update.RowsAffected != 1 {
-			return errx.New(errc.ErrFileState, nil)
+			return errx.New(errc.ErrFileRestoreRequestState, nil)
 		}
 		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, ownerID, FileEventRestoreRejected, now)
 	})
+	if err == nil {
+		s.publishFileProjection(fileID, "file.restore_rejected", nil)
+	}
+	return err
 }
 
 // PurgeFile permanently removes stored bytes and then finalizes the database
@@ -243,13 +263,17 @@ func (s *FileSvc) PurgeFile(userID, roomCode, fileID string) error {
 	s.publishCancelledDownloads(roomCode, file.ID, cancelledTasks)
 	if s.storage == nil {
 		_ = s.rollbackPurge(file.ID, cycle.ID, cycle.Version)
-		return errx.New(errc.ErrFileStorage, nil)
+		return errx.New(errc.ErrFilePurge, nil)
 	}
 	if err := s.storage.DeleteFile(file.RoomID, file.StorageName); err != nil {
 		_ = s.rollbackPurge(file.ID, cycle.ID, cycle.Version)
-		return errx.Wrap(errc.ErrFileStorage, err, nil)
+		return errx.Wrap(errc.ErrFilePurge, err, nil)
 	}
-	return s.finalizePurge(file.ID, cycle.Version, userID, s.now().Unix())
+	if err := s.finalizePurge(file.ID, cycle.Version, userID, s.now().Unix()); err != nil {
+		return err
+	}
+	s.publishFileProjection(file.ID, "file.purged", nil)
+	return nil
 }
 
 // RecoverPurgingFiles completes idempotent physical deletion after an
@@ -435,7 +459,7 @@ func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle
 		return request, err
 	}
 	if request.RequesterUserID != requesterID || request.Status != model.FileRestoreInvalidated {
-		return request, errx.New(errc.ErrFileState, nil)
+		return request, errx.New(errc.ErrFileRestoreRequestState, nil)
 	}
 	update := tx.Model(&model.FileRestoreRequest{}).
 		Where("id = ? AND status = ?", request.ID, model.FileRestoreInvalidated).
@@ -444,7 +468,7 @@ func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle
 		return request, update.Error
 	}
 	if update.RowsAffected != 1 {
-		return request, errx.New(errc.ErrFileState, nil)
+		return request, errx.New(errc.ErrFileRestoreRequestState, nil)
 	}
 	request.Status = model.FileRestorePending
 	request.CreatedAt = now
@@ -457,11 +481,11 @@ func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle
 func normalizeFileLifecycleReason(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if !utf8.ValidString(value) || len([]rune(value)) > MaxFileLifecycleReasonRunes {
-		return "", errx.New(errc.ErrFileManifest, nil)
+		return "", errx.New(errc.ErrFileLifecycleReason, nil)
 	}
 	for _, character := range value {
 		if unicode.IsControl(character) {
-			return "", errx.New(errc.ErrFileManifest, nil)
+			return "", errx.New(errc.ErrFileLifecycleReason, nil)
 		}
 	}
 	return value, nil
@@ -469,7 +493,7 @@ func normalizeFileLifecycleReason(value string) (string, error) {
 
 func restoreRequestStateError(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return errx.New(errc.ErrFileState, nil)
+		return errx.New(errc.ErrFileRestoreRequestState, nil)
 	}
 	return err
 }

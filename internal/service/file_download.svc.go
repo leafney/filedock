@@ -106,6 +106,9 @@ func (s *FileSvc) BeginDownload(userID, roomCode, taskID string) (*DownloadStrea
 	if err := s.db.Where("id = ? AND room_id = ? AND user_id = ?", taskID, room.ID, userID).First(&task).Error; err != nil {
 		return nil, fileNotFound(err)
 	}
+	if task.Status == model.DownloadTaskCancelled {
+		return nil, errx.New(errc.ErrDownloadCancelled, nil)
+	}
 	if task.Status != model.DownloadTaskPending || task.ExpiresAt <= s.now().Unix() {
 		if task.Status == model.DownloadTaskPending && task.ExpiresAt <= s.now().Unix() {
 			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskPending).Update("status", model.DownloadTaskExpired).Error

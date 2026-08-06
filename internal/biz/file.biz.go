@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/leafney/filedock/internal/dto"
+	"github.com/leafney/filedock/internal/model"
 	"github.com/leafney/filedock/internal/service"
 )
 
@@ -82,4 +83,32 @@ func (b *FileBiz) AcceptAndDownload(userID, roomCode, fileID string) (service.Do
 
 func (b *FileBiz) BeginDownload(userID, roomCode, taskID string) (*service.DownloadStream, error) {
 	return b.files.BeginDownload(userID, roomCode, taskID)
+}
+
+func (b *FileBiz) TrashList(userID, roomCode string, query service.FileTrashListQuery) (service.FileTrashPage, error) {
+	return b.files.ListTrash(userID, roomCode, query)
+}
+
+func (b *FileBiz) Trash(userID, roomCode, fileID string, request dto.TrashFileRequest) (dto.TrashFileDTO, error) {
+	cycle, err := b.files.TrashFile(userID, roomCode, fileID, request.Reason)
+	if err != nil {
+		return dto.TrashFileDTO{}, err
+	}
+	return dto.TrashFileDTO{Status: model.FileStatusTrashed, DeletedAt: cycle.DeletedAt}, nil
+}
+
+func (b *FileBiz) Restore(userID, roomCode, fileID string) (service.FileRestoreActionResult, error) {
+	return b.files.RestoreFile(userID, roomCode, fileID)
+}
+
+func (b *FileBiz) ApproveRestore(userID, roomCode, requestID string) error {
+	return b.files.ApproveFileRestore(userID, roomCode, requestID)
+}
+
+func (b *FileBiz) RejectRestore(userID, roomCode, requestID string, request dto.RejectFileRestoreRequest) error {
+	return b.files.RejectFileRestore(userID, roomCode, requestID, request.Reason)
+}
+
+func (b *FileBiz) Purge(userID, roomCode, fileID string) error {
+	return b.files.PurgeFile(userID, roomCode, fileID)
 }

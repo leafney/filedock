@@ -34,3 +34,16 @@ type ReusePrivateFilesRequest struct {
 	FileIDs      []string `json:"fileIds"`
 	RecipientIDs []string `json:"recipientIds"`
 }
+
+type TrashFileRequest struct {
+	Reason string `json:"reason"`
+}
+
+type TrashFileDTO struct {
+	Status    string `json:"status"`
+	DeletedAt int64  `json:"deletedAt"`
+}
+
+type RejectFileRestoreRequest struct {
+	Reason string `json:"reason"`
+}

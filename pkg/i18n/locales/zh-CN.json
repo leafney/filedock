@@ -12,6 +12,7 @@
   "error.upload_size_mismatch": "上传内容大小与声明不一致",
   "error.chat_content_invalid": "聊天内容为空或超过长度限制",
   "error.chat_recipient_invalid": "聊天接收者不合法",
+  "error.file_lifecycle_reason_invalid": "原因内容不合法或超过 200 字",
   "error.internal_server": "服务器繁忙，请稍后重试",
   "error.unauthorized": "鉴权失败",
   "error.auth_expired": "授权已过期",
@@ -56,6 +57,8 @@
   "error.file_recipient_state_conflict": "当前接收状态不允许此操作",
   "error.chat_message_state_conflict": "当前消息状态不允许此操作",
   "error.chat_recall_expired": "消息撤回时间已超过限制",
+  "error.file_restore_request_state_conflict": "恢复申请已处理或已失效",
+  "error.download_cancelled_by_file_trash": "文件已移入回收站，下载已取消",
   "error.room_pin_invalid": "房间 PIN 不正确",
   "error.pin_paused": "PIN 尝试次数过多，请稍后重试",
   "error.rate_limited": "请求过于频繁，请稍后重试",
@@ -67,5 +70,6 @@
   "error.cache": "缓存操作异常",
   "error.jwt_key": "会话安全密钥异常",
   "error.lifecycle": "房间生命周期任务异常",
-  "error.file_storage": "文件存储操作失败"
+  "error.file_storage": "文件存储操作失败",
+  "error.file_purge_failed": "永久删除文件失败，请稍后重试"
 }

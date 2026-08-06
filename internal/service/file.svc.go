@@ -65,11 +65,13 @@ const (
 )
 
 type FileCapabilities struct {
-	CanDownload      bool `json:"canDownload"`
-	CanAccept        bool `json:"canAccept"`
-	CanDecline       bool `json:"canDecline"`
-	CanReuse         bool `json:"canReuse"`
-	CanPublishShared bool `json:"canPublishShared"`
+	CanDownload       bool `json:"canDownload"`
+	CanAccept         bool `json:"canAccept"`
+	CanDecline        bool `json:"canDecline"`
+	CanReuse          bool `json:"canReuse"`
+	CanPublishShared  bool `json:"canPublishShared"`
+	CanTrash          bool `json:"canTrash"`
+	CanSetTrashReason bool `json:"canSetTrashReason"`
 }
 
 type FileRecipientView struct {
@@ -562,6 +564,8 @@ func ProjectFile(file model.RoomFile, uploader model.RoomMember, recipients []mo
 		name = file.PrivateCode
 	}
 	projection := FileProjection{Level: level, FileID: file.ID, DisplayName: name, PrivateCode: file.PrivateCode, Scope: file.Scope, Size: file.DeclaredSize, Status: file.Status, Progress: file.Progress, UploaderUserID: file.UploaderUserID, UploaderName: uploader.DisplayName, CreatedAt: file.CreatedAt, CompletedAt: file.CompletedAt}
+	projection.Capabilities.CanTrash = file.Status == model.FileStatusAvailable && (viewer.Role == model.MemberRoleOwner || file.UploaderUserID == viewer.UserID)
+	projection.Capabilities.CanSetTrashReason = projection.Capabilities.CanTrash && viewer.Role == model.MemberRoleOwner && file.UploaderUserID != viewer.UserID
 	for _, recipient := range recipients {
 		member := recipientMembers[recipient.RecipientUserID]
 		view := FileRecipientView{UserID: recipient.RecipientUserID, DisplayName: member.DisplayName}

@@ -9,18 +9,19 @@ import (
 const Success = 200
 
 const (
-	ErrClient          = 40000
-	ErrParams          = 40001
-	ErrBindParams      = 40002
-	ErrDisplayName     = 40003
-	ErrRoomCode        = 40004
-	ErrPIN             = 40005
-	ErrPINConfirmation = 40006
-	ErrFileManifest    = 40007
-	ErrFileRecipient   = 40008
-	ErrUploadSize      = 40009
-	ErrChatContent     = 40010
-	ErrChatRecipient   = 40011
+	ErrClient              = 40000
+	ErrParams              = 40001
+	ErrBindParams          = 40002
+	ErrDisplayName         = 40003
+	ErrRoomCode            = 40004
+	ErrPIN                 = 40005
+	ErrPINConfirmation     = 40006
+	ErrFileManifest        = 40007
+	ErrFileRecipient       = 40008
+	ErrUploadSize          = 40009
+	ErrChatContent         = 40010
+	ErrChatRecipient       = 40011
+	ErrFileLifecycleReason = 40012
 
 	ErrUnAuthorized             = 40101
 	ErrAuthExpired              = 40102
@@ -43,31 +44,33 @@ const (
 	ErrMethodNotAllowed = 40501
 	ErrTimeOut          = 40801
 
-	ErrExisted              = 40901
-	ErrDuplicate            = 40902
-	ErrConflict             = 40903
-	ErrNicknameTaken        = 40904
-	ErrOwnedRoomLimit       = 40905
-	ErrJoinedRoomLimit      = 40906
-	ErrRoomFull             = 40907
-	ErrRoomNotActive        = 40908
-	ErrRoomAlreadyExtended  = 40909
-	ErrOwnerCannotLeave     = 40910
-	ErrPendingRequestExists = 40911
-	ErrPendingRequestLimit  = 40912
-	ErrRequestCooldown      = 40913
-	ErrIdentityResetBlocked = 40915
-	ErrRoomCodeExhausted    = 40916
-	ErrJoinModeMismatch     = 40917
-	ErrJoinRequestResolved  = 40918
-	ErrRoomCapacity         = 40919
-	ErrFileState            = 40920
-	ErrUploadExpired        = 40921
-	ErrUploadCancelled      = 40922
-	ErrDownloadExpired      = 40923
-	ErrFileRecipientState   = 40924
-	ErrChatMessageState     = 40925
-	ErrChatRecallExpired    = 40926
+	ErrExisted                 = 40901
+	ErrDuplicate               = 40902
+	ErrConflict                = 40903
+	ErrNicknameTaken           = 40904
+	ErrOwnedRoomLimit          = 40905
+	ErrJoinedRoomLimit         = 40906
+	ErrRoomFull                = 40907
+	ErrRoomNotActive           = 40908
+	ErrRoomAlreadyExtended     = 40909
+	ErrOwnerCannotLeave        = 40910
+	ErrPendingRequestExists    = 40911
+	ErrPendingRequestLimit     = 40912
+	ErrRequestCooldown         = 40913
+	ErrIdentityResetBlocked    = 40915
+	ErrRoomCodeExhausted       = 40916
+	ErrJoinModeMismatch        = 40917
+	ErrJoinRequestResolved     = 40918
+	ErrRoomCapacity            = 40919
+	ErrFileState               = 40920
+	ErrUploadExpired           = 40921
+	ErrUploadCancelled         = 40922
+	ErrDownloadExpired         = 40923
+	ErrFileRecipientState      = 40924
+	ErrChatMessageState        = 40925
+	ErrChatRecallExpired       = 40926
+	ErrFileRestoreRequestState = 40927
+	ErrDownloadCancelled       = 40928
 
 	ErrRateLimited     = 42901
 	ErrPINPaused       = 42902
@@ -81,6 +84,7 @@ const (
 	ErrJWTKey      = 50003
 	ErrLifecycle   = 50004
 	ErrFileStorage = 50005
+	ErrFilePurge   = 50006
 )
 
 // ErrNoLogin is retained as a source-level semantic alias for missing sessions.
@@ -106,6 +110,7 @@ var definitions = map[int]Definition{
 	ErrUploadSize:               {Code: ErrUploadSize, MessageKey: "error.upload_size_mismatch", HTTPStatus: http.StatusBadRequest},
 	ErrChatContent:              {Code: ErrChatContent, MessageKey: "error.chat_content_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrChatRecipient:            {Code: ErrChatRecipient, MessageKey: "error.chat_recipient_invalid", HTTPStatus: http.StatusBadRequest},
+	ErrFileLifecycleReason:      {Code: ErrFileLifecycleReason, MessageKey: "error.file_lifecycle_reason_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrUnAuthorized:             {Code: ErrUnAuthorized, MessageKey: "error.unauthorized", HTTPStatus: http.StatusUnauthorized},
 	ErrAuthExpired:              {Code: ErrAuthExpired, MessageKey: "error.auth_expired", HTTPStatus: http.StatusUnauthorized},
 	ErrTokenInvalid:             {Code: ErrTokenInvalid, MessageKey: "error.token_invalid", HTTPStatus: http.StatusUnauthorized},
@@ -148,6 +153,8 @@ var definitions = map[int]Definition{
 	ErrFileRecipientState:       {Code: ErrFileRecipientState, MessageKey: "error.file_recipient_state_conflict", HTTPStatus: http.StatusConflict},
 	ErrChatMessageState:         {Code: ErrChatMessageState, MessageKey: "error.chat_message_state_conflict", HTTPStatus: http.StatusConflict},
 	ErrChatRecallExpired:        {Code: ErrChatRecallExpired, MessageKey: "error.chat_recall_expired", HTTPStatus: http.StatusConflict},
+	ErrFileRestoreRequestState:  {Code: ErrFileRestoreRequestState, MessageKey: "error.file_restore_request_state_conflict", HTTPStatus: http.StatusConflict},
+	ErrDownloadCancelled:        {Code: ErrDownloadCancelled, MessageKey: "error.download_cancelled_by_file_trash", HTTPStatus: http.StatusConflict},
 	ErrRateLimited:              {Code: ErrRateLimited, MessageKey: "error.rate_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrPINPaused:                {Code: ErrPINPaused, MessageKey: "error.pin_paused", HTTPStatus: http.StatusTooManyRequests},
 	ErrUploadLimited:            {Code: ErrUploadLimited, MessageKey: "error.upload_concurrency_limited", HTTPStatus: http.StatusTooManyRequests},
@@ -159,6 +166,7 @@ var definitions = map[int]Definition{
 	ErrJWTKey:                   {Code: ErrJWTKey, MessageKey: "error.jwt_key", HTTPStatus: http.StatusInternalServerError},
 	ErrLifecycle:                {Code: ErrLifecycle, MessageKey: "error.lifecycle", HTTPStatus: http.StatusInternalServerError},
 	ErrFileStorage:              {Code: ErrFileStorage, MessageKey: "error.file_storage", HTTPStatus: http.StatusInternalServerError},
+	ErrFilePurge:                {Code: ErrFilePurge, MessageKey: "error.file_purge_failed", HTTPStatus: http.StatusInternalServerError},
 }
 
 func Lookup(code int) (Definition, bool) {
