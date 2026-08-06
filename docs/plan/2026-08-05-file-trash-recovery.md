@@ -2,7 +2,7 @@ Related discussion: [docs/discuss/2026-08-05-file-trash-recovery.md](../discuss/
 
 # FileDock 文件删除与简化回收站 PRD
 
-状态：待批准
+状态：已批准，实施中
 
 日期：2026-08-05
 
