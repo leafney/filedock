@@ -85,6 +85,14 @@ func (b *FileBiz) BeginDownload(userID, roomCode, taskID string) (*service.Downl
 	return b.files.BeginDownload(userID, roomCode, taskID)
 }
 
+func (b *FileBiz) InspectDownload(userID, roomCode, taskID string) (service.DownloadDescriptor, error) {
+	return b.files.InspectDownload(userID, roomCode, taskID)
+}
+
+func (b *FileBiz) BeginDownloadRange(userID, roomCode, taskID string, requested *service.ByteRange) (*service.DownloadStream, error) {
+	return b.files.BeginDownloadRange(userID, roomCode, taskID, requested)
+}
+
 func (b *FileBiz) TrashList(userID, roomCode string, query service.FileTrashListQuery) (service.FileTrashPage, error) {
 	return b.files.ListTrash(userID, roomCode, query)
 }

@@ -448,7 +448,79 @@ func TestServerFileUploadBatchAndStreamingContent(t *testing.T) {
 	if err := json.NewDecoder(downloadTaskResponse.Body).Decode(&downloadTaskBody); err != nil || downloadTaskBody.Data.DownloadURL == "" {
 		t.Fatalf("decode download task: %+v error=%v", downloadTaskBody, err)
 	}
-	download := httptest.NewRequest(fiber.MethodGet, downloadTaskBody.Data.DownloadURL, nil)
+	head := httptest.NewRequest(fiber.MethodHead, downloadTaskBody.Data.DownloadURL, nil)
+	head.Header.Set(fiber.HeaderCookie, cookie)
+	headResponse, err := server.App().Test(head, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headBody, err := io.ReadAll(headResponse.Body)
+	_ = headResponse.Body.Close()
+	if err != nil || headResponse.StatusCode != fiber.StatusOK || len(headBody) != 0 || headResponse.Header.Get(fiber.HeaderContentLength) != "5" || headResponse.Header.Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("HEAD status=%d body=%q headers=%v error=%v", headResponse.StatusCode, headBody, headResponse.Header, err)
+	}
+
+	invalidRange := httptest.NewRequest(fiber.MethodGet, downloadTaskBody.Data.DownloadURL, nil)
+	invalidRange.Header.Set(fiber.HeaderCookie, cookie)
+	invalidRange.Header.Set(fiber.HeaderRange, "bytes=99-")
+	invalidResponse, err := server.App().Test(invalidRange, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var invalidBody struct {
+		Code int `json:"code"`
+	}
+	if err := json.NewDecoder(invalidResponse.Body).Decode(&invalidBody); err != nil {
+		_ = invalidResponse.Body.Close()
+		t.Fatal(err)
+	}
+	_ = invalidResponse.Body.Close()
+	if invalidResponse.StatusCode != fiber.StatusRequestedRangeNotSatisfiable || invalidBody.Code != 41601 || invalidResponse.Header.Get(fiber.HeaderContentRange) != "bytes */5" {
+		t.Fatalf("invalid range status=%d code=%d content-range=%q", invalidResponse.StatusCode, invalidBody.Code, invalidResponse.Header.Get(fiber.HeaderContentRange))
+	}
+
+	ranged := httptest.NewRequest(fiber.MethodGet, downloadTaskBody.Data.DownloadURL, nil)
+	ranged.Header.Set(fiber.HeaderCookie, cookie)
+	ranged.Header.Set(fiber.HeaderRange, "bytes=1-3")
+	rangedResponse, err := server.App().Test(ranged, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangedBody, err := io.ReadAll(rangedResponse.Body)
+	_ = rangedResponse.Body.Close()
+	if err != nil || rangedResponse.StatusCode != fiber.StatusPartialContent || string(rangedBody) != "ell" || rangedResponse.Header.Get(fiber.HeaderContentRange) != "bytes 1-3/5" || rangedResponse.ContentLength != 3 {
+		t.Fatalf("range status=%d body=%q headers=%v error=%v", rangedResponse.StatusCode, rangedBody, rangedResponse.Header, err)
+	}
+
+	replay := httptest.NewRequest(fiber.MethodGet, downloadTaskBody.Data.DownloadURL, nil)
+	replay.Header.Set(fiber.HeaderCookie, cookie)
+	replayResponse, err := server.App().Test(replay, 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayBody, err := io.ReadAll(replayResponse.Body)
+	_ = replayResponse.Body.Close()
+	if err != nil || replayResponse.StatusCode != fiber.StatusOK || string(replayBody) != "hello" {
+		t.Fatalf("replay status=%d body=%q error=%v", replayResponse.StatusCode, replayBody, err)
+	}
+
+	createDownloadAgain := httptest.NewRequest(fiber.MethodPost, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/files/"+batchBody.Data.Files[0].FileID+"/downloads", nil)
+	createDownloadAgain.Header.Set(fiber.HeaderCookie, cookie)
+	againResponse, err := server.App().Test(createDownloadAgain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var againBody struct {
+		Data struct {
+			DownloadURL string `json:"downloadUrl"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(againResponse.Body).Decode(&againBody); err != nil || againBody.Data.DownloadURL == "" {
+		_ = againResponse.Body.Close()
+		t.Fatal(err)
+	}
+	_ = againResponse.Body.Close()
+	download := httptest.NewRequest(fiber.MethodGet, againBody.Data.DownloadURL, nil)
 	download.Header.Set(fiber.HeaderCookie, cookie)
 	downloadResponse, err := server.App().Test(download, 5000)
 	if err != nil {

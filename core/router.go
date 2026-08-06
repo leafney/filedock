@@ -51,6 +51,7 @@ func registerRoutes(app *fiber.App, versionAPI *api.VersionAPI, sessionAPI *api.
 	app.Post("/api/v1/rooms/:code/file-restore-requests/:requestId/reject", fileAPI.HandleRejectRestore)
 	app.Post("/api/v1/rooms/:code/files/:fileId/downloads", fileAPI.HandleCreateDownload)
 	app.Get("/api/v1/rooms/:code/downloads/:taskId", fileAPI.HandleDownload)
+	app.Head("/api/v1/rooms/:code/downloads/:taskId", fileAPI.HandleDownload)
 	app.Get("/api/v1/rooms/:code/chat/conversations", chatAPI.HandleListConversations)
 	app.Get("/api/v1/rooms/:code/chat/conversations/:peerUserId/messages", chatAPI.HandleListMessages)
 	app.Post("/api/v1/rooms/:code/chat/messages", chatAPI.HandleSend)

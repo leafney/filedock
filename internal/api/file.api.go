@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 	"github.com/leafney/filedock/internal/dto"
 	"github.com/leafney/filedock/internal/service"
 	"github.com/leafney/filedock/pkg/errc"
+	"github.com/leafney/filedock/pkg/errx"
 	"github.com/leafney/filedock/pkg/response"
 )
 
@@ -176,24 +176,58 @@ func (a *FileAPI) HandleDownload(c *fiber.Ctx) error {
 	if !ok {
 		return response.Error(c, errc.ErrUnAuthorized, nil)
 	}
-	stream, err := a.biz.BeginDownload(principal.UserID, c.Params("code"), c.Params("taskId"))
+	descriptor, err := a.biz.InspectDownload(principal.UserID, c.Params("code"), c.Params("taskId"))
 	if err != nil {
 		return response.Failed(c, err)
 	}
-	fileName := strings.ReplaceAll(strings.ReplaceAll(stream.FileName(), "\r", ""), "\n", "")
+	rangeSpec, hasRange, err := service.ParseSingleByteRange(c.Get(fiber.HeaderRange), descriptor.Size)
+	if err != nil {
+		if hasRange {
+			c.Set(fiber.HeaderContentRange, fmt.Sprintf("bytes */%d", descriptor.Size))
+		}
+		return response.Failed(c, errxRangeInvalid(err))
+	}
+	fileName := strings.ReplaceAll(strings.ReplaceAll(descriptor.FileName, "\r", ""), "\n", "")
 	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
 	if disposition == "" {
 		disposition = "attachment"
 	}
 	c.Set(fiber.HeaderContentDisposition, disposition)
-	c.Set(fiber.HeaderContentType, stream.MIME())
-	c.Set(fiber.HeaderContentLength, strconv.FormatInt(stream.Size(), 10))
+	c.Set(fiber.HeaderContentType, descriptor.MIME)
+	c.Set("Accept-Ranges", "bytes")
+	if hasRange {
+		c.Status(fiber.StatusPartialContent)
+		c.Set(fiber.HeaderContentRange, fmt.Sprintf("bytes %d-%d/%d", rangeSpec.Start, rangeSpec.End, descriptor.Size))
+		c.Set(fiber.HeaderContentLength, strconv.FormatInt(rangeSpec.Length(), 10))
+	} else {
+		c.Set(fiber.HeaderContentLength, strconv.FormatInt(descriptor.Size, 10))
+	}
 	c.Set("X-Content-Type-Options", "nosniff")
+	if c.Method() == fiber.MethodHead {
+		return nil
+	}
+	var requested *service.ByteRange
+	if hasRange {
+		requested = &rangeSpec
+	}
+	stream, err := a.biz.BeginDownloadRange(principal.UserID, c.Params("code"), c.Params("taskId"), requested)
+	if err != nil {
+		return response.Failed(c, err)
+	}
 	ctx := c.UserContext()
-	c.Context().SetBodyStreamWriter(func(writer *bufio.Writer) {
-		_ = stream.WriteTo(ctx, writer)
-	})
+	reader, writer := io.Pipe()
+	go func() {
+		_ = writer.CloseWithError(stream.WriteTo(ctx, writer))
+	}()
+	c.Context().SetBodyStream(reader, int(stream.Size()))
 	return nil
+}
+
+func errxRangeInvalid(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errx.New(errc.ErrDownloadRangeInvalid, nil)
 }
 
 func (a *FileAPI) HandleTrashList(c *fiber.Ctx) error {
