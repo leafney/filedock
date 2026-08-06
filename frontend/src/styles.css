@@ -1242,6 +1242,44 @@ html[data-theme="dark"] .room-overlay,
 html[data-theme="dark"] .chat-history-overlay,
 html[data-theme="dark"] .chat-forward-overlay { background: rgb(2 6 23 / 62%); }
 
+html[data-theme="dark"] .file-batch-toggle {
+  border-color: var(--fd-border) !important;
+  background: var(--fd-surface-soft) !important;
+  color: var(--fd-text-secondary) !important;
+}
+html[data-theme="dark"] .file-batch-toggle:hover,
+html[data-theme="dark"] .file-batch-toggle:focus-visible {
+  border-color: var(--fd-focus) !important;
+  background: var(--fd-surface-hover) !important;
+  color: var(--fd-primary) !important;
+  outline: none;
+}
+html[data-theme="dark"] .file-batch-toggle.active {
+  border-color: var(--fd-focus) !important;
+  background: var(--fd-primary-soft) !important;
+  color: var(--fd-primary) !important;
+}
+html[data-theme="dark"] .file-batch-bar {
+  border-color: rgb(45 212 191 / 48%);
+  background: var(--fd-primary-soft);
+  color: #ccfbf1;
+}
+html[data-theme="dark"] .file-batch-bar button {
+  border-color: var(--fd-focus);
+  background: var(--fd-surface-soft);
+  color: var(--fd-primary);
+}
+html[data-theme="dark"] .file-batch-bar button:hover,
+html[data-theme="dark"] .file-batch-bar button:focus-visible {
+  background: var(--fd-surface-hover);
+}
+html[data-theme="dark"] .file-batch-bar button:disabled {
+  border-color: var(--fd-border);
+  background: var(--fd-surface-hover);
+  color: var(--fd-text-faint);
+}
+html[data-theme="dark"] .file-row > input { accent-color: var(--fd-primary); }
+
 .theme-menu-option { display: inline-flex; align-items: center; gap: 0.45rem; }
 .theme-menu-dot { display: inline-block; width: 0.5rem; height: 0.5rem; border: 1px solid currentColor; border-radius: 50%; opacity: 0.55; }
 .theme-menu-dot.is-selected { background: currentColor; opacity: 1; }
