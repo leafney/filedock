@@ -44,6 +44,12 @@ const (
 	UploadBatchPartial   = "partial"
 	UploadBatchFailed    = "failed"
 
+	UploadSessionActive    = "active"
+	UploadSessionCompleted = "completed"
+	UploadSessionFailed    = "failed"
+	UploadSessionCancelled = "cancelled"
+	UploadSessionExpired   = "expired"
+
 	FileStatusReserved  = "reserved"
 	FileStatusUploading = "uploading"
 	FileStatusAvailable = "available"

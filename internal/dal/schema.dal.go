@@ -20,6 +20,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.JoinRequest{},
 		&model.CleanupJob{},
 		&model.UploadBatch{},
+		&model.UploadSession{},
+		&model.UploadPart{},
 		&model.RoomFile{},
 		&model.FileTrashCycle{},
 		&model.FileRestoreRequest{},

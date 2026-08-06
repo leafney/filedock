@@ -16,7 +16,7 @@ func TestAutoMigrateCreatesCurrentStageTables(t *testing.T) {
 	if err := AutoMigrate(db); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
-	for _, name := range []string{"users", "sessions", "rooms", "room_members", "join_requests", "cleanup_jobs", "upload_batches", "room_files", "file_trash_cycles", "file_restore_requests", "file_recipients", "file_events", "download_tasks", "notification_records", "chat_conversations", "chat_messages", "chat_read_states", "chat_message_deletions"} {
+	for _, name := range []string{"users", "sessions", "rooms", "room_members", "join_requests", "cleanup_jobs", "upload_batches", "upload_sessions", "upload_parts", "room_files", "file_trash_cycles", "file_restore_requests", "file_recipients", "file_events", "download_tasks", "notification_records", "chat_conversations", "chat_messages", "chat_read_states", "chat_message_deletions"} {
 		var count int64
 		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&count).Error; err != nil {
 			t.Fatalf("check %s: %v", name, err)

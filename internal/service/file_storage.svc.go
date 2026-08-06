@@ -22,6 +22,173 @@ type StoredFile struct {
 	DetectedMIME string
 }
 
+// PrepareUpload creates a fixed-size temporary file that can receive chunks
+// at arbitrary offsets. Existing files are accepted only when their size is
+// exactly the declared size, which makes process restarts safe.
+func (s *FileStorage) PrepareUpload(roomID, storageName string, declaredSize int64) error {
+	if s == nil || declaredSize <= 0 || !validInternalName(storageName) {
+		return fmt.Errorf("invalid upload preparation")
+	}
+	tempDir, err := s.ensureInternalDir(s.uploadRoot, roomID)
+	if err != nil {
+		return err
+	}
+	tempPath, err := s.safePath(tempDir, storageName+".part")
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(tempPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("create upload temporary file: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Size() != declaredSize {
+		if err := file.Truncate(declaredSize); err != nil {
+			return fmt.Errorf("preallocate upload temporary file: %w", err)
+		}
+	}
+	return nil
+}
+
+// WritePart writes exactly length bytes at offset without changing the final
+// file name. The caller verifies the payload hash before calling this method.
+func (s *FileStorage) WritePart(ctx context.Context, roomID, storageName string, offset, length, declaredSize int64, source io.Reader) error {
+	if s == nil || source == nil || offset < 0 || length <= 0 || declaredSize <= 0 || offset > declaredSize-length {
+		return fmt.Errorf("invalid upload part")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.PrepareUpload(roomID, storageName, declaredSize); err != nil {
+		return err
+	}
+	tempDir, err := s.internalDir(s.uploadRoot, roomID)
+	if err != nil {
+		return err
+	}
+	tempPath, err := s.safePath(tempDir, storageName+".part")
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(tempPath, os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open upload temporary file: %w", err)
+	}
+	defer file.Close()
+	buffer := make([]byte, fileCopyBufferSize)
+	var written int64
+	for written < length {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		want := length - written
+		if int64(len(buffer)) > want {
+			buffer = buffer[:want]
+		}
+		read, readErr := source.Read(buffer)
+		if read > 0 {
+			count, writeErr := file.WriteAt(buffer[:read], offset+written)
+			if writeErr != nil {
+				return fmt.Errorf("write upload part: %w", writeErr)
+			}
+			if count != read {
+				return io.ErrShortWrite
+			}
+			written += int64(count)
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) && written == length {
+				break
+			}
+			return fmt.Errorf("read upload part: %w", readErr)
+		}
+		if read == 0 {
+			return io.ErrNoProgress
+		}
+	}
+	return file.Sync()
+}
+
+// FinalizeUpload verifies the preallocated temporary file and atomically moves
+// it to the room's permanent storage directory.
+func (s *FileStorage) FinalizeUpload(roomID, storageName string, declaredSize int64) (StoredFile, error) {
+	if s == nil || declaredSize <= 0 || !validInternalName(storageName) {
+		return StoredFile{}, fmt.Errorf("invalid upload finalization")
+	}
+	tempDir, err := s.internalDir(s.uploadRoot, roomID)
+	if err != nil {
+		return StoredFile{}, err
+	}
+	roomDir, err := s.ensureInternalDir(s.roomsRoot, roomID)
+	if err != nil {
+		return StoredFile{}, err
+	}
+	tempPath, err := s.safePath(tempDir, storageName+".part")
+	if err != nil {
+		return StoredFile{}, err
+	}
+	finalPath, err := s.safePath(roomDir, storageName)
+	if err != nil {
+		return StoredFile{}, err
+	}
+	file, err := os.OpenFile(tempPath, os.O_RDONLY, 0)
+	if err != nil {
+		return StoredFile{}, err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return StoredFile{}, err
+	}
+	if info.Size() != declaredSize {
+		file.Close()
+		return StoredFile{}, fmt.Errorf("%w: temporary file size %d, declared %d", ErrStoredSizeMismatch, info.Size(), declaredSize)
+	}
+	header := make([]byte, 512)
+	read, _ := file.ReadAt(header, 0)
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return StoredFile{}, err
+	}
+	if err := file.Close(); err != nil {
+		return StoredFile{}, err
+	}
+	if _, err := os.Lstat(finalPath); err == nil {
+		return StoredFile{}, fmt.Errorf("stored file already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return StoredFile{}, err
+	}
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return StoredFile{}, fmt.Errorf("move uploaded file: %w", err)
+	}
+	return StoredFile{Path: finalPath, Size: declaredSize, DetectedMIME: http.DetectContentType(header[:read])}, nil
+}
+
+func (s *FileStorage) DeleteTemporaryFile(roomID, storageName string) error {
+	if s == nil || !validInternalName(storageName) {
+		return fmt.Errorf("invalid temporary upload")
+	}
+	tempDir, err := s.internalDir(s.uploadRoot, roomID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	path, err := s.safePath(tempDir, storageName+".part")
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 type FileStorage struct {
 	root       string
 	roomsRoot  string

@@ -98,6 +98,68 @@ func TestFileStorageHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestFileStorageWritesPartsOutOfOrderAndFinalizes(t *testing.T) {
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.PrepareUpload("room-parts", "storage-parts", 6); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WritePart(context.Background(), "room-parts", "storage-parts", 3, 3, 6, bytes.NewReader([]byte("def"))); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WritePart(context.Background(), "room-parts", "storage-parts", 0, 3, 6, bytes.NewReader([]byte("abc"))); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := storage.FinalizeUpload("room-parts", "storage-parts", 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Size != 6 || stored.DetectedMIME == "" {
+		t.Fatalf("stored=%+v", stored)
+	}
+	file, _, err := storage.Open("room-parts", "storage-parts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	content, err := io.ReadAll(file)
+	if err != nil || string(content) != "abcdef" {
+		t.Fatalf("content=%q error=%v", content, err)
+	}
+}
+
+func TestFileStorageRejectsShortUploadPart(t *testing.T) {
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = storage.WritePart(context.Background(), "room-parts-short", "storage-parts-short", 0, 3, 3, bytes.NewReader([]byte("ab")))
+	if err == nil {
+		t.Fatal("WritePart() unexpectedly succeeded")
+	}
+	if err := storage.DeleteTemporaryFile("room-parts-short", "storage-parts-short"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFileStorageDeletesTemporaryUpload(t *testing.T) {
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.PrepareUpload("room-parts-delete", "storage-parts-delete", 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.DeleteTemporaryFile("room-parts-delete", "storage-parts-delete"); err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.DeleteTemporaryFile("room-parts-delete", "storage-parts-delete"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLifecycleCleanupDeletesFileStorageAndMetadata(t *testing.T) {
 	fixture := newFileTestFixture(t, 1000)
 	storage, err := NewFileStorage(t.TempDir())

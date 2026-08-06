@@ -16,6 +16,41 @@ type UploadBatch struct {
 
 func (UploadBatch) TableName() string { return "upload_batches" }
 
+// UploadSession stores resumable upload progress for one room file. The file
+// ID is also the public upload ID, so a session can never be detached from
+// its file metadata.
+type UploadSession struct {
+	FileID         string `gorm:"type:text;primaryKey;size:26"`
+	RoomID         string `gorm:"type:text;not null;index:idx_upload_sessions_room_status"`
+	UploaderUserID string `gorm:"type:text;not null;index:idx_upload_sessions_uploader_status"`
+	DeclaredSize   int64  `gorm:"not null"`
+	ChunkSize      int64  `gorm:"not null"`
+	TotalParts     int    `gorm:"not null"`
+	ReceivedBytes  int64  `gorm:"not null;default:0"`
+	Status         string `gorm:"type:text;not null;index:idx_upload_sessions_room_status"`
+	ExpiresAt      int64  `gorm:"not null;index:idx_upload_sessions_expires_at"`
+	CreatedAt      int64  `gorm:"not null"`
+	UpdatedAt      int64  `gorm:"not null"`
+	CompletedAt    *int64 `gorm:"index:idx_upload_sessions_completed_at"`
+}
+
+func (UploadSession) TableName() string { return "upload_sessions" }
+
+// UploadPart records one fully verified chunk. A unique file/part index makes
+// retries idempotent and prevents two different payloads replacing each other.
+type UploadPart struct {
+	ID          string `gorm:"type:text;primaryKey;size:26"`
+	FileID      string `gorm:"type:text;not null;uniqueIndex:idx_upload_parts_file_part;index:idx_upload_parts_file_id"`
+	PartNumber  int    `gorm:"not null;uniqueIndex:idx_upload_parts_file_part"`
+	StartOffset int64  `gorm:"not null"`
+	EndOffset   int64  `gorm:"not null"`
+	Length      int64  `gorm:"not null"`
+	SHA256      string `gorm:"type:text;not null"`
+	CompletedAt int64  `gorm:"not null;index:idx_upload_parts_completed_at"`
+}
+
+func (UploadPart) TableName() string { return "upload_parts" }
+
 // RoomFile stores metadata only. StorageName is always server generated.
 type RoomFile struct {
 	ID             string `gorm:"type:text;primaryKey;size:26"`
