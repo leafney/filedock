@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	DownloadTaskTTL     = 10 * time.Minute
-	DownloadGlobalLimit = 50
-	DownloadRoomLimit   = 10
-	DownloadUserLimit   = 2
+	DownloadTaskTTL      = 10 * time.Minute
+	DownloadReplayWindow = 2 * time.Second
+	DownloadGlobalLimit  = 50
+	DownloadRoomLimit    = 10
+	DownloadUserLimit    = 2
 )
 
 type DownloadTaskResult struct {
@@ -33,15 +34,37 @@ type DownloadTaskResult struct {
 }
 
 type DownloadStream struct {
-	svc         *FileSvc
-	task        model.DownloadTask
-	fileRecord  model.RoomFile
-	file        *os.File
-	fileName    string
-	mime        string
-	finish      func()
-	taskContext context.Context
-	once        sync.Once
+	svc           *FileSvc
+	task          model.DownloadTask
+	fileRecord    model.RoomFile
+	file          *os.File
+	fileName      string
+	mime          string
+	finish        func()
+	taskContext   context.Context
+	rangeSpec     ByteRange
+	hasRange      bool
+	replay        bool
+	allowComplete bool
+	once          sync.Once
+}
+
+// DownloadDescriptor contains the validated metadata shared by GET and HEAD.
+// It deliberately does not open the stored file or consume a pending task.
+type DownloadDescriptor struct {
+	Task     model.DownloadTask
+	File     model.RoomFile
+	FileName string
+	MIME     string
+	Size     int64
+}
+
+func downloadReplayOpen(timestamp *int64, now time.Time) bool {
+	if timestamp == nil {
+		return false
+	}
+	started := time.Unix(*timestamp, 0)
+	return !now.Before(started) && now.Sub(started) <= DownloadReplayWindow
 }
 
 type downloadRegistry struct {
@@ -49,6 +72,7 @@ type downloadRegistry struct {
 	active map[string]downloadActive
 	rooms  map[string]int
 	users  map[string]int
+	next   uint64
 }
 
 type downloadActive struct {
@@ -95,81 +119,142 @@ func (s *FileSvc) AcceptAndCreateDownload(userID, roomCode, fileID string) (Down
 }
 
 func (s *FileSvc) BeginDownload(userID, roomCode, taskID string) (*DownloadStream, error) {
+	return s.BeginDownloadRange(userID, roomCode, taskID, nil)
+}
+
+// InspectDownload validates access and returns metadata without consuming the task.
+func (s *FileSvc) InspectDownload(userID, roomCode, taskID string) (DownloadDescriptor, error) {
 	if s == nil || s.db == nil || s.storage == nil || s.downloads == nil {
-		return nil, fmt.Errorf("file download service is unavailable")
+		return DownloadDescriptor{}, fmt.Errorf("file download service is unavailable")
 	}
 	room, _, err := activeFileMember(s.db, roomCode, userID)
 	if err != nil {
-		return nil, err
+		return DownloadDescriptor{}, err
 	}
 	var task model.DownloadTask
 	if err := s.db.Where("id = ? AND room_id = ? AND user_id = ?", taskID, room.ID, userID).First(&task).Error; err != nil {
-		return nil, fileNotFound(err)
+		return DownloadDescriptor{}, fileNotFound(err)
 	}
 	if task.Status == model.DownloadTaskCancelled {
-		return nil, errx.New(errc.ErrDownloadCancelled, nil)
+		return DownloadDescriptor{}, errx.New(errc.ErrDownloadCancelled, nil)
 	}
-	if task.Status != model.DownloadTaskPending || task.ExpiresAt <= s.now().Unix() {
-		if task.Status == model.DownloadTaskPending && task.ExpiresAt <= s.now().Unix() {
-			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskPending).Update("status", model.DownloadTaskExpired).Error
-		}
-		return nil, errx.New(errc.ErrDownloadExpired, nil)
+	now := s.now()
+	if task.Status == model.DownloadTaskPending && task.ExpiresAt <= now.Unix() {
+		_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskPending).Update("status", model.DownloadTaskExpired).Error
+		return DownloadDescriptor{}, errx.New(errc.ErrDownloadExpired, nil)
+	}
+	if task.Status == model.DownloadTaskStreaming && !downloadReplayOpen(task.StartedAt, now) {
+		return DownloadDescriptor{}, errx.New(errc.ErrDownloadExpired, nil)
+	}
+	if task.Status == model.DownloadTaskCompleted && !downloadReplayOpen(task.CompletedAt, now) {
+		return DownloadDescriptor{}, errx.New(errc.ErrDownloadExpired, nil)
+	}
+	if task.Status != model.DownloadTaskPending && task.Status != model.DownloadTaskStreaming && task.Status != model.DownloadTaskCompleted {
+		return DownloadDescriptor{}, errx.New(errc.ErrDownloadExpired, nil)
 	}
 	var file model.RoomFile
 	if err := s.db.Where("id = ? AND room_id = ? AND status = ?", task.FileID, room.ID, model.FileStatusAvailable).First(&file).Error; err != nil {
-		return nil, fileNotFound(err)
+		return DownloadDescriptor{}, fileNotFound(err)
 	}
 	allowed, err := s.canDownload(userID, file)
 	if err != nil || !allowed {
 		if err != nil {
-			return nil, err
+			return DownloadDescriptor{}, err
 		}
-		return nil, errx.New(errc.ErrFileNotFound, nil)
+		return DownloadDescriptor{}, errx.New(errc.ErrFileNotFound, nil)
 	}
-	taskContext, finish, err := s.downloads.begin(task.ID, room.ID, file.ID, userID)
-	if err != nil {
-		return nil, err
-	}
-	now := s.now().Unix()
-	result := s.db.Model(&model.DownloadTask{}).Where("id = ? AND user_id = ? AND status = ? AND expires_at > ?", task.ID, userID, model.DownloadTaskPending, now).Updates(map[string]interface{}{"status": model.DownloadTaskStreaming, "started_at": now})
-	if result.Error != nil || result.RowsAffected != 1 {
-		finish()
-		if result.Error != nil {
-			return nil, result.Error
-		}
-		return nil, errx.New(errc.ErrDownloadExpired, nil)
-	}
-	stored, info, err := s.storage.Open(file.RoomID, file.StorageName)
-	if err != nil {
-		finish()
-		_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
-		return nil, errx.Wrap(errc.ErrFileStorage, err, nil)
-	}
-	if info.Size() != task.ExpectedSize || info.Size() != file.ActualSize {
-		_ = stored.Close()
-		finish()
-		_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
-		return nil, errx.New(errc.ErrFileStorage, nil)
-	}
-	if err := createFileEvent(s.db, file.RoomID, file.ID, file.BatchID, userID, FileEventDownloadStarted, now); err != nil {
-		_ = stored.Close()
-		finish()
-		_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
-		return nil, err
-	}
-	s.publishFileProjection(file.ID, "file.download_started", map[string]interface{}{"downloaderUserId": userID})
 	mimeType := file.DetectedMIME
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
-	task.Status = model.DownloadTaskStreaming
-	task.StartedAt = &now
-	return &DownloadStream{svc: s, task: task, fileRecord: file, file: stored, fileName: file.OriginalName, mime: mimeType, finish: finish, taskContext: taskContext}, nil
+	return DownloadDescriptor{Task: task, File: file, FileName: file.OriginalName, MIME: mimeType, Size: file.ActualSize}, nil
+}
+
+// BeginDownloadRange starts a validated full or single-range transfer.
+func (s *FileSvc) BeginDownloadRange(userID, roomCode, taskID string, requested *ByteRange) (*DownloadStream, error) {
+	descriptor, err := s.InspectDownload(userID, roomCode, taskID)
+	if err != nil {
+		return nil, err
+	}
+	rangeSpec := ByteRange{Start: 0, End: descriptor.Size - 1}
+	hasRange := requested != nil
+	if hasRange {
+		rangeSpec = *requested
+	}
+	if (hasRange && (descriptor.Size == 0 || rangeSpec.Start < 0 || rangeSpec.End < rangeSpec.Start || rangeSpec.End >= descriptor.Size)) || (!hasRange && descriptor.Size > 0 && rangeSpec.End >= descriptor.Size) {
+		return nil, errx.New(errc.ErrDownloadRangeInvalid, nil)
+	}
+	task := descriptor.Task
+	replay := task.Status == model.DownloadTaskStreaming || task.Status == model.DownloadTaskCompleted
+	taskContext, finish, err := s.downloads.begin(task.ID, descriptor.File.RoomID, descriptor.File.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+	now := s.now().Unix()
+	if !replay {
+		result := s.db.Model(&model.DownloadTask{}).Where("id = ? AND user_id = ? AND status = ? AND expires_at > ?", task.ID, userID, model.DownloadTaskPending, now).Updates(map[string]interface{}{"status": model.DownloadTaskStreaming, "started_at": now})
+		if result.Error != nil || result.RowsAffected != 1 {
+			if result.Error != nil {
+				finish()
+				return nil, result.Error
+			}
+			var current model.DownloadTask
+			if loadErr := s.db.First(&current, "id = ?", task.ID).Error; loadErr != nil {
+				finish()
+				return nil, fileNotFound(loadErr)
+			}
+			currentReplayOpen := (current.Status == model.DownloadTaskStreaming && downloadReplayOpen(current.StartedAt, s.now())) || (current.Status == model.DownloadTaskCompleted && downloadReplayOpen(current.CompletedAt, s.now()))
+			if !currentReplayOpen {
+				finish()
+				return nil, errx.New(errc.ErrDownloadExpired, nil)
+			}
+			task = current
+			replay = true
+		} else {
+			task.Status = model.DownloadTaskStreaming
+			task.StartedAt = &now
+		}
+	}
+	stored, info, err := s.storage.Open(descriptor.File.RoomID, descriptor.File.StorageName)
+	if err != nil {
+		finish()
+		if !replay {
+			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
+		}
+		return nil, errx.Wrap(errc.ErrFileStorage, err, nil)
+	}
+	if info.Size() != task.ExpectedSize || info.Size() != descriptor.File.ActualSize {
+		_ = stored.Close()
+		finish()
+		if !replay {
+			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
+		}
+		return nil, errx.New(errc.ErrFileStorage, nil)
+	}
+	if _, err := stored.Seek(rangeSpec.Start, io.SeekStart); err != nil {
+		_ = stored.Close()
+		finish()
+		if !replay {
+			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
+		}
+		return nil, errx.Wrap(errc.ErrFileStorage, err, nil)
+	}
+	if !replay {
+		if err := createFileEvent(s.db, descriptor.File.RoomID, descriptor.File.ID, descriptor.File.BatchID, userID, FileEventDownloadStarted, now); err != nil {
+			_ = stored.Close()
+			finish()
+			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
+			return nil, err
+		}
+		s.publishFileProjection(descriptor.File.ID, "file.download_started", map[string]interface{}{"downloaderUserId": userID})
+	}
+	return &DownloadStream{svc: s, task: task, fileRecord: descriptor.File, file: stored, fileName: descriptor.FileName, mime: descriptor.MIME, finish: finish, taskContext: taskContext, rangeSpec: rangeSpec, hasRange: hasRange, replay: replay, allowComplete: !replay && (!hasRange || rangeSpec.End == descriptor.Size-1)}, nil
 }
 
 func (stream *DownloadStream) FileName() string { return stream.fileName }
 func (stream *DownloadStream) MIME() string     { return stream.mime }
-func (stream *DownloadStream) Size() int64      { return stream.task.ExpectedSize }
+func (stream *DownloadStream) Size() int64      { return stream.rangeSpec.Length() }
+func (stream *DownloadStream) TotalSize() int64 { return stream.task.ExpectedSize }
 
 func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) error {
 	if stream == nil || stream.svc == nil || stream.file == nil || target == nil {
@@ -181,9 +266,10 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 	defer stream.close()
 	buffer := make([]byte, fileCopyBufferSize)
 	var transferred int64
+	remaining := stream.rangeSpec.Length()
 	lastProgress := 0
 	lastPublished := time.Time{}
-	for {
+	for remaining > 0 {
 		if err := stream.taskContext.Err(); err != nil {
 			stream.fail(transferred)
 			return err
@@ -192,7 +278,11 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 			stream.fail(transferred)
 			return err
 		}
-		read, readErr := stream.file.Read(buffer)
+		chunk := buffer
+		if int64(len(chunk)) > remaining {
+			chunk = chunk[:remaining]
+		}
+		read, readErr := stream.file.Read(chunk)
 		if read > 0 {
 			written, writeErr := target.Write(buffer[:read])
 			transferred += int64(written)
@@ -203,9 +293,13 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 				}
 				return io.ErrShortWrite
 			}
-			progress := int(transferred * 100 / stream.task.ExpectedSize)
+			progress := 0
+			if stream.task.ExpectedSize > 0 {
+				progress = int((stream.rangeSpec.Start + transferred) * 100 / stream.task.ExpectedSize)
+			}
 			now := stream.svc.now()
-			if progress > lastProgress && (progress == 100 || now.Sub(lastPublished) >= 250*time.Millisecond) {
+			remaining -= int64(read)
+			if !stream.replay && progress > lastProgress && (progress == 100 || now.Sub(lastPublished) >= 250*time.Millisecond) {
 				lastProgress = progress
 				lastPublished = now
 				_ = stream.svc.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", stream.task.ID, model.DownloadTaskStreaming).Update("transferred_size", transferred).Error
@@ -228,15 +322,17 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 			return err
 		}
 	}
-	if transferred != stream.task.ExpectedSize {
+	if transferred != stream.rangeSpec.Length() {
 		stream.fail(transferred)
 		return io.ErrUnexpectedEOF
 	}
-	if err := stream.complete(transferred); err != nil {
-		stream.fail(transferred)
-		return err
+	if stream.allowComplete {
+		if err := stream.complete(stream.task.ExpectedSize); err != nil {
+			stream.fail(transferred)
+			return err
+		}
+		stream.svc.publishFileProjection(stream.fileRecord.ID, "file.download_completed", map[string]interface{}{"downloaderUserId": stream.task.UserID})
 	}
-	stream.svc.publishFileProjection(stream.fileRecord.ID, "file.download_completed", map[string]interface{}{"downloaderUserId": stream.task.UserID})
 	return nil
 }
 
@@ -252,6 +348,13 @@ func (stream *DownloadStream) complete(transferred int64) error {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
+			var task model.DownloadTask
+			if err := tx.Where("id = ?", stream.task.ID).First(&task).Error; err != nil {
+				return err
+			}
+			if task.Status == model.DownloadTaskCompleted {
+				return nil
+			}
 			return errx.New(errc.ErrDownloadExpired, nil)
 		}
 		var recipient model.FileRecipient
@@ -281,6 +384,9 @@ func (stream *DownloadStream) complete(transferred int64) error {
 }
 
 func (stream *DownloadStream) fail(transferred int64) {
+	if stream.replay {
+		return
+	}
 	now := stream.svc.now().Unix()
 	_ = stream.svc.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", stream.task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "transferred_size": transferred, "failed_at": now}).Error
 }
@@ -311,18 +417,20 @@ func (s *FileSvc) canDownload(userID string, file model.RoomFile) (bool, error) 
 func (r *downloadRegistry) begin(taskID, roomID, fileID, userID string) (context.Context, func(), error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.active[taskID]; exists || len(r.active) >= DownloadGlobalLimit || r.rooms[roomID] >= DownloadRoomLimit || r.users[userID] >= DownloadUserLimit {
+	if len(r.active) >= DownloadGlobalLimit || r.rooms[roomID] >= DownloadRoomLimit || r.users[userID] >= DownloadUserLimit {
 		return nil, nil, errx.New(errc.ErrDownloadLimited, nil)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r.active[taskID] = downloadActive{taskID: taskID, roomID: roomID, fileID: fileID, userID: userID, cancel: cancel}
+	r.next++
+	key := fmt.Sprintf("%s:%d", taskID, r.next)
+	r.active[key] = downloadActive{taskID: taskID, roomID: roomID, fileID: fileID, userID: userID, cancel: cancel}
 	r.rooms[roomID]++
 	r.users[userID]++
 	var once sync.Once
 	return ctx, func() {
 		once.Do(func() {
 			r.mu.Lock()
-			delete(r.active, taskID)
+			delete(r.active, key)
 			r.rooms[roomID]--
 			r.users[userID]--
 			r.mu.Unlock()

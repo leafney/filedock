@@ -71,6 +71,7 @@ const (
 	ErrChatRecallExpired       = 40926
 	ErrFileRestoreRequestState = 40927
 	ErrDownloadCancelled       = 40928
+	ErrDownloadRangeInvalid    = 41601
 
 	ErrRateLimited     = 42901
 	ErrPINPaused       = 42902
@@ -155,6 +156,7 @@ var definitions = map[int]Definition{
 	ErrChatRecallExpired:        {Code: ErrChatRecallExpired, MessageKey: "error.chat_recall_expired", HTTPStatus: http.StatusConflict},
 	ErrFileRestoreRequestState:  {Code: ErrFileRestoreRequestState, MessageKey: "error.file_restore_request_state_conflict", HTTPStatus: http.StatusConflict},
 	ErrDownloadCancelled:        {Code: ErrDownloadCancelled, MessageKey: "error.download_cancelled_by_file_trash", HTTPStatus: http.StatusConflict},
+	ErrDownloadRangeInvalid:     {Code: ErrDownloadRangeInvalid, MessageKey: "error.download_range_invalid", HTTPStatus: http.StatusRequestedRangeNotSatisfiable},
 	ErrRateLimited:              {Code: ErrRateLimited, MessageKey: "error.rate_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrPINPaused:                {Code: ErrPINPaused, MessageKey: "error.pin_paused", HTTPStatus: http.StatusTooManyRequests},
 	ErrUploadLimited:            {Code: ErrUploadLimited, MessageKey: "error.upload_concurrency_limited", HTTPStatus: http.StatusTooManyRequests},

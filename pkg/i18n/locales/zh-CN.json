@@ -59,6 +59,7 @@
   "error.chat_recall_expired": "消息撤回时间已超过限制",
   "error.file_restore_request_state_conflict": "恢复申请已处理或已失效",
   "error.download_cancelled_by_file_trash": "文件已移入回收站，下载已取消",
+  "error.download_range_invalid": "请求的文件字节范围无效",
   "error.room_pin_invalid": "房间 PIN 不正确",
   "error.pin_paused": "PIN 尝试次数过多，请稍后重试",
   "error.rate_limited": "请求过于频繁，请稍后重试",

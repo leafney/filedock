@@ -59,6 +59,7 @@
   "error.chat_recall_expired": "The message recall window has expired",
   "error.file_restore_request_state_conflict": "The restore request was processed or is no longer valid",
   "error.download_cancelled_by_file_trash": "The file was moved to trash and the download was cancelled",
+  "error.download_range_invalid": "The requested byte range is invalid",
   "error.room_pin_invalid": "The room PIN is incorrect",
   "error.pin_paused": "Too many PIN attempts; try again later",
   "error.rate_limited": "Too many requests; try again later",

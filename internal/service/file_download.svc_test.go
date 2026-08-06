@@ -34,7 +34,7 @@ func makeStoredAvailableFile(t *testing.T, fixture fileTestFixture, storage *Fil
 	return file
 }
 
-func TestDownloadTaskStreamsCompletesAndCannotBeReused(t *testing.T) {
+func TestDownloadTaskStreamsCompletesAndSupportsShortReplay(t *testing.T) {
 	fixture := newFileTestFixture(t, 1000)
 	storage, err := NewFileStorage(t.TempDir())
 	if err != nil {
@@ -62,9 +62,54 @@ func TestDownloadTaskStreamsCompletesAndCannotBeReused(t *testing.T) {
 	if storedTask.Status != model.DownloadTaskCompleted || storedTask.TransferredSize != int64(len(content)) {
 		t.Fatalf("stored task = %+v", storedTask)
 	}
-	if _, err := fixture.svc.BeginDownload(fixture.outsider.UserID, fixture.room.Code, task.TaskID); errx.Code(err) != errc.ErrDownloadExpired {
-		t.Fatalf("reused task error=%v", err)
+	replay, err := fixture.svc.BeginDownload(fixture.outsider.UserID, fixture.room.Code, task.TaskID)
+	if err != nil {
+		t.Fatalf("replay error=%v", err)
 	}
+	var replayOutput bytes.Buffer
+	if err := replay.WriteTo(context.Background(), &replayOutput); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(replayOutput.Bytes(), content) {
+		t.Fatalf("replay output=%q", replayOutput.Bytes())
+	}
+	old := fixture.svc.now().Add(-DownloadReplayWindow - time.Second).Unix()
+	fixture.svc.db.Model(&model.DownloadTask{}).Where("id = ?", task.TaskID).Update("completed_at", old)
+	if _, err := fixture.svc.BeginDownload(fixture.outsider.UserID, fixture.room.Code, task.TaskID); errx.Code(err) != errc.ErrDownloadExpired {
+		t.Fatalf("expired replay error=%v", err)
+	}
+}
+
+func TestDownloadRangeStreamsExactBytesAndOnlyEndRangeCompletes(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("0123456789")
+	file := makeStoredAvailableFile(t, fixture, storage, "download-range", model.FileScopeShared, "range.txt", content, nil)
+	task, err := fixture.svc.CreateDownloadTask(fixture.outsider.UserID, fixture.room.Code, file.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rangeSpec := ByteRange{Start: 2, End: 5}
+	stream, err := fixture.svc.BeginDownloadRange(fixture.outsider.UserID, fixture.room.Code, task.TaskID, &rangeSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := stream.WriteTo(context.Background(), &output); err != nil {
+		t.Fatal(err)
+	}
+	if string(output.Bytes()) != "2345" {
+		t.Fatalf("range output=%q", output.Bytes())
+	}
+	var storedTask model.DownloadTask
+	fixture.svc.db.First(&storedTask, "id = ?", task.TaskID)
+	if storedTask.Status != model.DownloadTaskStreaming {
+		t.Fatalf("middle range status=%q", storedTask.Status)
+	}
+	fixture.svc.db.Model(&model.DownloadTask{}).Where("id = ?", task.TaskID).Updates(map[string]interface{}{"started_at": fixture.svc.now().Add(-DownloadReplayWindow - time.Second).Unix()})
 }
 
 func TestPrivateAcceptCreatesDownloadAndCompletionUpdatesReceipt(t *testing.T) {
@@ -92,6 +137,18 @@ func TestPrivateAcceptCreatesDownloadAndCompletionUpdatesReceipt(t *testing.T) {
 	fixture.svc.db.Where("file_id = ? AND recipient_user_id = ?", file.ID, fixture.recipient.UserID).First(&recipient)
 	if recipient.Status != model.RecipientDownloaded || recipient.DownloadCount != 1 || recipient.FirstDownloadedAt == nil || recipient.LastDownloadedAt == nil {
 		t.Fatalf("recipient after download = %+v", recipient)
+	}
+	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDownloaded, 1)
+	replay, err := fixture.svc.BeginDownload(fixture.recipient.UserID, fixture.room.Code, task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := replay.WriteTo(context.Background(), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.db.Where("file_id = ? AND recipient_user_id = ?", file.ID, fixture.recipient.UserID).First(&recipient)
+	if recipient.DownloadCount != 1 {
+		t.Fatalf("replay changed download count=%d", recipient.DownloadCount)
 	}
 	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDownloaded, 1)
 	secondTask, err := fixture.svc.CreateDownloadTask(fixture.recipient.UserID, fixture.room.Code, file.ID)
