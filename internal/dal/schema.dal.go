@@ -21,6 +21,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.CleanupJob{},
 		&model.UploadBatch{},
 		&model.RoomFile{},
+		&model.FileTrashCycle{},
+		&model.FileRestoreRequest{},
 		&model.FileRecipient{},
 		&model.FileEvent{},
 		&model.DownloadTask{},

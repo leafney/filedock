@@ -363,6 +363,14 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 	if err := s.db.Model(&model.NotificationRecord{}).Where("room_id = ?", roomID).Count(&notifications).Error; err != nil {
 		return err
 	}
+	var trashCycles int64
+	if err := s.db.Model(&model.FileTrashCycle{}).Where("room_id = ?", roomID).Count(&trashCycles).Error; err != nil {
+		return err
+	}
+	var restoreRequests int64
+	if err := s.db.Model(&model.FileRestoreRequest{}).Where("room_id = ?", roomID).Count(&restoreRequests).Error; err != nil {
+		return err
+	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("message_id IN (?)", tx.Model(&model.ChatMessage{}).Select("id").Where("room_id = ?", roomID)).Delete(&model.ChatMessageDeletion{}).Error; err != nil {
 			return err
@@ -380,6 +388,12 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 			return err
 		}
 		if err := tx.Where("room_id = ?", roomID).Delete(&model.NotificationRecord{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.FileRestoreRequest{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.FileTrashCycle{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Where("room_id = ?", roomID).Delete(&model.FileEvent{}).Error; err != nil {
@@ -401,15 +415,19 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 			return err
 		}
 		return tx.Model(&model.CleanupJob{}).Where("id = ?", jobID).Updates(map[string]interface{}{
-			"phase":                 "relations_deleted",
-			"total_members":         members,
-			"cleaned_members":       members,
-			"total_join_requests":   requests,
-			"cleaned_join_requests": requests,
-			"total_notifications":   gorm.Expr("CASE WHEN total_notifications > ? THEN total_notifications ELSE ? END", notifications, notifications),
-			"cleaned_notifications": gorm.Expr("CASE WHEN cleaned_notifications > ? THEN cleaned_notifications ELSE ? END", notifications, notifications),
-			"last_error":            "",
-			"started_at":            now.Unix(),
+			"phase":                    "relations_deleted",
+			"total_members":            members,
+			"cleaned_members":          members,
+			"total_join_requests":      requests,
+			"cleaned_join_requests":    requests,
+			"total_notifications":      gorm.Expr("CASE WHEN total_notifications > ? THEN total_notifications ELSE ? END", notifications, notifications),
+			"cleaned_notifications":    gorm.Expr("CASE WHEN cleaned_notifications > ? THEN cleaned_notifications ELSE ? END", notifications, notifications),
+			"total_trash_cycles":       trashCycles,
+			"cleaned_trash_cycles":     trashCycles,
+			"total_restore_requests":   restoreRequests,
+			"cleaned_restore_requests": restoreRequests,
+			"last_error":               "",
+			"started_at":               now.Unix(),
 		}).Error
 	}); err != nil {
 		return err

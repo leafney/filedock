@@ -31,6 +31,7 @@ type RoomFile struct {
 	Scope          string `gorm:"type:text;not null;index:idx_room_files_room_scope"`
 	PrivateCode    string `gorm:"type:text;index:idx_room_files_private_code"`
 	Status         string `gorm:"type:text;not null;index:idx_room_files_room_status"`
+	TrashVersion   int64  `gorm:"not null;default:0"`
 	Progress       int    `gorm:"not null;default:0"`
 	FailureCode    int    `gorm:"not null;default:0"`
 	CreatedAt      int64  `gorm:"not null;index:idx_room_files_created_at"`
@@ -40,6 +41,42 @@ type RoomFile struct {
 }
 
 func (RoomFile) TableName() string { return "room_files" }
+
+// FileTrashCycle records one immutable deletion generation. The outcome and
+// resolver fields are completed when that generation is restored or purged.
+type FileTrashCycle struct {
+	ID               string `gorm:"type:text;primaryKey;size:26"`
+	RoomID           string `gorm:"type:text;not null;index:idx_file_trash_cycles_room_id"`
+	FileID           string `gorm:"type:text;not null;uniqueIndex:idx_file_trash_cycles_file_version"`
+	Version          int64  `gorm:"not null;uniqueIndex:idx_file_trash_cycles_file_version"`
+	DeletedByUserID  string `gorm:"type:text;not null;index:idx_file_trash_cycles_deleted_by"`
+	DeletedAt        int64  `gorm:"not null;index:idx_file_trash_cycles_room_cursor"`
+	DeleteReason     string `gorm:"type:text"`
+	Outcome          string `gorm:"type:text;not null;index:idx_file_trash_cycles_outcome"`
+	ResolvedByUserID string `gorm:"type:text"`
+	ResolvedAt       *int64 `gorm:"index:idx_file_trash_cycles_resolved_at"`
+}
+
+func (FileTrashCycle) TableName() string { return "file_trash_cycles" }
+
+// FileRestoreRequest stores at most one request for a trash generation. An
+// invalidated request may be reactivated after the same anonymous identity
+// rejoins; a rejected request remains final for that generation.
+type FileRestoreRequest struct {
+	ID              string `gorm:"type:text;primaryKey;size:26"`
+	RoomID          string `gorm:"type:text;not null;index:idx_file_restore_requests_room_status"`
+	FileID          string `gorm:"type:text;not null;index:idx_file_restore_requests_file_id"`
+	TrashCycleID    string `gorm:"type:text;not null;uniqueIndex:idx_file_restore_requests_cycle_id"`
+	TrashVersion    int64  `gorm:"not null"`
+	RequesterUserID string `gorm:"type:text;not null;index:idx_file_restore_requests_requester_status"`
+	Status          string `gorm:"type:text;not null;index:idx_file_restore_requests_room_status;index:idx_file_restore_requests_requester_status"`
+	CreatedAt       int64  `gorm:"not null;index:idx_file_restore_requests_created_at"`
+	DecidedAt       *int64 `gorm:"index:idx_file_restore_requests_decided_at"`
+	DecidedByUserID string `gorm:"type:text"`
+	RejectionReason string `gorm:"type:text"`
+}
+
+func (FileRestoreRequest) TableName() string { return "file_restore_requests" }
 
 type FileRecipient struct {
 	ID                string `gorm:"type:text;primaryKey;size:26"`
@@ -84,6 +121,7 @@ type DownloadTask struct {
 	ExpiresAt       int64  `gorm:"not null;index:idx_download_tasks_expires_at"`
 	StartedAt       *int64
 	CompletedAt     *int64
+	CancelledAt     *int64
 	FailedAt        *int64
 }
 

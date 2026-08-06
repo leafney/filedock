@@ -26,18 +26,23 @@ const (
 	UploadRoomLimit      = 2
 	UploadUserLimit      = 2
 
-	FileEventBatchCreated    = "batch_created"
-	FileEventUploadStarted   = "upload_started"
-	FileEventUploadCompleted = "upload_completed"
-	FileEventUploadFailed    = "upload_failed"
-	FileEventUploadCancelled = "upload_cancelled"
-	FileEventDirectSent      = "direct_sent"
-	FileEventReused          = "reused"
-	FileEventPublished       = "published_shared"
-	FileEventAccepted        = "accepted"
-	FileEventDeclined        = "declined"
-	FileEventDownloadStarted = "download_started"
-	FileEventDownloaded      = "download_completed"
+	FileEventBatchCreated     = "batch_created"
+	FileEventUploadStarted    = "upload_started"
+	FileEventUploadCompleted  = "upload_completed"
+	FileEventUploadFailed     = "upload_failed"
+	FileEventUploadCancelled  = "upload_cancelled"
+	FileEventDirectSent       = "direct_sent"
+	FileEventReused           = "reused"
+	FileEventPublished        = "published_shared"
+	FileEventAccepted         = "accepted"
+	FileEventDeclined         = "declined"
+	FileEventDownloadStarted  = "download_started"
+	FileEventDownloaded       = "download_completed"
+	FileEventTrashed          = "trashed"
+	FileEventRestoreRequested = "restore_requested"
+	FileEventRestoreRejected  = "restore_rejected"
+	FileEventRestored         = "restored"
+	FileEventPurged           = "purged"
 )
 
 type FileManifest struct {

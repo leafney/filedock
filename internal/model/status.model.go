@@ -47,8 +47,20 @@ const (
 	FileStatusReserved  = "reserved"
 	FileStatusUploading = "uploading"
 	FileStatusAvailable = "available"
+	FileStatusTrashed   = "trashed"
+	FileStatusPurging   = "purging"
+	FileStatusPurged    = "purged"
 	FileStatusFailed    = "failed"
 	FileStatusCancelled = "cancelled"
+
+	FileTrashActive   = "active"
+	FileTrashRestored = "restored"
+	FileTrashPurged   = "purged"
+
+	FileRestorePending     = "pending"
+	FileRestoreApproved    = "approved"
+	FileRestoreRejected    = "rejected"
+	FileRestoreInvalidated = "invalidated"
 
 	RecipientPending    = "pending"
 	RecipientAccepted   = "accepted"
@@ -58,6 +70,7 @@ const (
 	DownloadTaskPending   = "pending"
 	DownloadTaskStreaming = "streaming"
 	DownloadTaskCompleted = "completed"
+	DownloadTaskCancelled = "cancelled"
 	DownloadTaskFailed    = "failed"
 	DownloadTaskExpired   = "expired"
 

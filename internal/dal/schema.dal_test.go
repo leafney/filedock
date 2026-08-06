@@ -16,7 +16,7 @@ func TestAutoMigrateCreatesCurrentStageTables(t *testing.T) {
 	if err := AutoMigrate(db); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
-	for _, name := range []string{"users", "sessions", "rooms", "room_members", "join_requests", "cleanup_jobs", "upload_batches", "room_files", "file_recipients", "file_events", "download_tasks", "notification_records", "chat_conversations", "chat_messages", "chat_read_states", "chat_message_deletions"} {
+	for _, name := range []string{"users", "sessions", "rooms", "room_members", "join_requests", "cleanup_jobs", "upload_batches", "room_files", "file_trash_cycles", "file_restore_requests", "file_recipients", "file_events", "download_tasks", "notification_records", "chat_conversations", "chat_messages", "chat_read_states", "chat_message_deletions"} {
 		var count int64
 		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", name).Scan(&count).Error; err != nil {
 			t.Fatalf("check %s: %v", name, err)
@@ -30,6 +30,9 @@ func TestAutoMigrateCreatesCurrentStageTables(t *testing.T) {
 	}
 	if !db.Migrator().HasColumn("file_recipients", "delivery_version") {
 		t.Fatal("file recipient delivery version was not migrated")
+	}
+	if !db.Migrator().HasColumn("room_files", "trash_version") || !db.Migrator().HasColumn("download_tasks", "cancelled_at") {
+		t.Fatal("file trash lifecycle columns were not migrated")
 	}
 }
 

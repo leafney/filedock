@@ -473,7 +473,19 @@ func (s *RoomSvc) Leave(userID, code string) error {
 	if member.Role == model.MemberRoleOwner {
 		return errx.New(errc.ErrOwnerCannotLeave, nil)
 	}
-	if err := s.db.Model(&model.RoomMember{}).Where("id = ?", member.ID).Updates(map[string]interface{}{"status": model.MemberStatusLeft, "left_at": now, "last_seen_at": now}).Error; err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		update := tx.Model(&model.RoomMember{}).Where("id = ? AND status = ?", member.ID, model.MemberStatusActive).Updates(map[string]interface{}{"status": model.MemberStatusLeft, "left_at": now, "last_seen_at": now})
+		if update.Error != nil {
+			return update.Error
+		}
+		if update.RowsAffected != 1 {
+			return errx.New(errc.ErrMemberRequired, nil)
+		}
+		if s.files != nil {
+			return s.files.InvalidateMemberRestoreRequests(tx, room.ID, userID, now)
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	if s.files != nil {
@@ -515,12 +527,20 @@ func (s *RoomSvc) Kick(ownerID, code, targetUserID string) error {
 		return errx.New(errc.ErrConflict, nil)
 	}
 	now := s.now().Unix()
-	result := s.db.Model(&model.RoomMember{}).Where("room_id = ? AND user_id = ? AND status = ? AND role = ?", room.ID, targetUserID, model.MemberStatusActive, model.MemberRoleMember).Updates(map[string]interface{}{"status": model.MemberStatusKicked, "kicked_at": now, "kicked_by_user_id": ownerID, "last_seen_at": now})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return errx.New(errc.ErrMemberRequired, nil)
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.RoomMember{}).Where("room_id = ? AND user_id = ? AND status = ? AND role = ?", room.ID, targetUserID, model.MemberStatusActive, model.MemberRoleMember).Updates(map[string]interface{}{"status": model.MemberStatusKicked, "kicked_at": now, "kicked_by_user_id": ownerID, "last_seen_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return errx.New(errc.ErrMemberRequired, nil)
+		}
+		if s.files != nil {
+			return s.files.InvalidateMemberRestoreRequests(tx, room.ID, targetUserID, now)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	if s.files != nil {
 		s.files.CancelMemberTransfers(room.ID, targetUserID)
