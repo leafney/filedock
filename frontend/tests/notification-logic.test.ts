@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { NotificationItem } from "../src/types/domain";
-import { chatNotificationTarget, fileNotificationTarget, formatNotificationCount, isChatNotification, isFileNotification, isFileResultNotification, readNotificationChatLaunch, readNotificationFileLaunch, shouldRefreshNotifications } from "../src/utils/notifications";
+import { chatNotificationTarget, fileNotificationTarget, formatNotificationCount, isChatNotification, isFileNotification, isFileResultNotification, readNotificationChatLaunch, readNotificationFileLaunch, shouldConsumeNotificationLaunch, shouldRefreshNotifications } from "../src/utils/notifications";
 
 const chatItem: NotificationItem = {
   key: "chat_conversation:one",
@@ -107,5 +107,12 @@ describe("全局通知纯逻辑", () => {
     expect(formatNotificationCount(0)).toBe("0");
     expect(formatNotificationCount(99)).toBe("99");
     expect(formatNotificationCount(100)).toBe("99+");
+  });
+
+  test("同一导航 token 只消费一次，新 token 可以再次消费", () => {
+    expect(shouldConsumeNotificationLaunch(undefined, "launch-one")).toBe(true);
+    expect(shouldConsumeNotificationLaunch("launch-one", "launch-one")).toBe(false);
+    expect(shouldConsumeNotificationLaunch("launch-one", "launch-two")).toBe(true);
+    expect(shouldConsumeNotificationLaunch(undefined, undefined)).toBe(false);
   });
 });

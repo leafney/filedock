@@ -9,6 +9,7 @@ import { chatMessageCapabilities, chatDateKey, chatTimeBucket, isChatNearBottom,
 import { readChatDraft, writeChatDraft } from "../../utils/chat-drafts";
 import { copyText } from "../../utils/clipboard";
 import { appendUniqueChatMessages } from "../../utils/chat-history";
+import { shouldConsumeNotificationLaunch } from "../../utils/notifications";
 
 interface Props {
   roomId: string;
@@ -19,6 +20,7 @@ interface Props {
   selectedPeerUserId?: string;
   launchPeerUserId?: string;
   launchToken?: string;
+  onLaunchConsumed?: (token: string) => void;
   onCloseConversation?: () => void;
   onUnreadCount?: (count: number) => void;
   onUnreadByPeer?: (counts: Record<string, number>) => void;
@@ -26,7 +28,7 @@ interface Props {
 
 type MenuPoint = { clientX: number; clientY: number };
 
-export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPeerUserId, launchPeerUserId, launchToken, onCloseConversation, onUnreadCount, onUnreadByPeer }: Props) {
+export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPeerUserId, launchPeerUserId, launchToken, onLaunchConsumed, onCloseConversation, onUnreadCount, onUnreadByPeer }: Props) {
   const { t } = useTranslation();
   const chat = useChatRoom(code, selfId);
   const desktop = mode === "desktop";
@@ -65,10 +67,12 @@ export function ChatWorkspace({ roomId, code, members, selfId, mode, selectedPee
   }, [chat.openConversation, chat.peerUserId, desktop, selectedPeerUserId]);
 
   useEffect(() => {
-    if (desktop || !launchPeerUserId || !launchToken || handledLaunchToken.current === launchToken) return;
-    handledLaunchToken.current = launchToken;
+    const token = launchToken;
+    if (desktop || !launchPeerUserId || !token || !shouldConsumeNotificationLaunch(handledLaunchToken.current, token)) return;
+    handledLaunchToken.current = token;
     chat.openConversation(launchPeerUserId);
-  }, [chat.openConversation, desktop, launchPeerUserId, launchToken]);
+    onLaunchConsumed?.(token);
+  }, [chat.openConversation, desktop, launchPeerUserId, launchToken, onLaunchConsumed]);
 
   const peers = useMemo(() => {
     const active = members.filter((member) => member.userId !== selfId && member.status === "active");

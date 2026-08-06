@@ -15,8 +15,9 @@ import { applyDownloadProgress, enqueueDownload, enqueueUploadBatch, fileRefresh
 import type { FileIdentity, FileRange, FileScope, FileSort, RoomFile, RoomMember } from "../../types/domain";
 import { formatBytes } from "../../utils/format";
 import { moveRovingFocus } from "../../utils/keyboard";
+import { shouldConsumeNotificationLaunch } from "../../utils/notifications";
 
-export function FileWorkspace({ code, members, selfId, fileLaunch }: { code: string; members: RoomMember[]; selfId: string; fileLaunch?: { token: string; view: "list" | "timeline" | "trash"; requestId?: string } }) {
+export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchConsumed }: { code: string; members: RoomMember[]; selfId: string; fileLaunch?: { token: string; view: "list" | "timeline" | "trash"; requestId?: string }; onFileLaunchConsumed: (token: string) => void }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +38,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch }: { code: str
   const [trashError, setTrashError] = useState<unknown>();
   const [trashPending, setTrashPending] = useState(false);
   const [trashLaunch, setTrashLaunch] = useState<{ token: string; requestId?: string }>();
+  const consumedFileLaunchToken = useRef<string>();
   const trashCountQuery = useQuery({ queryKey: ["file-trash-count", code], queryFn: () => listFileTrash(code, "", "", 1), retry: false });
 
   const refresh = useCallback(() => {
@@ -51,10 +53,12 @@ export function FileWorkspace({ code, members, selfId, fileLaunch }: { code: str
   }, [code, queryClient]);
 
   useEffect(() => {
-    if (!fileLaunch) return;
+    if (!fileLaunch || !shouldConsumeNotificationLaunch(consumedFileLaunchToken.current, fileLaunch.token)) return;
+    consumedFileLaunchToken.current = fileLaunch.token;
     setView(fileLaunch.view);
     setTrashLaunch(fileLaunch.view === "trash" ? { token: fileLaunch.token, requestId: fileLaunch.requestId } : undefined);
-  }, [fileLaunch?.requestId, fileLaunch?.token, fileLaunch?.view]);
+    onFileLaunchConsumed(fileLaunch.token);
+  }, [fileLaunch, onFileLaunchConsumed]);
 
   useEffect(() => {
     const stream = (raw: Event) => {
@@ -147,7 +151,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch }: { code: str
       </div>
       {actionError != null && <div className="file-action-error"><ErrorNotice error={actionError} /></div>}
       <FileList code={code} range={range} identity={identity} search={search} sort={sort} batchMode={batchMode} selected={selected} onSelectedChange={setSelected} onDropFiles={addFiles} onDownload={(file) => void download(file)} onAccept={(file) => void accept(file)} onDecline={(file) => void decline(file)} onReuse={(files) => setReuseFiles(files.map((file) => file.fileId))} onPublish={(file) => void publish(file)} onTrash={openTrash} onDetails={setDetails} onBatchDownload={(files) => void batchDownload(files)} />
-    </div> : view === "timeline" ? <FileTimeline code={code} /> : <FileTrash code={code} search={trashSearch} onSearchChange={setTrashSearch} launch={trashLaunch} onChanged={refresh} />}
+    </div> : view === "timeline" ? <FileTimeline code={code} /> : <FileTrash code={code} search={trashSearch} onSearchChange={setTrashSearch} launch={trashLaunch} onLaunchConsumed={(token) => setTrashLaunch((current) => current?.token === token ? undefined : current)} onChanged={refresh} />}
     {drafts.length > 0 && <UploadComposer files={drafts} members={members} selfId={selfId} pending={upload.isPending} error={upload.error} onClose={() => { if (!upload.isPending) setDrafts([]); }} onAdd={chooseFiles} onRemove={(index) => setDrafts((files) => files.filter((_, current) => current !== index))} onSubmit={(scope, recipientIds) => upload.mutate({ files: drafts, scope, recipientIds })} />}
     {reuseFiles != null && <ReusePrivateDialog code={code} members={members} selfId={selfId} initialFileIds={reuseFiles} pending={reuse.isPending} error={reuse.error} onClose={() => { if (!reuse.isPending) setReuseFiles(null); }} onSubmit={(fileIds, recipientIds) => reuse.mutate({ fileIds, recipientIds })} />}
     {details && <FileDetailsDialog file={details} onClose={() => setDetails(null)} />}

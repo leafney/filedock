@@ -92,3 +92,7 @@ export function formatNotificationCount(count: number) {
   if (!Number.isFinite(count) || count <= 0) return "0";
   return count > 99 ? "99+" : String(Math.floor(count));
 }
+
+export function shouldConsumeNotificationLaunch(consumedToken: string | undefined, incomingToken: string | undefined) {
+  return Boolean(incomingToken) && consumedToken !== incomingToken;
+}

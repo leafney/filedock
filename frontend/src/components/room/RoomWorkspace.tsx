@@ -29,6 +29,8 @@ interface Props {
   actionError?: unknown;
   chatLaunch?: { peerUserId: string; token: string };
   fileLaunch?: { token: string; view: "list" | "timeline" | "trash"; requestId?: string };
+  onChatLaunchConsumed: (token: string) => void;
+  onFileLaunchConsumed: (token: string) => void;
 }
 
 export function RoomWorkspace(props: Props) {
@@ -38,6 +40,7 @@ export function RoomWorkspace(props: Props) {
   const [shareOpen, setShareOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<string>();
+  const [mobileChatLaunch, setMobileChatLaunch] = useState<Props["chatLaunch"]>();
   const [chatMobileOpen, setChatMobileOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const [chatUnreadByPeer, setChatUnreadByPeer] = useState<Record<string, number>>({});
@@ -53,8 +56,14 @@ export function RoomWorkspace(props: Props) {
     const member = props.room.members.find((item) => item.userId === props.chatLaunch?.peerUserId && item.status === "active");
     if (!member || member.userId === props.session.userId) return;
     setChatTarget(member.userId);
-    if (window.matchMedia("(max-width: 760px)").matches) setChatMobileOpen(true);
-  }, [props.chatLaunch?.token, props.chatLaunch?.peerUserId, props.room.members, props.session.userId]);
+    if (window.matchMedia("(max-width: 760px)").matches) {
+      setMobileChatLaunch(props.chatLaunch);
+      setChatMobileOpen(true);
+    } else {
+      setMobileChatLaunch(undefined);
+    }
+    props.onChatLaunchConsumed(props.chatLaunch.token);
+  }, [props.chatLaunch, props.onChatLaunchConsumed, props.room.members, props.session.userId]);
   useEffect(() => {
     if (props.fileLaunch) setChatMobileOpen(false);
   }, [props.fileLaunch?.token]);
@@ -82,7 +91,7 @@ export function RoomWorkspace(props: Props) {
 
     <div className="room-workspace-layout">
       <MemberPanel room={props.room} session={props.session} onKick={props.onKick} onChat={setChatTarget} selectedUserId={chatTarget} unreadByUser={chatUnreadByPeer} />
-      <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} fileLaunch={props.fileLaunch} />
+      <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} fileLaunch={props.fileLaunch} onFileLaunchConsumed={props.onFileLaunchConsumed} />
       <ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="desktop" selectedPeerUserId={chatTarget} onCloseConversation={() => setChatTarget(undefined)} onUnreadCount={setChatUnread} onUnreadByPeer={setChatUnreadByPeer} />
     </div>
     <TransferBar roomCode={props.code} />
@@ -90,7 +99,7 @@ export function RoomWorkspace(props: Props) {
     {membersOpen && <Overlay title={t("room.members")} onClose={() => setMembersOpen(false)}><MemberPanel room={props.room} session={props.session} onKick={props.onKick} drawer /></Overlay>}
     {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
     {capacityOpen && <Overlay title={t("room.workspace.capacityDetails")} onClose={() => setCapacityOpen(false)}><CapacityPanel room={props.room} /></Overlay>}
-    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="mobile" launchPeerUserId={props.chatLaunch?.peerUserId} launchToken={props.chatLaunch?.token} onUnreadCount={setChatUnread} /></section></div>}
+    {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="mobile" launchPeerUserId={mobileChatLaunch?.peerUserId} launchToken={mobileChatLaunch?.token} onLaunchConsumed={(token) => setMobileChatLaunch((current) => current?.token === token ? undefined : current)} onUnreadCount={setChatUnread} /></section></div>}
     {props.actionError != null && <div className="room-floating-error"><ErrorNotice error={props.actionError} /></div>}
     {(props.destroyAt || props.room.status === "destroying") && <div className="room-blocking-state"><RefreshCw aria-hidden="true" /><h2>{t("room.destroyingTitle")}</h2><p>{t("room.destroyingHint")}</p><strong>{t("room.destroyCountdown", { seconds: String(countdown) })}</strong></div>}
     {props.kicked && <div className="room-blocking-state"><DoorOpen aria-hidden="true" /><h2>{t("room.kickedTitle")}</h2><p>{t("room.kicked")}</p><button type="button" onClick={() => { props.setKicked(false); window.location.replace("/"); }}>{t("room.confirmOnly")}</button></div>}

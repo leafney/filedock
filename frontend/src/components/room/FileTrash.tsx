@@ -9,16 +9,18 @@ import { approveFileRestore, listFileTrash, purgeRoomFile, rejectFileRestore, re
 import type { FileTrashItem } from "../../types/domain";
 import { fileTrashActions } from "../../utils/file-permissions";
 import { formatBytes, formatDate } from "../../utils/format";
+import { shouldConsumeNotificationLaunch } from "../../utils/notifications";
 
 interface Props {
   code: string;
   search: string;
   onSearchChange: (value: string) => void;
   launch?: { token: string; requestId?: string };
+  onLaunchConsumed: (token: string) => void;
   onChanged: () => void;
 }
 
-export function FileTrash({ code, search, onSearchChange, launch, onChanged }: Props) {
+export function FileTrash({ code, search, onSearchChange, launch, onLaunchConsumed, onChanged }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const deferredSearch = useDeferredValue(search.trim());
@@ -29,8 +31,15 @@ export function FileTrash({ code, search, onSearchChange, launch, onChanged }: P
   const [decision, setDecision] = useState<"approve" | "reject">();
   const [decisionReason, setDecisionReason] = useState("");
   const [approvalError, setApprovalError] = useState<unknown>();
+  const [activeLaunch, setActiveLaunch] = useState<{ token: string; requestId?: string }>();
   const handledLaunch = useRef<string>();
   const unavailableLaunch = useRef<string>();
+
+  useEffect(() => {
+    if (!launch || !shouldConsumeNotificationLaunch(activeLaunch?.token, launch.token)) return;
+    setActiveLaunch(launch);
+    onLaunchConsumed(launch.token);
+  }, [activeLaunch?.token, launch, onLaunchConsumed]);
 
   const trashQuery = useInfiniteQuery({
     queryKey: ["file-trash", code, deferredSearch],
@@ -42,8 +51,8 @@ export function FileTrash({ code, search, onSearchChange, launch, onChanged }: P
   const total = trashQuery.data?.pages[0]?.total ?? 0;
 
   const approvalQuery = useInfiniteQuery({
-    queryKey: ["file-trash-approval", code, launch?.requestId],
-    enabled: Boolean(launch?.requestId),
+    queryKey: ["file-trash-approval", code, activeLaunch?.requestId],
+    enabled: Boolean(activeLaunch?.requestId),
     initialPageParam: "",
     queryFn: ({ pageParam }) => listFileTrash(code, "", pageParam, 30),
     getNextPageParam: (page) => page.nextCursor || undefined,
@@ -52,8 +61,8 @@ export function FileTrash({ code, search, onSearchChange, launch, onChanged }: P
   const { fetchNextPage: fetchApprovalNextPage, hasNextPage: approvalHasNextPage, isFetchingNextPage: approvalIsFetchingNextPage, isSuccess: approvalIsSuccess } = approvalQuery;
 
   useEffect(() => {
-    const requestId = launch?.requestId;
-    const token = launch?.token;
+    const requestId = activeLaunch?.requestId;
+    const token = activeLaunch?.token;
     if (!requestId || !token || handledLaunch.current === token || approvalItem) return;
     const item = approvalItems.find((candidate) => candidate.restoreRequest?.requestId === requestId);
     if (item) {
@@ -80,7 +89,7 @@ export function FileTrash({ code, search, onSearchChange, launch, onChanged }: P
       message.warning(t("notification.unavailable"));
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
-  }, [approvalHasNextPage, approvalIsFetchingNextPage, approvalIsSuccess, approvalItem, approvalItems, fetchApprovalNextPage, launch?.requestId, launch?.token, queryClient, t]);
+  }, [activeLaunch?.requestId, activeLaunch?.token, approvalHasNextPage, approvalIsFetchingNextPage, approvalIsSuccess, approvalItem, approvalItems, fetchApprovalNextPage, queryClient, t]);
 
   const refreshAfterAction = () => {
     setPendingAction(undefined);

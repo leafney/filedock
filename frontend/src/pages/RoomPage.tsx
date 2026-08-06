@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { message } from "antd";
 import { Check, Shield, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -46,6 +46,12 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const joinInfo = useQuery({ queryKey: ["room-join-info", code], queryFn: () => getJoinInfo(code), enabled: Boolean(session && validCode), retry: false });
   useEffect(() => { if (joinInfo.data?.alreadyMember) setJoined(true); }, [joinInfo.data?.alreadyMember]);
   const snapshot = useQuery({ queryKey: ["room", code], queryFn: () => getRoom(code), enabled: Boolean(session && joined), retry: false, refetchInterval: joined && !destroyAt ? 30_000 : false });
+  const consumeChatLaunch = useCallback((token: string) => {
+    setChatLaunch((current) => current?.token === token ? undefined : current);
+  }, []);
+  const consumeFileLaunch = useCallback((token: string) => {
+    setFileLaunch((current) => current?.token === token ? undefined : current);
+  }, []);
   useEffect(() => {
     const chatTarget = readNotificationChatLaunch(location.state);
     const fileTarget = readNotificationFileLaunch(location.state);
@@ -143,6 +149,8 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     actionError={actionError}
     chatLaunch={chatLaunch?.roomCode === code ? chatLaunch : undefined}
     fileLaunch={fileLaunch?.roomCode === code ? { token: fileLaunch.token, view: fileLaunch.view, requestId: fileLaunch.requestId } : undefined}
+    onChatLaunchConsumed={consumeChatLaunch}
+    onFileLaunchConsumed={consumeFileLaunch}
   />{profileOpen && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={() => {
     if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
     void resetSession().then(() => {
