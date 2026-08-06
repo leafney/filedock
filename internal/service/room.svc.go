@@ -73,6 +73,7 @@ type RoomCapacityView struct {
 	UsedBytes     int64
 	SharedBytes   *int64
 	DirectBytes   *int64
+	TrashBytes    *int64
 	ReservedBytes *int64
 }
 
@@ -415,16 +416,20 @@ func (s *RoomSvc) Snapshot(userID, code string) (RoomSnapshot, error) {
 	}
 	capacity := RoomCapacityView{CapacityBytes: room.CapacityBytes, UsedBytes: room.UsedBytes}
 	if current.Role == model.MemberRoleOwner {
-		var sharedBytes, directBytes int64
+		var sharedBytes, directBytes, trashBytes int64
 		if err := s.db.Model(&model.RoomFile{}).Select("COALESCE(SUM(actual_size), 0)").Where("room_id = ? AND scope = ? AND status = ?", room.ID, model.FileScopeShared, model.FileStatusAvailable).Scan(&sharedBytes).Error; err != nil {
 			return RoomSnapshot{}, err
 		}
 		if err := s.db.Model(&model.RoomFile{}).Select("COALESCE(SUM(actual_size), 0)").Where("room_id = ? AND scope = ? AND status = ?", room.ID, model.FileScopeDirect, model.FileStatusAvailable).Scan(&directBytes).Error; err != nil {
 			return RoomSnapshot{}, err
 		}
+		if err := s.db.Model(&model.RoomFile{}).Select("COALESCE(SUM(actual_size), 0)").Where("room_id = ? AND status IN ?", room.ID, []string{model.FileStatusTrashed, model.FileStatusPurging}).Scan(&trashBytes).Error; err != nil {
+			return RoomSnapshot{}, err
+		}
 		reserved := room.ReservedBytes
 		capacity.SharedBytes = &sharedBytes
 		capacity.DirectBytes = &directBytes
+		capacity.TrashBytes = &trashBytes
 		capacity.ReservedBytes = &reserved
 	}
 	return RoomSnapshot{RoomID: room.ID, RoomCode: room.Code, Title: room.Title, Status: room.Status, JoinMode: room.JoinMode, Role: current.Role, ExpiresAt: room.ExpiresAt, CanExtend: current.Role == model.MemberRoleOwner && room.Status == model.RoomStatusActive && room.ExtendedAt == nil, DestroyAt: room.DestroyAt, Members: views, PendingRequestCount: int(pending), Capacity: capacity}, nil

@@ -53,6 +53,7 @@ type RoomCapacityDTO struct {
 	UsedBytes     int64  `json:"usedBytes"`
 	SharedBytes   *int64 `json:"sharedBytes,omitempty"`
 	DirectBytes   *int64 `json:"directBytes,omitempty"`
+	TrashBytes    *int64 `json:"trashBytes,omitempty"`
 	ReservedBytes *int64 `json:"reservedBytes,omitempty"`
 }
 

@@ -52,7 +52,9 @@ type downloadRegistry struct {
 }
 
 type downloadActive struct {
+	taskID string
 	roomID string
+	fileID string
 	userID string
 	cancel context.CancelFunc
 }
@@ -121,7 +123,7 @@ func (s *FileSvc) BeginDownload(userID, roomCode, taskID string) (*DownloadStrea
 		}
 		return nil, errx.New(errc.ErrFileNotFound, nil)
 	}
-	taskContext, finish, err := s.downloads.begin(task.ID, room.ID, userID)
+	taskContext, finish, err := s.downloads.begin(task.ID, room.ID, file.ID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,6 +240,10 @@ func (stream *DownloadStream) WriteTo(ctx context.Context, target io.Writer) err
 func (stream *DownloadStream) complete(transferred int64) error {
 	now := stream.svc.now().Unix()
 	return stream.svc.db.Transaction(func(tx *gorm.DB) error {
+		var current model.RoomFile
+		if err := tx.Where("id = ? AND status = ? AND trash_version = ?", stream.fileRecord.ID, model.FileStatusAvailable, stream.fileRecord.TrashVersion).First(&current).Error; err != nil {
+			return fileNotFound(err)
+		}
 		result := tx.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", stream.task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskCompleted, "transferred_size": transferred, "completed_at": now})
 		if result.Error != nil {
 			return result.Error
@@ -299,14 +305,14 @@ func (s *FileSvc) canDownload(userID string, file model.RoomFile) (bool, error) 
 	return recipient.Status == model.RecipientAccepted || recipient.Status == model.RecipientDownloaded, nil
 }
 
-func (r *downloadRegistry) begin(taskID, roomID, userID string) (context.Context, func(), error) {
+func (r *downloadRegistry) begin(taskID, roomID, fileID, userID string) (context.Context, func(), error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.active[taskID]; exists || len(r.active) >= DownloadGlobalLimit || r.rooms[roomID] >= DownloadRoomLimit || r.users[userID] >= DownloadUserLimit {
 		return nil, nil, errx.New(errc.ErrDownloadLimited, nil)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r.active[taskID] = downloadActive{roomID: roomID, userID: userID, cancel: cancel}
+	r.active[taskID] = downloadActive{taskID: taskID, roomID: roomID, fileID: fileID, userID: userID, cancel: cancel}
 	r.rooms[roomID]++
 	r.users[userID]++
 	var once sync.Once
@@ -320,6 +326,24 @@ func (r *downloadRegistry) begin(taskID, roomID, userID string) (context.Context
 			cancel()
 		})
 	}, nil
+}
+
+func (r *downloadRegistry) cancelFile(fileID string) []downloadActive {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	matched := make([]downloadActive, 0)
+	for _, active := range r.active {
+		if active.fileID == fileID {
+			matched = append(matched, active)
+		}
+	}
+	r.mu.Unlock()
+	for _, active := range matched {
+		active.cancel()
+	}
+	return matched
 }
 
 func (r *downloadRegistry) cancelMatching(roomID, userID string) {

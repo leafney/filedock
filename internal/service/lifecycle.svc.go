@@ -97,6 +97,12 @@ func (s *LifecycleSvc) Start(ctx context.Context) error {
 		_ = s.Stop()
 		return err
 	}
+	if s.files != nil {
+		if err := s.files.RecoverPurgingFiles(); err != nil {
+			_ = s.Stop()
+			return err
+		}
+	}
 	if err := s.Tick(); err != nil {
 		_ = s.Stop()
 		return err

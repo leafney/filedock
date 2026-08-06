@@ -34,6 +34,7 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 		return model.FileTrashCycle{}, err
 	}
 	var cycle model.FileTrashCycle
+	var cancelledTasks []model.DownloadTask
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, userID)
 		if err != nil {
@@ -64,12 +65,30 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 			return err
 		}
 		now := s.now().Unix()
+		if err := tx.Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).Find(&cancelledTasks).Error; err != nil {
+			return err
+		}
+		if len(cancelledTasks) > 0 {
+			if err := tx.Model(&model.DownloadTask{}).
+				Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).
+				Updates(map[string]interface{}{"status": model.DownloadTaskCancelled, "cancelled_at": now}).Error; err != nil {
+				return err
+			}
+		}
 		cycle = model.FileTrashCycle{ID: cycleID, RoomID: room.ID, FileID: file.ID, Version: version, DeletedByUserID: userID, DeletedAt: now, DeleteReason: reason, Outcome: model.FileTrashActive}
 		if err := tx.Create(&cycle).Error; err != nil {
 			return err
 		}
 		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventTrashed, now)
 	})
+	if err == nil {
+		s.downloads.cancelFile(fileID)
+		if s.hub != nil {
+			for _, task := range cancelledTasks {
+				s.hub.PublishUser(task.UserID, "file.download_cancelled", map[string]interface{}{"roomCode": roomCode, "fileId": fileID, "taskId": task.ID})
+			}
+		}
+	}
 	return cycle, err
 }
 
@@ -121,8 +140,10 @@ func (s *FileSvc) ApproveFileRestore(ownerID, roomCode, requestID string) error 
 		}
 		file, cycle, err := loadCurrentTrash(tx, room.ID, request.FileID)
 		if err != nil || cycle.ID != request.TrashCycleID || cycle.Version != request.TrashVersion {
-			if err != nil && errx.Code(err) == 0 {
-				return err
+			if err != nil {
+				if _, business := errx.As(err); !business {
+					return err
+				}
 			}
 			return errx.New(errc.ErrFileState, nil)
 		}
@@ -150,8 +171,10 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 		}
 		file, cycle, err := loadCurrentTrash(tx, room.ID, request.FileID)
 		if err != nil || cycle.ID != request.TrashCycleID || cycle.Version != request.TrashVersion {
-			if err != nil && errx.Code(err) == 0 {
-				return err
+			if err != nil {
+				if _, business := errx.As(err); !business {
+					return err
+				}
 			}
 			return errx.New(errc.ErrFileState, nil)
 		}
@@ -167,6 +190,164 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 		}
 		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, ownerID, FileEventRestoreRejected, now)
 	})
+}
+
+// PurgeFile permanently removes stored bytes and then finalizes the database
+// state. A short-lived purging state makes a process interruption recoverable.
+func (s *FileSvc) PurgeFile(userID, roomCode, fileID string) error {
+	var file model.RoomFile
+	var cycle model.FileTrashCycle
+	var cancelledTasks []model.DownloadTask
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		room, member, err := activeFileMember(tx, roomCode, userID)
+		if err != nil {
+			return err
+		}
+		file, cycle, err = loadCurrentTrash(tx, room.ID, fileID)
+		if err != nil {
+			return err
+		}
+		allowed := member.Role == model.MemberRoleOwner || (file.UploaderUserID == userID && cycle.DeletedByUserID == userID)
+		if !allowed {
+			return errx.New(errc.ErrFileNotFound, nil)
+		}
+		update := tx.Model(&model.RoomFile{}).
+			Where("id = ? AND status = ? AND trash_version = ?", file.ID, model.FileStatusTrashed, cycle.Version).
+			Update("status", model.FileStatusPurging)
+		if update.Error != nil {
+			return update.Error
+		}
+		if update.RowsAffected != 1 {
+			return errx.New(errc.ErrFileState, nil)
+		}
+		if err := tx.Model(&model.FileTrashCycle{}).
+			Where("id = ? AND outcome = ?", cycle.ID, model.FileTrashActive).
+			Update("resolved_by_user_id", userID).Error; err != nil {
+			return err
+		}
+		now := s.now().Unix()
+		if err := tx.Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).Find(&cancelledTasks).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.DownloadTask{}).
+			Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).
+			Updates(map[string]interface{}{"status": model.DownloadTaskCancelled, "cancelled_at": now}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	s.downloads.cancelFile(file.ID)
+	s.publishCancelledDownloads(roomCode, file.ID, cancelledTasks)
+	if s.storage == nil {
+		_ = s.rollbackPurge(file.ID, cycle.ID, cycle.Version)
+		return errx.New(errc.ErrFileStorage, nil)
+	}
+	if err := s.storage.DeleteFile(file.RoomID, file.StorageName); err != nil {
+		_ = s.rollbackPurge(file.ID, cycle.ID, cycle.Version)
+		return errx.Wrap(errc.ErrFileStorage, err, nil)
+	}
+	return s.finalizePurge(file.ID, cycle.Version, userID, s.now().Unix())
+}
+
+// RecoverPurgingFiles completes idempotent physical deletion after an
+// interrupted process. Files that cannot be finalized stay in purging state so
+// the service start fails visibly instead of serving missing content.
+func (s *FileSvc) RecoverPurgingFiles() error {
+	if s == nil || s.db == nil || s.storage == nil {
+		return nil
+	}
+	var files []model.RoomFile
+	if err := s.db.Where("status = ?", model.FileStatusPurging).Find(&files).Error; err != nil {
+		return err
+	}
+	for _, file := range files {
+		var cycle model.FileTrashCycle
+		if err := s.db.Where("file_id = ? AND version = ? AND outcome = ?", file.ID, file.TrashVersion, model.FileTrashActive).First(&cycle).Error; err != nil {
+			return err
+		}
+		if err := s.storage.DeleteFile(file.RoomID, file.StorageName); err != nil {
+			return errx.Wrap(errc.ErrFileStorage, err, nil)
+		}
+		if err := s.finalizePurge(file.ID, cycle.Version, cycle.ResolvedByUserID, s.now().Unix()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *FileSvc) finalizePurge(fileID string, version int64, actorID string, now int64) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var file model.RoomFile
+		if err := tx.Where("id = ? AND status = ? AND trash_version = ?", fileID, model.FileStatusPurging, version).First(&file).Error; err != nil {
+			return fileNotFound(err)
+		}
+		var cycle model.FileTrashCycle
+		if err := tx.Where("file_id = ? AND version = ? AND outcome = ?", file.ID, version, model.FileTrashActive).First(&cycle).Error; err != nil {
+			return err
+		}
+		capacity := tx.Model(&model.Room{}).
+			Where("id = ? AND used_bytes >= ?", file.RoomID, file.ActualSize).
+			Update("used_bytes", gorm.Expr("used_bytes - ?", file.ActualSize))
+		if capacity.Error != nil {
+			return capacity.Error
+		}
+		if capacity.RowsAffected != 1 {
+			return errx.New(errc.ErrFileState, nil)
+		}
+		fileUpdate := tx.Model(&model.RoomFile{}).
+			Where("id = ? AND status = ? AND trash_version = ?", file.ID, model.FileStatusPurging, version).
+			Update("status", model.FileStatusPurged)
+		if fileUpdate.Error != nil {
+			return fileUpdate.Error
+		}
+		if fileUpdate.RowsAffected != 1 {
+			return errx.New(errc.ErrFileState, nil)
+		}
+		cycleUpdate := tx.Model(&model.FileTrashCycle{}).
+			Where("id = ? AND outcome = ?", cycle.ID, model.FileTrashActive).
+			Updates(map[string]interface{}{"outcome": model.FileTrashPurged, "resolved_by_user_id": actorID, "resolved_at": now})
+		if cycleUpdate.Error != nil {
+			return cycleUpdate.Error
+		}
+		if cycleUpdate.RowsAffected != 1 {
+			return errx.New(errc.ErrFileState, nil)
+		}
+		if err := tx.Model(&model.FileRestoreRequest{}).
+			Where("trash_cycle_id = ? AND status = ?", cycle.ID, model.FileRestorePending).
+			Updates(map[string]interface{}{"status": model.FileRestoreInvalidated, "decided_at": now, "decided_by_user_id": actorID}).Error; err != nil {
+			return err
+		}
+		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventPurged, now)
+	})
+}
+
+func (s *FileSvc) rollbackPurge(fileID, cycleID string, version int64) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		update := tx.Model(&model.RoomFile{}).
+			Where("id = ? AND status = ? AND trash_version = ?", fileID, model.FileStatusPurging, version).
+			Update("status", model.FileStatusTrashed)
+		if update.Error != nil {
+			return update.Error
+		}
+		if update.RowsAffected != 1 {
+			return errx.New(errc.ErrFileState, nil)
+		}
+		return tx.Model(&model.FileTrashCycle{}).
+			Where("id = ? AND outcome = ?", cycleID, model.FileTrashActive).
+			Update("resolved_by_user_id", "").Error
+	})
+}
+
+func (s *FileSvc) publishCancelledDownloads(roomCode, fileID string, tasks []model.DownloadTask) {
+	if s == nil || s.hub == nil {
+		return
+	}
+	for _, task := range tasks {
+		s.hub.PublishUser(task.UserID, "file.download_cancelled", map[string]interface{}{"roomCode": roomCode, "fileId": fileID, "taskId": task.ID})
+	}
 }
 
 // InvalidateMemberRestoreRequests is called by room membership transitions in

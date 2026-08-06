@@ -199,17 +199,17 @@ func TestDownloadProgressIsOnlyPublishedToTaskUser(t *testing.T) {
 
 func TestDownloadRegistryEnforcesPerUserLimit(t *testing.T) {
 	registry := &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}
-	_, finishOne, err := registry.begin("task-1", "room", "user")
+	_, finishOne, err := registry.begin("task-1", "room", "file-1", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer finishOne()
-	_, finishTwo, err := registry.begin("task-2", "room", "user")
+	_, finishTwo, err := registry.begin("task-2", "room", "file-2", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer finishTwo()
-	if _, _, err := registry.begin("task-3", "room", "user"); errx.Code(err) != errc.ErrDownloadLimited {
+	if _, _, err := registry.begin("task-3", "room", "file-3", "user"); errx.Code(err) != errc.ErrDownloadLimited {
 		t.Fatalf("third download error=%v", err)
 	}
 }
