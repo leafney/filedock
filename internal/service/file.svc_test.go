@@ -138,6 +138,47 @@ func TestUploadPartRetryIsIdempotentAfterCompletion(t *testing.T) {
 	}
 }
 
+func TestExpireUploadSessionsReleasesReservationAndTemporaryFile(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-expire-session", model.FileScopeShared, []FileManifest{{OriginalName: "expire.bin", DeclaredSize: 5}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := batch.Files[0]
+	if err := storage.PrepareUpload(file.RoomID, file.StorageName, file.DeclaredSize); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.db.Model(&model.UploadSession{}).Where("file_id = ?", file.ID).Updates(map[string]interface{}{"expires_at": fixture.svc.now().Add(-time.Second).Unix()}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.ExpireUploadSessions(fixture.svc.now()); err != nil {
+		t.Fatal(err)
+	}
+	var current model.RoomFile
+	fixture.svc.db.First(&current, "id = ?", file.ID)
+	if current.Status != model.FileStatusFailed {
+		t.Fatalf("file status=%q", current.Status)
+	}
+	var sessions int64
+	fixture.svc.db.Model(&model.UploadSession{}).Where("file_id = ?", file.ID).Count(&sessions)
+	if sessions != 0 {
+		t.Fatalf("session count=%d", sessions)
+	}
+	room := model.Room{}
+	fixture.svc.db.First(&room, "id = ?", fixture.room.ID)
+	if room.ReservedBytes != 0 {
+		t.Fatalf("reserved bytes=%d", room.ReservedBytes)
+	}
+	if err := storage.DeleteTemporaryFile(file.RoomID, file.StorageName); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUploadContentSizeMismatchFailsAndReleasesReservation(t *testing.T) {
 	fixture := newFileTestFixture(t, 1000)
 	storage, err := NewFileStorage(t.TempDir())

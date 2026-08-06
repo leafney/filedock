@@ -126,18 +126,6 @@ func (s *FileSvc) UploadPart(ctx context.Context, userID, roomCode, fileID strin
 	if partNumber < 0 || startOffset < 0 || endOffset < startOffset || contentLength <= 0 || totalSize <= 0 || endOffset-startOffset+1 != contentLength || strings.TrimSpace(expectedSHA) == "" {
 		return UploadSessionResult{}, errx.New(errc.ErrUploadChunkInvalid, nil)
 	}
-	body, err := io.ReadAll(io.LimitReader(source, contentLength+1))
-	if err != nil {
-		return UploadSessionResult{}, errx.Wrap(errc.ErrUploadSize, err, nil)
-	}
-	if int64(len(body)) != contentLength {
-		return UploadSessionResult{}, errx.New(errc.ErrUploadSize, nil)
-	}
-	actualSHA := chunkSHA256(body)
-	if !strings.EqualFold(strings.TrimSpace(expectedSHA), actualSHA) {
-		return UploadSessionResult{}, errx.New(errc.ErrUploadChunkHash, nil)
-	}
-
 	room, _, err := activeFileMember(s.db, roomCode, userID)
 	if err != nil {
 		return UploadSessionResult{}, err
@@ -153,6 +141,33 @@ func (s *FileSvc) UploadPart(ctx context.Context, userID, roomCode, fileID strin
 	if session.ExpiresAt <= s.now().Unix() {
 		return UploadSessionResult{}, errx.New(errc.ErrUploadExpired, nil)
 	}
+	if session.Status != model.UploadSessionActive && session.Status != model.UploadSessionCompleted {
+		return UploadSessionResult{}, uploadSessionStateError(session.Status)
+	}
+	if session.Status == model.UploadSessionActive && file.Status != model.FileStatusReserved && file.Status != model.FileStatusUploading {
+		return UploadSessionResult{}, errx.New(errc.ErrFileState, nil)
+	}
+	wantStart, wantEnd, ok := uploadPartBounds(session.DeclaredSize, session.ChunkSize, session.TotalParts, partNumber)
+	if !ok || totalSize != session.DeclaredSize || startOffset != wantStart || endOffset != wantEnd || contentLength != wantEnd-wantStart+1 {
+		return UploadSessionResult{}, errx.New(errc.ErrUploadChunkInvalid, nil)
+	}
+	partKey := fmt.Sprintf("%s:%d", fileID, partNumber)
+	partContext, finish, err := s.uploads.beginPart(ctx, partKey, file.ID, file.RoomID, userID)
+	if err != nil {
+		return UploadSessionResult{}, err
+	}
+	defer finish()
+	body, err := io.ReadAll(io.LimitReader(source, contentLength+1))
+	if err != nil {
+		return UploadSessionResult{}, errx.Wrap(errc.ErrUploadSize, err, nil)
+	}
+	if int64(len(body)) != contentLength {
+		return UploadSessionResult{}, errx.New(errc.ErrUploadSize, nil)
+	}
+	actualSHA := chunkSHA256(body)
+	if !strings.EqualFold(strings.TrimSpace(expectedSHA), actualSHA) {
+		return UploadSessionResult{}, errx.New(errc.ErrUploadChunkHash, nil)
+	}
 	if session.Status == model.UploadSessionCompleted || file.Status == model.FileStatusAvailable {
 		var completedPart model.UploadPart
 		if err := s.db.Where("file_id = ? AND part_number = ?", fileID, partNumber).First(&completedPart).Error; err == nil {
@@ -162,13 +177,6 @@ func (s *FileSvc) UploadPart(ctx context.Context, userID, roomCode, fileID strin
 			return UploadSessionResult{}, errx.New(errc.ErrUploadChunkConflict, nil)
 		}
 		return UploadSessionResult{}, errx.New(errc.ErrFileState, nil)
-	}
-	if session.Status != model.UploadSessionActive || (file.Status != model.FileStatusReserved && file.Status != model.FileStatusUploading) {
-		return UploadSessionResult{}, uploadSessionStateError(session.Status)
-	}
-	wantStart, wantEnd, ok := uploadPartBounds(session.DeclaredSize, session.ChunkSize, session.TotalParts, partNumber)
-	if !ok || totalSize != session.DeclaredSize || startOffset != wantStart || endOffset != wantEnd || contentLength != wantEnd-wantStart+1 {
-		return UploadSessionResult{}, errx.New(errc.ErrUploadChunkInvalid, nil)
 	}
 	var existing model.UploadPart
 	if err := s.db.Where("file_id = ? AND part_number = ?", fileID, partNumber).First(&existing).Error; err == nil {
@@ -180,12 +188,6 @@ func (s *FileSvc) UploadPart(ctx context.Context, userID, roomCode, fileID strin
 		return UploadSessionResult{}, err
 	}
 
-	partKey := fmt.Sprintf("%s:%d", fileID, partNumber)
-	partContext, finish, err := s.uploads.beginPart(ctx, partKey, file.ID, file.RoomID, userID)
-	if err != nil {
-		return UploadSessionResult{}, err
-	}
-	defer finish()
 	if file.Status == model.FileStatusReserved {
 		if err := s.MarkUploading(userID, file.ID); err != nil && errx.Code(err) != errc.ErrFileState {
 			return UploadSessionResult{}, err
