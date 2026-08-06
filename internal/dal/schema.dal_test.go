@@ -34,6 +34,9 @@ func TestAutoMigrateCreatesCurrentStageTables(t *testing.T) {
 	if !db.Migrator().HasColumn("room_files", "trash_version") || !db.Migrator().HasColumn("download_tasks", "cancelled_at") {
 		t.Fatal("file trash lifecycle columns were not migrated")
 	}
+	if !db.Migrator().HasColumn("notification_records", "occurrence_key") || !db.Migrator().HasColumn("notification_records", "trash_cycle_id") || !db.Migrator().HasColumn("notification_records", "restore_request_id") {
+		t.Fatal("file trash notification columns were not migrated")
+	}
 }
 
 func TestChatSchemaConstraints(t *testing.T) {

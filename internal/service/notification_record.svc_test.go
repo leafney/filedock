@@ -77,3 +77,33 @@ func TestFileNotificationRecorderRejectsIncompleteInput(t *testing.T) {
 		t.Fatal("incomplete input unexpectedly succeeded")
 	}
 }
+
+func TestFileNotificationRecorderSupportsTrashAndRequestOccurrences(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.NotificationRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	recorder, err := NewFileNotificationRecorder(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := FileNotificationRecordInput{UserID: "uploader", RoomID: "room", FileID: "file", CounterpartUserID: "owner", TrashCycleID: "cycle", TrashVersion: 1, SourceEventID: "event", OccurredAtMS: 1_000}
+	base.Type = NotificationTypeFileTrashedByOwner
+	if created, err := recorder.Record(nil, base); err != nil || !created {
+		t.Fatalf("trash record=%v error=%v", created, err)
+	}
+	if created, err := recorder.Record(nil, base); err != nil || created {
+		t.Fatalf("duplicate trash record=%v error=%v", created, err)
+	}
+	base.Type = NotificationTypeFileRestoreRequested
+	base.UserID = "owner"
+	base.CounterpartUserID = "uploader"
+	base.RestoreRequestID = "request"
+	base.SourceEventID = "request-event"
+	if created, err := recorder.Record(nil, base); err != nil || !created {
+		t.Fatalf("request record=%v error=%v", created, err)
+	}
+}

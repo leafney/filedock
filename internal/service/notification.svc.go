@@ -45,6 +45,7 @@ type NotificationItem struct {
 	CounterpartUserID      string
 	CounterpartDisplayName string
 	LatestFileName         string
+	LatestReason           string
 	FileCount              int64
 	LatestFileEventAt      int64
 	ReadToken              string
@@ -98,6 +99,8 @@ type fileNotificationRow struct {
 	CounterpartUserID string
 	CounterpartName   string
 	OriginalName      string
+	Reason            string
+	RequestID         string
 	OccurredAtMS      int64
 }
 
@@ -300,6 +303,27 @@ func (s *NotificationSvc) listFileNotifications(db *gorm.DB, userID string, now 
 	latestOccurredAt := make(map[string]int64)
 	var total int64
 	for _, row := range rows {
+		if row.Type == NotificationTypeFileRestoreRequested {
+			items = append(items, NotificationItem{
+				Key:                    fileRestoreRequestNotificationKey(row.RequestID),
+				Type:                   row.Type,
+				ActivityAt:             row.OccurredAtMS / 1000,
+				RoomCode:               row.RoomCode,
+				RoomTitle:              row.RoomTitle,
+				RequestID:              row.RequestID,
+				ActorUserID:            row.CounterpartUserID,
+				ActorDisplayName:       row.CounterpartName,
+				CreatedAt:              row.OccurredAtMS / 1000,
+				CounterpartUserID:      row.CounterpartUserID,
+				CounterpartDisplayName: row.CounterpartName,
+				LatestFileName:         row.OriginalName,
+				LatestReason:           row.Reason,
+				FileCount:              1,
+				LatestFileEventAt:      row.OccurredAtMS / 1000,
+			})
+			total++
+			continue
+		}
 		key := fileNotificationGroupKey(row.Type, row.RoomID, row.CounterpartUserID)
 		index, exists := indexes[key]
 		if !exists {
@@ -314,6 +338,7 @@ func (s *NotificationSvc) listFileNotifications(db *gorm.DB, userID string, now 
 				CounterpartUserID:      row.CounterpartUserID,
 				CounterpartDisplayName: row.CounterpartName,
 				LatestFileName:         row.OriginalName,
+				LatestReason:           row.Reason,
 				FileCount:              1,
 				LatestFileEventAt:      row.OccurredAtMS / 1000,
 			})
@@ -325,6 +350,7 @@ func (s *NotificationSvc) listFileNotifications(db *gorm.DB, userID string, now 
 			if row.OccurredAtMS > latestOccurredAt[key] || (row.OccurredAtMS == latestOccurredAt[key] && row.RecordID > latestRecordIDs[key]) {
 				items[index].ActivityAt = row.OccurredAtMS / 1000
 				items[index].LatestFileName = row.OriginalName
+				items[index].LatestReason = row.Reason
 				items[index].LatestFileEventAt = row.OccurredAtMS / 1000
 				latestRecordIDs[key] = row.RecordID
 				latestOccurredAt[key] = row.OccurredAtMS
@@ -334,7 +360,7 @@ func (s *NotificationSvc) listFileNotifications(db *gorm.DB, userID string, now 
 	}
 	for index := range items {
 		item := &items[index]
-		if item.Type == NotificationTypeFileReceived {
+		if item.Type == NotificationTypeFileReceived || item.Type == NotificationTypeFileRestoreRequested {
 			continue
 		}
 		token, err := encodeNotificationReadToken(notificationReadToken{
@@ -352,7 +378,7 @@ func (s *NotificationSvc) listFileNotifications(db *gorm.DB, userID string, now 
 	return items, total, nil
 }
 
-func listValidFileNotificationRows(db *gorm.DB, userID string, now int64) ([]fileNotificationRow, error) {
+func listValidRecipientFileNotificationRows(db *gorm.DB, userID string, now int64) ([]fileNotificationRow, error) {
 	const query = `
 SELECT
     record.id AS record_id,
@@ -421,12 +447,24 @@ WHERE record.user_id = ?
 	return rows, err
 }
 
+func listValidFileNotificationRows(db *gorm.DB, userID string, now int64) ([]fileNotificationRow, error) {
+	recipientRows, err := listValidRecipientFileNotificationRows(db, userID, now)
+	if err != nil {
+		return nil, err
+	}
+	trashRows, err := listValidTrashNotificationRows(db, userID, now)
+	if err != nil {
+		return nil, err
+	}
+	return append(recipientRows, trashRows...), nil
+}
+
 func (s *NotificationSvc) MarkFileResultsRead(userID, key, readToken string) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, fmt.Errorf("notification service is not initialized")
 	}
 	token, err := decodeNotificationReadToken(readToken)
-	if err != nil || (token.Type != NotificationTypeFileDeclined && token.Type != NotificationTypeFileDownloaded) || key != fileNotificationGroupKey(token.Type, token.RoomID, token.CounterpartUserID) {
+	if err != nil || !isReadableFileResultNotificationType(token.Type) || key != fileNotificationGroupKey(token.Type, token.RoomID, token.CounterpartUserID) {
 		return 0, errx.New(errc.ErrParams, nil)
 	}
 	var user model.User
@@ -471,6 +509,24 @@ func fileNotificationGroupKey(notificationType, roomID, counterpartUserID string
 	return notificationType + ":" + roomID + ":" + counterpartUserID
 }
 
+func fileRestoreRequestNotificationKey(requestID string) string {
+	return NotificationTypeFileRestoreRequested + ":" + requestID
+}
+
+func isReadableFileResultNotificationType(value string) bool {
+	switch value {
+	case NotificationTypeFileDeclined,
+		NotificationTypeFileDownloaded,
+		NotificationTypeFileTrashedByOwner,
+		NotificationTypeFileRestoredByOwner,
+		NotificationTypeFileRestoreRejected,
+		NotificationTypeFilePurgedByOwner:
+		return true
+	default:
+		return false
+	}
+}
+
 func encodeNotificationReadToken(value notificationReadToken) (string, error) {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -502,7 +558,7 @@ func normalizeNotificationLimit(limit int) (int, error) {
 }
 
 func notificationPriority(notificationType string) int {
-	if notificationType == NotificationTypeJoinRequest {
+	if notificationType == NotificationTypeJoinRequest || notificationType == NotificationTypeFileRestoreRequested {
 		return 0
 	}
 	if notificationType == NotificationTypeFileReceived {

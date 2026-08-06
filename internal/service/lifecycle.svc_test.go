@@ -88,7 +88,7 @@ func TestLifecycleCleanupDeletesChatRelationsIdempotently(t *testing.T) {
 	if err := db.Create(&model.ChatMessageDeletion{MessageID: messageID, UserID: "01USERCHATCLEANUP1", DeletedAt: 1}).Error; err != nil {
 		t.Fatalf("create deletion: %v", err)
 	}
-	if err := db.Create(&model.NotificationRecord{ID: "01NOTIFYCHATCLEANUP01", UserID: "01USERCHATCLEANUP1", Type: NotificationTypeFileDeclined, RoomID: roomID, FileID: "01FILECHATCLEANUP001", CounterpartUserID: "01USERCHATCLEANUP2", FileRecipientID: "01RECIPIENTCLEANUP01", DeliveryVersion: 1, SourceEventID: "01EVENTCHATCLEANUP01", OccurredAtMS: 1000}).Error; err != nil {
+	if err := db.Create(&model.NotificationRecord{ID: "01NOTIFYCHATCLEANUP01", UserID: "01USERCHATCLEANUP1", Type: NotificationTypeFileDeclined, OccurrenceKey: "recipient:01RECIPIENTCLEANUP01:1", RoomID: roomID, FileID: "01FILECHATCLEANUP001", CounterpartUserID: "01USERCHATCLEANUP2", FileRecipientID: "01RECIPIENTCLEANUP01", DeliveryVersion: 1, SourceEventID: "01EVENTCHATCLEANUP01", OccurredAtMS: 1000}).Error; err != nil {
 		t.Fatalf("create notification record: %v", err)
 	}
 	if err := db.Create(&model.CleanupJob{ID: jobID, RoomID: roomID, Status: model.CleanupRunning, Phase: "running", ScheduledAt: 1}).Error; err != nil {

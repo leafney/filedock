@@ -44,6 +44,7 @@ func (b *NotificationBiz) List(userID, cursor string, limit int) (dto.Notificati
 			CounterpartUserID:      item.CounterpartUserID,
 			CounterpartDisplayName: item.CounterpartDisplayName,
 			LatestFileName:         item.LatestFileName,
+			LatestReason:           item.LatestReason,
 			FileCount:              item.FileCount,
 			LatestFileEventAt:      item.LatestFileEventAt,
 			ReadToken:              item.ReadToken,

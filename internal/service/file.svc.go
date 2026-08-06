@@ -722,6 +722,63 @@ func (s *FileSvc) recordFileNotification(tx *gorm.DB, notificationType, userID, 
 	return err
 }
 
+func (s *FileSvc) recordTrashNotification(tx *gorm.DB, notificationType, userID, counterpartUserID string, file model.RoomFile, cycle model.FileTrashCycle, request *model.FileRestoreRequest, event model.FileEvent) error {
+	if s == nil || s.notifications == nil {
+		return fmt.Errorf("file notification recorder is unavailable")
+	}
+	input := FileNotificationRecordInput{
+		UserID:            userID,
+		Type:              notificationType,
+		RoomID:            file.RoomID,
+		FileID:            file.ID,
+		CounterpartUserID: counterpartUserID,
+		TrashCycleID:      cycle.ID,
+		TrashVersion:      cycle.Version,
+		SourceEventID:     event.ID,
+		OccurredAtMS:      event.CreatedAt * 1000,
+	}
+	if request != nil {
+		input.RestoreRequestID = request.ID
+	}
+	_, err := s.notifications.Record(tx, input)
+	return err
+}
+
+func (s *FileSvc) publishNotificationChanged(userIDs []string, reason string) {
+	if s == nil || s.hub == nil {
+		return
+	}
+	s.hub.PublishUsers(userIDs, "notification.changed", map[string]interface{}{"reason": reason})
+}
+
+func (s *FileSvc) fileNotificationAudience(fileID string, userIDs ...string) []string {
+	unique := make(map[string]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		if userID != "" {
+			unique[userID] = struct{}{}
+		}
+	}
+	if s != nil && s.db != nil && fileID != "" {
+		var file model.RoomFile
+		if err := s.db.Select("uploader_user_id").Where("id = ?", fileID).First(&file).Error; err == nil && file.UploaderUserID != "" {
+			unique[file.UploaderUserID] = struct{}{}
+		}
+		var recipientIDs []string
+		if err := s.db.Model(&model.FileRecipient{}).Where("file_id = ?", fileID).Pluck("recipient_user_id", &recipientIDs).Error; err == nil {
+			for _, userID := range recipientIDs {
+				if userID != "" {
+					unique[userID] = struct{}{}
+				}
+			}
+		}
+	}
+	result := make([]string, 0, len(unique))
+	for userID := range unique {
+		result = append(result, userID)
+	}
+	return result
+}
+
 func fileNotFound(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return errx.New(errc.ErrFileNotFound, nil)

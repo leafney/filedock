@@ -23,6 +23,7 @@ type NotificationItemDTO struct {
 	CounterpartUserID      string `json:"counterpartUserId,omitempty"`
 	CounterpartDisplayName string `json:"counterpartDisplayName,omitempty"`
 	LatestFileName         string `json:"latestFileName,omitempty"`
+	LatestReason           string `json:"latestReason,omitempty"`
 	FileCount              int64  `json:"fileCount,omitempty"`
 	LatestFileEventAt      int64  `json:"latestFileEventAt,omitempty"`
 	ReadToken              string `json:"readToken,omitempty"`

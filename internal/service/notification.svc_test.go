@@ -376,7 +376,7 @@ func createFileNotificationFixture(t *testing.T, fixture notificationFixture, su
 	if err := fixture.db.Create(&recipient).Error; err != nil {
 		t.Fatalf("create notification recipient: %v", err)
 	}
-	record := model.NotificationRecord{ID: "record-" + suffix, UserID: notificationUserID, Type: notificationType, RoomID: fixture.room.RoomID, FileID: fileID, CounterpartUserID: counterpartUserID, FileRecipientID: relationID, DeliveryVersion: 1, SourceEventID: "event-" + suffix, OccurredAtMS: occurredAtMS}
+	record := model.NotificationRecord{ID: "record-" + suffix, UserID: notificationUserID, Type: notificationType, OccurrenceKey: "recipient:" + relationID + ":1", RoomID: fixture.room.RoomID, FileID: fileID, CounterpartUserID: counterpartUserID, FileRecipientID: relationID, DeliveryVersion: 1, SourceEventID: "event-" + suffix, OccurredAtMS: occurredAtMS}
 	if err := fixture.db.Create(&record).Error; err != nil {
 		t.Fatalf("create notification record: %v", err)
 	}

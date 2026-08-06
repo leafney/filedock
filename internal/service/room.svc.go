@@ -497,6 +497,9 @@ func (s *RoomSvc) Leave(userID, code string) error {
 		s.files.CancelMemberTransfers(room.ID, userID)
 	}
 	s.publishRoom(room.ID, "room.member_left", map[string]interface{}{"roomCode": room.Code, "userId": userID, "displayName": member.DisplayName, "reason": "left"})
+	if s.hub != nil {
+		s.hub.PublishUser(room.OwnerUserID, "notification.changed", map[string]interface{}{"reason": "file_restore_request_invalidated"})
+	}
 	return nil
 }
 
@@ -552,6 +555,9 @@ func (s *RoomSvc) Kick(ownerID, code, targetUserID string) error {
 	}
 	s.hub.PublishUser(targetUserID, "room.member_kicked", map[string]interface{}{"roomCode": room.Code, "reason": "kicked"})
 	s.publishRoom(room.ID, "room.member_left", map[string]interface{}{"roomCode": room.Code, "userId": targetUserID, "reason": "kicked"})
+	if s.hub != nil {
+		s.hub.PublishUser(room.OwnerUserID, "notification.changed", map[string]interface{}{"reason": "file_restore_request_invalidated"})
+	}
 	return nil
 }
 

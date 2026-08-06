@@ -21,13 +21,14 @@ const (
 )
 
 type FileRestoreActionResult struct {
-	Status    string `json:"status"`
-	RequestID string `json:"requestId,omitempty"`
+	Status             string `json:"status"`
+	RequestID          string `json:"requestId,omitempty"`
+	NotificationUserID string `json:"-"`
+	OwnerUserID        string `json:"-"`
 }
 
-// TrashFile starts a new deletion generation. Storage deletion, active stream
-// cancellation and lifecycle notifications are coordinated by later phases;
-// this method owns the authoritative database state transition.
+// TrashFile starts a new deletion generation and atomically records its event,
+// cancelled tasks, obsolete result reads, and any owner-deletion notification.
 func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.FileTrashCycle, error) {
 	reason, err := normalizeFileLifecycleReason(reason)
 	if err != nil {
@@ -35,6 +36,7 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 	}
 	var cycle model.FileTrashCycle
 	var cancelledTasks []model.DownloadTask
+	notificationUserID := ""
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, userID)
 		if err != nil {
@@ -79,7 +81,22 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 		if err := tx.Create(&cycle).Error; err != nil {
 			return err
 		}
-		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventTrashed, now)
+		if err := tx.Model(&model.NotificationRecord{}).
+			Where("file_id = ? AND type IN ? AND read_at_ms IS NULL", file.ID, []string{NotificationTypeFileDeclined, NotificationTypeFileDownloaded}).
+			Update("read_at_ms", now*1000).Error; err != nil {
+			return err
+		}
+		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventTrashed, now)
+		if err != nil {
+			return err
+		}
+		if file.UploaderUserID != userID {
+			if err := s.recordTrashNotification(tx, NotificationTypeFileTrashedByOwner, file.UploaderUserID, userID, file, cycle, nil, event); err != nil {
+				return err
+			}
+			notificationUserID = file.UploaderUserID
+		}
+		return nil
 	})
 	if err == nil {
 		s.downloads.cancelFile(fileID)
@@ -89,6 +106,7 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 			}
 		}
 		s.publishFileProjection(fileID, "file.trashed", nil)
+		s.publishNotificationChanged(s.fileNotificationAudience(fileID, notificationUserID), "file_trashed")
 	}
 	return cycle, err
 }
@@ -107,8 +125,16 @@ func (s *FileSvc) RestoreFile(userID, roomCode, fileID string) (FileRestoreActio
 			return err
 		}
 		if member.Role == model.MemberRoleOwner || (file.UploaderUserID == userID && cycle.DeletedByUserID == userID) {
-			if err := restoreTrashCycle(tx, file, cycle, userID, nil, s.now().Unix()); err != nil {
+			event, err := restoreTrashCycle(tx, file, cycle, userID, nil, s.now().Unix())
+			if err != nil {
 				return err
+			}
+			if member.Role == model.MemberRoleOwner && file.UploaderUserID != userID {
+				if err := s.recordTrashNotification(tx, NotificationTypeFileRestoredByOwner, file.UploaderUserID, userID, file, cycle, nil, event); err != nil {
+					return err
+				}
+				result.NotificationUserID = file.UploaderUserID
+				result.OwnerUserID = room.OwnerUserID
 			}
 			result.Status = FileRestoreActionRestored
 			return nil
@@ -120,8 +146,12 @@ func (s *FileSvc) RestoreFile(userID, roomCode, fileID string) (FileRestoreActio
 		if err != nil {
 			return err
 		}
-		result = FileRestoreActionResult{Status: FileRestoreActionPending, RequestID: request.ID}
-		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventRestoreRequested, request.CreatedAt)
+		result = FileRestoreActionResult{Status: FileRestoreActionPending, RequestID: request.ID, NotificationUserID: room.OwnerUserID, OwnerUserID: room.OwnerUserID}
+		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventRestoreRequested, request.CreatedAt)
+		if err != nil {
+			return err
+		}
+		return s.recordTrashNotification(tx, NotificationTypeFileRestoreRequested, room.OwnerUserID, userID, file, cycle, &request, event)
 	})
 	if err == nil {
 		eventType := "file.restore_requested"
@@ -129,12 +159,18 @@ func (s *FileSvc) RestoreFile(userID, roomCode, fileID string) (FileRestoreActio
 			eventType = "file.restored"
 		}
 		s.publishFileProjection(fileID, eventType, nil)
+		users := []string{result.NotificationUserID, result.OwnerUserID}
+		if result.Status == FileRestoreActionRestored {
+			users = s.fileNotificationAudience(fileID, users...)
+		}
+		s.publishNotificationChanged(users, eventType)
 	}
 	return result, err
 }
 
 func (s *FileSvc) ApproveFileRestore(ownerID, roomCode, requestID string) error {
 	var fileID string
+	var notificationUserID string
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, ownerID)
 		if err != nil {
@@ -158,10 +194,19 @@ func (s *FileSvc) ApproveFileRestore(ownerID, roomCode, requestID string) error 
 			return errx.New(errc.ErrFileRestoreRequestState, nil)
 		}
 		now := s.now().Unix()
-		return restoreTrashCycle(tx, file, cycle, ownerID, &request, now)
+		event, err := restoreTrashCycle(tx, file, cycle, ownerID, &request, now)
+		if err != nil {
+			return err
+		}
+		if err := s.recordTrashNotification(tx, NotificationTypeFileRestoredByOwner, file.UploaderUserID, ownerID, file, cycle, nil, event); err != nil {
+			return err
+		}
+		notificationUserID = file.UploaderUserID
+		return nil
 	})
 	if err == nil {
 		s.publishFileProjection(fileID, "file.restored", nil)
+		s.publishNotificationChanged(s.fileNotificationAudience(fileID, ownerID, notificationUserID), "file_restore_approved")
 	}
 	return err
 }
@@ -172,6 +217,7 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 		return err
 	}
 	var fileID string
+	var notificationUserID string
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		room, member, err := activeFileMember(tx, roomCode, ownerID)
 		if err != nil {
@@ -204,10 +250,19 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 		if update.RowsAffected != 1 {
 			return errx.New(errc.ErrFileRestoreRequestState, nil)
 		}
-		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, ownerID, FileEventRestoreRejected, now)
+		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, ownerID, FileEventRestoreRejected, now)
+		if err != nil {
+			return err
+		}
+		if err := s.recordTrashNotification(tx, NotificationTypeFileRestoreRejected, request.RequesterUserID, ownerID, file, cycle, &request, event); err != nil {
+			return err
+		}
+		notificationUserID = request.RequesterUserID
+		return nil
 	})
 	if err == nil {
 		s.publishFileProjection(fileID, "file.restore_rejected", nil)
+		s.publishNotificationChanged([]string{ownerID, notificationUserID}, "file_restore_rejected")
 	}
 	return err
 }
@@ -273,6 +328,9 @@ func (s *FileSvc) PurgeFile(userID, roomCode, fileID string) error {
 		return err
 	}
 	s.publishFileProjection(file.ID, "file.purged", nil)
+	if file.UploaderUserID != userID {
+		s.publishNotificationChanged([]string{file.UploaderUserID, userID}, "file_purged")
+	}
 	return nil
 }
 
@@ -297,6 +355,9 @@ func (s *FileSvc) RecoverPurgingFiles() error {
 		}
 		if err := s.finalizePurge(file.ID, cycle.Version, cycle.ResolvedByUserID, s.now().Unix()); err != nil {
 			return err
+		}
+		if file.UploaderUserID != cycle.ResolvedByUserID {
+			s.publishNotificationChanged([]string{file.UploaderUserID, cycle.ResolvedByUserID}, "file_purged")
 		}
 	}
 	return nil
@@ -344,7 +405,14 @@ func (s *FileSvc) finalizePurge(fileID string, version int64, actorID string, no
 			Updates(map[string]interface{}{"status": model.FileRestoreInvalidated, "decided_at": now, "decided_by_user_id": actorID}).Error; err != nil {
 			return err
 		}
-		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventPurged, now)
+		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventPurged, now)
+		if err != nil {
+			return err
+		}
+		if file.UploaderUserID != actorID {
+			return s.recordTrashNotification(tx, NotificationTypeFilePurgedByOwner, file.UploaderUserID, actorID, file, cycle, nil, event)
+		}
+		return nil
 	})
 }
 
@@ -403,31 +471,31 @@ func loadCurrentTrash(tx *gorm.DB, roomID, fileID string) (model.RoomFile, model
 	return file, cycle, nil
 }
 
-func restoreTrashCycle(tx *gorm.DB, file model.RoomFile, cycle model.FileTrashCycle, actorID string, request *model.FileRestoreRequest, now int64) error {
+func restoreTrashCycle(tx *gorm.DB, file model.RoomFile, cycle model.FileTrashCycle, actorID string, request *model.FileRestoreRequest, now int64) (model.FileEvent, error) {
 	fileUpdate := tx.Model(&model.RoomFile{}).
 		Where("id = ? AND status = ? AND trash_version = ?", file.ID, model.FileStatusTrashed, cycle.Version).
 		Update("status", model.FileStatusAvailable)
 	if fileUpdate.Error != nil {
-		return fileUpdate.Error
+		return model.FileEvent{}, fileUpdate.Error
 	}
 	if fileUpdate.RowsAffected != 1 {
-		return errx.New(errc.ErrFileState, nil)
+		return model.FileEvent{}, errx.New(errc.ErrFileState, nil)
 	}
 	cycleUpdate := tx.Model(&model.FileTrashCycle{}).
 		Where("id = ? AND outcome = ?", cycle.ID, model.FileTrashActive).
 		Updates(map[string]interface{}{"outcome": model.FileTrashRestored, "resolved_by_user_id": actorID, "resolved_at": now})
 	if cycleUpdate.Error != nil {
-		return cycleUpdate.Error
+		return model.FileEvent{}, cycleUpdate.Error
 	}
 	if cycleUpdate.RowsAffected != 1 {
-		return errx.New(errc.ErrFileState, nil)
+		return model.FileEvent{}, errx.New(errc.ErrFileState, nil)
 	}
 	if request == nil {
 		var pending model.FileRestoreRequest
 		if err := tx.Where("trash_cycle_id = ? AND status = ?", cycle.ID, model.FileRestorePending).First(&pending).Error; err == nil {
 			request = &pending
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
+			return model.FileEvent{}, err
 		}
 	}
 	if request != nil {
@@ -435,13 +503,13 @@ func restoreTrashCycle(tx *gorm.DB, file model.RoomFile, cycle model.FileTrashCy
 			Where("id = ? AND status = ?", request.ID, model.FileRestorePending).
 			Updates(map[string]interface{}{"status": model.FileRestoreApproved, "decided_at": now, "decided_by_user_id": actorID, "rejection_reason": ""})
 		if requestUpdate.Error != nil {
-			return requestUpdate.Error
+			return model.FileEvent{}, requestUpdate.Error
 		}
 		if requestUpdate.RowsAffected != 1 {
-			return errx.New(errc.ErrFileState, nil)
+			return model.FileEvent{}, errx.New(errc.ErrFileState, nil)
 		}
 	}
-	return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventRestored, now)
+	return createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventRestored, now)
 }
 
 func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle model.FileTrashCycle, requesterID string, now int64) (model.FileRestoreRequest, error) {
