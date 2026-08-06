@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Download, Ellipsis, File, FileLock2, FolderOpen, Send, Share2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Ellipsis, File, FileLock2, FolderOpen, Send, Share2, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -25,6 +25,7 @@ interface Props {
   onDecline: (file: RoomFile) => void;
   onReuse: (files: RoomFile[]) => void;
   onPublish: (file: RoomFile) => void;
+  onTrash: (file: RoomFile) => void;
   onDetails: (file: RoomFile) => void;
   onBatchDownload: (files: RoomFile[]) => void;
 }
@@ -79,7 +80,7 @@ export function FileList(props: Props) {
 }
 
 function fileActions(props: Props) {
-  return { onDownload: props.onDownload, onAccept: props.onAccept, onDecline: props.onDecline, onReuse: (file: RoomFile) => props.onReuse([file]), onPublish: props.onPublish, onDetails: props.onDetails };
+  return { onDownload: props.onDownload, onAccept: props.onAccept, onDecline: props.onDecline, onReuse: (file: RoomFile) => props.onReuse([file]), onPublish: props.onPublish, onTrash: props.onTrash, onDetails: props.onDetails };
 }
 
 function useFileGroup(props: Props, scope: "shared" | "direct") {
@@ -110,6 +111,7 @@ interface GroupProps {
   onDecline: (file: RoomFile) => void;
   onReuse: (file: RoomFile) => void;
   onPublish: (file: RoomFile) => void;
+  onTrash: (file: RoomFile) => void;
   onDetails: (file: RoomFile) => void;
 }
 
@@ -127,7 +129,7 @@ function FileGroupView(props: GroupProps) {
   </section>;
 }
 
-function FileRow({ file, batchMode, selected, onSelectedChange, onDownload, onAccept, onDecline, onReuse, onPublish, onDetails }: GroupProps & { file: RoomFile }) {
+function FileRow({ file, batchMode, selected, onSelectedChange, onDownload, onAccept, onDecline, onReuse, onPublish, onTrash, onDetails }: GroupProps & { file: RoomFile }) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -144,6 +146,7 @@ function FileRow({ file, batchMode, selected, onSelectedChange, onDownload, onAc
     if (name === "reuse") onReuse(file);
     if (name === "publish") onPublish(file);
     if (name === "details") onDetails(file);
+    if (name === "trash") onTrash(file);
   };
   return <article className={`file-row ${file.projection === "anonymous" ? "is-anonymous" : ""}`}>
     {batchMode && <input type="checkbox" checked={checked} aria-label={file.displayName} onChange={toggle} />}
@@ -154,7 +157,7 @@ function FileRow({ file, batchMode, selected, onSelectedChange, onDownload, onAc
       {primary === "download" && <button className="primary" type="button" onClick={() => onDownload(file)}><Download aria-hidden="true" />{t("room.files.download")}</button>}
       {primary === "accept" && <><button className="primary" type="button" onClick={() => onAccept(file)}>{t("room.files.acceptDownload")}</button><button type="button" onClick={() => onDecline(file)}>{t("room.files.decline")}</button></>}
       {primary === "progress" && <span className="file-row-progress"><progress max={100} value={file.progress} aria-label={t("room.files.uploadProgress", { percent: String(file.progress) })} />{file.progress}%</span>}
-      <div className="file-menu-host"><button ref={menuButtonRef} type="button" aria-label={t("room.files.fileActions")} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><Ellipsis aria-hidden="true" /></button><MobileActionSheet title={file.displayName} open={menuOpen} triggerRef={menuButtonRef} onClose={() => setMenuOpen(false)}>{actions.map((name) => <button key={name} type="button" role="menuitem" onClick={() => action(name)}>{name === "reuse" ? <Send aria-hidden="true" /> : name === "publish" ? <Share2 aria-hidden="true" /> : <File aria-hidden="true" />}{t(`room.files.actions.${name}`)}</button>)}</MobileActionSheet></div>
+      <div className="file-menu-host"><button ref={menuButtonRef} type="button" aria-label={t("room.files.fileActions")} aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}><Ellipsis aria-hidden="true" /></button><MobileActionSheet title={file.displayName} open={menuOpen} triggerRef={menuButtonRef} onClose={() => setMenuOpen(false)}>{actions.map((name) => <button className={name === "trash" ? "is-danger" : undefined} key={name} type="button" role="menuitem" onClick={() => action(name)}>{name === "reuse" ? <Send aria-hidden="true" /> : name === "publish" ? <Share2 aria-hidden="true" /> : name === "trash" ? <Trash2 aria-hidden="true" /> : <File aria-hidden="true" />}{t(`room.files.actions.${name}`)}</button>)}</MobileActionSheet></div>
     </div>
   </article>;
 }

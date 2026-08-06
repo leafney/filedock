@@ -40,6 +40,11 @@ describe("全局通知纯逻辑", () => {
     expect(shouldRefreshNotifications("file.reused")).toBe(true);
     expect(shouldRefreshNotifications("file.recipient_changed")).toBe(true);
     expect(shouldRefreshNotifications("file.download_completed")).toBe(true);
+    expect(shouldRefreshNotifications("file.trashed")).toBe(true);
+    expect(shouldRefreshNotifications("file.restore_requested")).toBe(true);
+    expect(shouldRefreshNotifications("file.restored")).toBe(true);
+    expect(shouldRefreshNotifications("file.restore_rejected")).toBe(true);
+    expect(shouldRefreshNotifications("file.purged")).toBe(true);
     expect(shouldRefreshNotifications("notification.changed")).toBe(true);
     expect(shouldRefreshNotifications("file.upload_progress")).toBe(false);
     expect(shouldRefreshNotifications("file.download_progress")).toBe(false);
@@ -49,12 +54,20 @@ describe("全局通知纯逻辑", () => {
   test("文件通知区分待接收与结果并只生成房间目标", () => {
     expect(isFileNotification(fileItem)).toBe(true);
     expect(isFileResultNotification(fileItem)).toBe(true);
-    expect(fileNotificationTarget(fileItem)).toEqual({ roomCode: "1234" });
+    expect(fileNotificationTarget(fileItem)).toEqual({ roomCode: "1234", view: "list" });
     const received: NotificationItem = { ...fileItem, key: "file_received:room-one:user-two", type: "file_received" };
     delete (received as { readToken?: string }).readToken;
     expect(isFileNotification(received)).toBe(true);
     expect(isFileResultNotification(received)).toBe(false);
     expect(fileNotificationTarget(chatItem)).toBeUndefined();
+    const requested: NotificationItem = { ...fileItem, key: "file_restore_requested:one", type: "file_restore_requested", requestId: "request-one" };
+    delete (requested as { readToken?: string }).readToken;
+    expect(isFileResultNotification(requested)).toBe(false);
+    expect(fileNotificationTarget(requested)).toEqual({ roomCode: "1234", view: "trash", requestId: "request-one" });
+    expect(fileNotificationTarget({ ...fileItem, type: "file_trashed_by_owner" })).toEqual({ roomCode: "1234", view: "trash" });
+    expect(fileNotificationTarget({ ...fileItem, type: "file_restored_by_owner" })).toEqual({ roomCode: "1234", view: "list" });
+    expect(fileNotificationTarget({ ...fileItem, type: "file_restore_rejected" })).toEqual({ roomCode: "1234", view: "trash" });
+    expect(fileNotificationTarget({ ...fileItem, type: "file_purged_by_owner" })).toEqual({ roomCode: "1234", view: "timeline" });
   });
 
   test("聊天通知生成一次性房间和成员目标", () => {
@@ -82,9 +95,11 @@ describe("全局通知纯逻辑", () => {
   });
 
   test("只接受完整的一次性文件导航状态", () => {
-    expect(readNotificationFileLaunch({ notificationFileTarget: { token: "file-launch-one" } })).toEqual({ token: "file-launch-one" });
+    expect(readNotificationFileLaunch({ notificationFileTarget: { token: "file-launch-one", view: "trash", requestId: "request-one" } })).toEqual({ token: "file-launch-one", view: "trash", requestId: "request-one" });
+    expect(readNotificationFileLaunch({ notificationFileTarget: { token: "file-launch-two", view: "list" } })).toEqual({ token: "file-launch-two", view: "list", requestId: undefined });
     expect(readNotificationFileLaunch({ notificationFileTarget: {} })).toBeUndefined();
-    expect(readNotificationFileLaunch({ notificationFileTarget: { token: 1 } })).toBeUndefined();
+    expect(readNotificationFileLaunch({ notificationFileTarget: { token: 1, view: "list" } })).toBeUndefined();
+    expect(readNotificationFileLaunch({ notificationFileTarget: { token: "one", view: "timeline", requestId: "request-one" } })).toBeUndefined();
     expect(readNotificationFileLaunch(null)).toBeUndefined();
   });
 

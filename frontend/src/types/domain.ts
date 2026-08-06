@@ -46,6 +46,7 @@ export interface RoomCapacity {
   usedBytes: number;
   sharedBytes?: number;
   directBytes?: number;
+  trashBytes?: number;
   reservedBytes?: number;
 }
 
@@ -86,6 +87,7 @@ interface FileNotificationBase extends NotificationBase {
   counterpartUserId: string;
   counterpartDisplayName: string;
   latestFileName: string;
+  latestReason?: string;
   fileCount: number;
   latestFileEventAt: number;
 }
@@ -104,7 +106,40 @@ export interface FileDownloadedNotification extends FileNotificationBase {
   readToken: string;
 }
 
-export type FileNotification = FileReceivedNotification | FileDeclinedNotification | FileDownloadedNotification;
+export interface FileTrashedByOwnerNotification extends FileNotificationBase {
+  type: "file_trashed_by_owner";
+  readToken: string;
+}
+
+export interface FileRestoreRequestedNotification extends FileNotificationBase {
+  type: "file_restore_requested";
+  requestId: string;
+}
+
+export interface FileRestoredByOwnerNotification extends FileNotificationBase {
+  type: "file_restored_by_owner";
+  readToken: string;
+}
+
+export interface FileRestoreRejectedNotification extends FileNotificationBase {
+  type: "file_restore_rejected";
+  readToken: string;
+}
+
+export interface FilePurgedByOwnerNotification extends FileNotificationBase {
+  type: "file_purged_by_owner";
+  readToken: string;
+}
+
+export type FileNotification =
+  | FileReceivedNotification
+  | FileDeclinedNotification
+  | FileDownloadedNotification
+  | FileTrashedByOwnerNotification
+  | FileRestoreRequestedNotification
+  | FileRestoredByOwnerNotification
+  | FileRestoreRejectedNotification
+  | FilePurgedByOwnerNotification;
 
 export type NotificationItem = JoinRequestNotification | ChatConversationNotification | FileNotification;
 
@@ -189,7 +224,7 @@ export interface ChatSearchPage {
 
 export type FileScope = "shared" | "direct";
 export type FileProjectionLevel = "full" | "anonymous";
-export type FileStatus = "reserved" | "uploading" | "available";
+export type FileStatus = "reserved" | "uploading" | "available" | "trashed" | "purging" | "purged";
 export type FileRecipientStatus = "pending" | "accepted" | "declined" | "downloaded";
 export type FileRange = "all" | FileScope;
 export type FileIdentity = "all" | "uploaded" | "received";
@@ -201,6 +236,8 @@ export interface FileCapabilities {
   canDecline: boolean;
   canReuse: boolean;
   canPublishShared: boolean;
+  canTrash: boolean;
+  canSetTrashReason: boolean;
 }
 
 export interface FileRecipient {
@@ -253,6 +290,44 @@ export interface FileEventItem {
 export interface FileEventPage {
   items: FileEventItem[];
   nextCursor?: string;
+}
+
+export type FileRestoreRequestStatus = "pending" | "approved" | "rejected" | "invalidated";
+
+export interface FileRestoreRequest {
+  requestId: string;
+  status: FileRestoreRequestStatus;
+  requesterUserId: string;
+  requesterName: string;
+  createdAt: number;
+  rejectionReason?: string;
+}
+
+export interface FileTrashCapabilities {
+  canRestore: boolean;
+  canRequestRestore: boolean;
+  canPurge: boolean;
+}
+
+export interface FileTrashItem {
+  file: RoomFile;
+  deletedByUserId: string;
+  deletedByName: string;
+  deletedAt: number;
+  deleteReason?: string;
+  restoreRequest?: FileRestoreRequest;
+  capabilities: FileTrashCapabilities;
+}
+
+export interface FileTrashPage {
+  items: FileTrashItem[];
+  total: number;
+  nextCursor?: string;
+}
+
+export interface FileRestoreResult {
+  status: "restored" | "pending";
+  requestId?: string;
 }
 
 export interface UploadManifest {

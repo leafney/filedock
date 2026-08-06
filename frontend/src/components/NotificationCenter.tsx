@@ -1,4 +1,4 @@
-import { CloseCircleOutlined, DownloadOutlined, FileOutlined, MessageOutlined, UserAddOutlined } from "@ant-design/icons";
+import { CloseCircleOutlined, DeleteOutlined, DownloadOutlined, FileOutlined, MessageOutlined, StopOutlined, UndoOutlined, UserAddOutlined } from "@ant-design/icons";
 import { Alert, Avatar, Button, Drawer, Empty, Space } from "antd";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -108,6 +108,8 @@ export function NotificationCenterProvider({ session, children }: { session?: Se
       state: {
         notificationFileTarget: {
           token: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          view: target.view,
+          requestId: target.requestId,
         },
       },
     });
@@ -148,14 +150,16 @@ export function NotificationCenterProvider({ session, children }: { session?: Se
 
 function FileNotificationItem({ item, processing, onOpen }: { item: FileNotification; processing: boolean; onOpen: (item: FileNotification) => Promise<void> }) {
   const { t } = useTranslation();
-  const icon = item.type === "file_declined" ? <CloseCircleOutlined aria-hidden="true" /> : item.type === "file_downloaded" ? <DownloadOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />;
-  const previewKey = item.type === "file_received" ? "notification.fileReceived" : item.type === "file_declined" ? "notification.fileDeclined" : "notification.fileDownloaded";
-  return <button className={`global-notification-item is-file ${item.type}`} type="button" disabled={processing} onClick={() => void onOpen(item)} aria-label={t("notification.openFile", { name: item.counterpartDisplayName, room: item.roomTitle, count: item.fileCount })}>
+  const icon = item.type === "file_declined" ? <CloseCircleOutlined aria-hidden="true" /> : item.type === "file_downloaded" ? <DownloadOutlined aria-hidden="true" /> : item.type === "file_trashed_by_owner" ? <DeleteOutlined aria-hidden="true" /> : item.type === "file_restore_requested" ? <UndoOutlined aria-hidden="true" /> : item.type === "file_restore_rejected" ? <StopOutlined aria-hidden="true" /> : item.type === "file_purged_by_owner" ? <DeleteOutlined aria-hidden="true" /> : <FileOutlined aria-hidden="true" />;
+  const previewKey = item.type === "file_received" ? "notification.fileReceived" : item.type === "file_declined" ? "notification.fileDeclined" : item.type === "file_downloaded" ? "notification.fileDownloaded" : item.type === "file_trashed_by_owner" ? "notification.fileTrashed" : item.type === "file_restore_requested" ? "notification.fileRestoreRequested" : item.type === "file_restored_by_owner" ? "notification.fileRestored" : item.type === "file_restore_rejected" ? "notification.fileRestoreRejected" : "notification.filePurged";
+  const actionable = item.type === "file_restore_requested";
+  return <button className={`global-notification-item is-file ${item.type} ${actionable ? "is-action" : ""}`} type="button" disabled={processing} onClick={() => void onOpen(item)} aria-label={t("notification.openFile", { name: item.counterpartDisplayName, room: item.roomTitle, count: item.fileCount })}>
     <Avatar size={42} style={{ backgroundColor: getStableAvatarColor(item.counterpartDisplayName) }}>{getAvatarInitial(item.counterpartDisplayName)}</Avatar>
     <span className="global-notification-content">
       <span className="global-notification-title"><strong>{item.counterpartDisplayName}</strong><time>{formatDate(item.latestFileEventAt)}</time></span>
       <span className="global-notification-room">{icon}{item.roomTitle} · {item.roomCode}</span>
       <span className="global-notification-preview">{t(previewKey, { count: item.fileCount, file: item.latestFileName })}</span>
+      {item.latestReason && <span className="global-notification-reason">{t("notification.reason", { reason: item.latestReason })}</span>}
     </span>
     <span className="global-notification-count" aria-label={t("notification.fileCount", { count: item.fileCount })}>{formatNotificationCount(item.fileCount)}</span>
   </button>;

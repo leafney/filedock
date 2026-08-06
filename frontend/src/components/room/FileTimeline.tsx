@@ -41,6 +41,11 @@ const eventKeys = {
   declined: "room.files.events.declined",
   download_started: "room.files.events.download_started",
   download_completed: "room.files.events.download_completed",
+  trashed: "room.files.events.trashed",
+  restore_requested: "room.files.events.restore_requested",
+  restore_rejected: "room.files.events.restore_rejected",
+  restored: "room.files.events.restored",
+  purged: "room.files.events.purged",
 } as const;
 
 function eventTranslationKey(type: string): (typeof eventKeys)[keyof typeof eventKeys] {

@@ -28,7 +28,7 @@ interface Props {
   onOpenProfile: () => void;
   actionError?: unknown;
   chatLaunch?: { peerUserId: string; token: string };
-  fileLaunchToken?: string;
+  fileLaunch?: { token: string; view: "list" | "timeline" | "trash"; requestId?: string };
 }
 
 export function RoomWorkspace(props: Props) {
@@ -56,8 +56,8 @@ export function RoomWorkspace(props: Props) {
     if (window.matchMedia("(max-width: 760px)").matches) setChatMobileOpen(true);
   }, [props.chatLaunch?.token, props.chatLaunch?.peerUserId, props.room.members, props.session.userId]);
   useEffect(() => {
-    if (props.fileLaunchToken) setChatMobileOpen(false);
-  }, [props.fileLaunchToken]);
+    if (props.fileLaunch) setChatMobileOpen(false);
+  }, [props.fileLaunch?.token]);
   const expires = Math.max(0, props.room.expiresAt - now);
   const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;
@@ -82,7 +82,7 @@ export function RoomWorkspace(props: Props) {
 
     <div className="room-workspace-layout">
       <MemberPanel room={props.room} session={props.session} onKick={props.onKick} onChat={setChatTarget} selectedUserId={chatTarget} unreadByUser={chatUnreadByPeer} />
-      <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} />
+      <FileWorkspace code={props.code} members={props.room.members} selfId={props.session.userId} fileLaunch={props.fileLaunch} />
       <ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="desktop" selectedPeerUserId={chatTarget} onCloseConversation={() => setChatTarget(undefined)} onUnreadCount={setChatUnread} onUnreadByPeer={setChatUnreadByPeer} />
     </div>
     <TransferBar roomCode={props.code} />
@@ -165,5 +165,5 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
 
 function CapacityPanel({ room }: { room: RoomSnapshot }) {
   const { t } = useTranslation();
-  return <dl className="room-capacity-details"><div><dt>{t("room.workspace.usedTotal")}</dt><dd>{formatBytes(room.capacity.usedBytes)} / {formatBytes(room.capacity.capacityBytes)}</dd></div>{room.role === "owner" && <><div><dt>{t("room.workspace.sharedUsage")}</dt><dd>{formatBytes(room.capacity.sharedBytes ?? 0)}</dd></div><div><dt>{t("room.workspace.privateUsage")}</dt><dd>{formatBytes(room.capacity.directBytes ?? 0)}</dd></div><div><dt>{t("room.workspace.reservedUsage")}</dt><dd>{formatBytes(room.capacity.reservedBytes ?? 0)}</dd></div></>}</dl>;
+  return <dl className="room-capacity-details"><div><dt>{t("room.workspace.usedTotal")}</dt><dd>{formatBytes(room.capacity.usedBytes)} / {formatBytes(room.capacity.capacityBytes)}</dd></div>{room.role === "owner" && <><div><dt>{t("room.workspace.sharedUsage")}</dt><dd>{formatBytes(room.capacity.sharedBytes ?? 0)}</dd></div><div><dt>{t("room.workspace.privateUsage")}</dt><dd>{formatBytes(room.capacity.directBytes ?? 0)}</dd></div><div><dt>{t("room.workspace.trashUsage")}</dt><dd>{formatBytes(room.capacity.trashBytes ?? 0)}</dd></div><div><dt>{t("room.workspace.reservedUsage")}</dt><dd>{formatBytes(room.capacity.reservedBytes ?? 0)}</dd></div></>}</dl>;
 }

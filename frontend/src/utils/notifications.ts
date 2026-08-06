@@ -12,6 +12,8 @@ export interface NotificationChatLaunch {
 
 export interface NotificationFileLaunch {
   token: string;
+  view: "list" | "timeline" | "trash";
+  requestId?: string;
 }
 
 const notificationFileEvents = new Set([
@@ -19,6 +21,11 @@ const notificationFileEvents = new Set([
   "file.reused",
   "file.recipient_changed",
   "file.download_completed",
+  "file.trashed",
+  "file.restore_requested",
+  "file.restored",
+  "file.restore_rejected",
+  "file.purged",
 ]);
 
 export function shouldRefreshNotifications(eventType: string) {
@@ -35,16 +42,31 @@ export function isChatNotification(item: NotificationItem): item is ChatConversa
 }
 
 export function isFileNotification(item: NotificationItem): item is FileNotification {
-  return item.type === "file_received" || item.type === "file_declined" || item.type === "file_downloaded";
+  return item.type === "file_received"
+    || item.type === "file_declined"
+    || item.type === "file_downloaded"
+    || item.type === "file_trashed_by_owner"
+    || item.type === "file_restore_requested"
+    || item.type === "file_restored_by_owner"
+    || item.type === "file_restore_rejected"
+    || item.type === "file_purged_by_owner";
 }
 
-export function isFileResultNotification(item: NotificationItem): item is Exclude<FileNotification, { type: "file_received" }> {
-  return item.type === "file_declined" || item.type === "file_downloaded";
+export function isFileResultNotification(item: NotificationItem): item is Extract<FileNotification, { readToken: string }> {
+  return item.type === "file_declined"
+    || item.type === "file_downloaded"
+    || item.type === "file_trashed_by_owner"
+    || item.type === "file_restored_by_owner"
+    || item.type === "file_restore_rejected"
+    || item.type === "file_purged_by_owner";
 }
 
-export function fileNotificationTarget(item: NotificationItem): { roomCode: string } | undefined {
+export function fileNotificationTarget(item: NotificationItem): ({ roomCode: string } & Omit<NotificationFileLaunch, "token">) | undefined {
   if (!isFileNotification(item)) return undefined;
-  return { roomCode: item.roomCode };
+  if (item.type === "file_trashed_by_owner" || item.type === "file_restore_rejected") return { roomCode: item.roomCode, view: "trash" };
+  if (item.type === "file_restore_requested") return { roomCode: item.roomCode, view: "trash", requestId: item.requestId };
+  if (item.type === "file_purged_by_owner") return { roomCode: item.roomCode, view: "timeline" };
+  return { roomCode: item.roomCode, view: "list" };
 }
 
 export function readNotificationChatLaunch(state: unknown): NotificationChatLaunch | undefined {
@@ -60,9 +82,10 @@ export function readNotificationFileLaunch(state: unknown): NotificationFileLaun
   if (!state || typeof state !== "object") return undefined;
   const target = (state as { notificationFileTarget?: unknown }).notificationFileTarget;
   if (!target || typeof target !== "object") return undefined;
-  const { token } = target as { token?: unknown };
-  if (typeof token !== "string" || !token) return undefined;
-  return { token };
+  const { token, view, requestId } = target as { token?: unknown; view?: unknown; requestId?: unknown };
+  if (typeof token !== "string" || !token || (view !== "list" && view !== "timeline" && view !== "trash")) return undefined;
+  if (requestId != null && (typeof requestId !== "string" || !requestId || view !== "trash")) return undefined;
+  return { token, view, requestId: requestId as string | undefined };
 }
 
 export function formatNotificationCount(count: number) {

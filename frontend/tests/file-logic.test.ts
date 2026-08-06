@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import en from "../src/i18n/locales/en";
 import zhCN from "../src/i18n/locales/zh-CN";
-import type { RoomFile } from "../src/types/domain";
-import { batchFileCapabilities, fileMenuActions, primaryFileAction } from "../src/utils/file-permissions";
+import type { FileTrashItem, RoomFile } from "../src/types/domain";
+import { batchFileCapabilities, fileMenuActions, fileTrashActions, primaryFileAction } from "../src/utils/file-permissions";
 import { downloadStatusForProgress, selectQueuedStarts, transferProgress } from "../src/utils/transfer-queue";
 
 function roomFile(overrides: Partial<RoomFile> = {}): RoomFile {
@@ -18,29 +18,46 @@ function roomFile(overrides: Partial<RoomFile> = {}): RoomFile {
     uploaderUserId: "user-1",
     uploaderName: "member",
     createdAt: 1,
-    capabilities: { canDownload: true, canAccept: false, canDecline: false, canReuse: false, canPublishShared: false },
+    capabilities: { canDownload: true, canAccept: false, canDecline: false, canReuse: false, canPublishShared: false, canTrash: false, canSetTrashReason: false },
     ...overrides,
   };
 }
 
 describe("文件操作权限矩阵", () => {
   test("待接收私密文件优先显示接收动作", () => {
-    const file = roomFile({ scope: "direct", capabilities: { canDownload: false, canAccept: true, canDecline: true, canReuse: false, canPublishShared: false } });
+    const file = roomFile({ scope: "direct", capabilities: { canDownload: false, canAccept: true, canDecline: true, canReuse: false, canPublishShared: false, canTrash: false, canSetTrashReason: false } });
     expect(primaryFileAction(file)).toBe("accept");
   });
 
   test("匿名投影只提供安全详情动作", () => {
-    const file = roomFile({ projection: "anonymous", scope: "direct", displayName: "7K2M-A9Q4", capabilities: { canDownload: false, canAccept: false, canDecline: false, canReuse: false, canPublishShared: false } });
+    const file = roomFile({ projection: "anonymous", scope: "direct", displayName: "7K2M-A9Q4", capabilities: { canDownload: false, canAccept: false, canDecline: false, canReuse: false, canPublishShared: false, canTrash: false, canSetTrashReason: false } });
     expect(primaryFileAction(file)).toBe("none");
     expect(fileMenuActions(file)).toEqual(["details"]);
   });
 
   test("批量能力要求全部文件同时具备权限", () => {
     const downloadable = roomFile();
-    const privateOwned = roomFile({ fileId: "file-2", scope: "direct", capabilities: { canDownload: true, canAccept: false, canDecline: false, canReuse: true, canPublishShared: true } });
+    const privateOwned = roomFile({ fileId: "file-2", scope: "direct", capabilities: { canDownload: true, canAccept: false, canDecline: false, canReuse: true, canPublishShared: true, canTrash: true, canSetTrashReason: false } });
     expect(batchFileCapabilities([downloadable, privateOwned])).toEqual({ canDownload: true, canReuse: false });
     expect(batchFileCapabilities([privateOwned])).toEqual({ canDownload: true, canReuse: true });
     expect(batchFileCapabilities([])).toEqual({ canDownload: false, canReuse: false });
+  });
+
+  test("移入回收站始终排在安全信息操作之后", () => {
+    const file = roomFile({ capabilities: { canDownload: true, canAccept: false, canDecline: false, canReuse: true, canPublishShared: false, canTrash: true, canSetTrashReason: true } });
+    expect(fileMenuActions(file)).toEqual(["reuse", "details", "trash"]);
+  });
+
+  test("回收站能力映射操作并阻止重复申请", () => {
+    const item = (restoreRequest?: FileTrashItem["restoreRequest"]): FileTrashItem => ({
+      file: roomFile({ status: "trashed" }), deletedByUserId: "owner", deletedByName: "owner", deletedAt: 2,
+      capabilities: { canRestore: false, canRequestRestore: true, canPurge: false },
+      restoreRequest,
+    });
+    expect(fileTrashActions(item())).toEqual(["request_restore"]);
+    expect(fileTrashActions({ ...item(), restoreRequest: { requestId: "one", status: "pending", requesterUserId: "user-1", requesterName: "member", createdAt: 3 } })).toEqual([]);
+    expect(fileTrashActions({ ...item(), restoreRequest: { requestId: "two", status: "rejected", requesterUserId: "user-1", requesterName: "member", createdAt: 3 } })).toEqual([]);
+    expect(fileTrashActions({ ...item(), capabilities: { canRestore: true, canRequestRestore: false, canPurge: true } })).toEqual(["restore", "purge"]);
   });
 });
 

@@ -1,7 +1,8 @@
-import type { RoomFile } from "../types/domain";
+import type { FileTrashItem, RoomFile } from "../types/domain";
 
 export type FilePrimaryAction = "accept" | "download" | "progress" | "none";
-export type FileMenuAction = "download" | "reuse" | "publish" | "details";
+export type FileMenuAction = "download" | "reuse" | "publish" | "details" | "trash";
+export type FileTrashAction = "restore" | "request_restore" | "purge";
 
 export function primaryFileAction(file: RoomFile): FilePrimaryAction {
   if (file.capabilities.canAccept) return "accept";
@@ -15,6 +16,15 @@ export function fileMenuActions(file: RoomFile): FileMenuAction[] {
   if (file.capabilities.canReuse) actions.push("reuse");
   if (file.capabilities.canPublishShared) actions.push("publish");
   actions.push("details");
+  if (file.capabilities.canTrash) actions.push("trash");
+  return actions;
+}
+
+export function fileTrashActions(item: FileTrashItem): FileTrashAction[] {
+  const actions: FileTrashAction[] = [];
+  if (item.capabilities.canRestore) actions.push("restore");
+  if (item.capabilities.canRequestRestore && (!item.restoreRequest || item.restoreRequest.status === "invalidated")) actions.push("request_restore");
+  if (item.capabilities.canPurge) actions.push("purge");
   return actions;
 }
 

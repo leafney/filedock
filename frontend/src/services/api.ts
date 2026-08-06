@@ -11,7 +11,9 @@ import type {
   FileIdentity,
   FileListResult,
   FileRange,
+  FileRestoreResult,
   FileSort,
+  FileTrashPage,
   NotificationPage,
   NotificationReadResult,
   RoomFile,
@@ -174,6 +176,30 @@ export function listRoomFiles(code: string, params: FileListParams) {
 
 export function listFileEvents(code: string, cursor = "", limit = 30) {
   return unwrap<FileEventPage>(apiClient.get<ApiResponse<FileEventPage>>(`/api/v1/rooms/${code}/file-events`, { params: { cursor, limit } }));
+}
+
+export function listFileTrash(code: string, search = "", cursor = "", limit = 30) {
+  return unwrap<FileTrashPage>(apiClient.get<ApiResponse<FileTrashPage>>(`/api/v1/rooms/${code}/file-trash`, { params: { search: search || undefined, cursor: cursor || undefined, limit } }));
+}
+
+export function trashRoomFile(code: string, fileId: string, reason = "") {
+  return unwrap<{ status: string; deletedAt: number }>(apiClient.post<ApiResponse<{ status: string; deletedAt: number }>>(`/api/v1/rooms/${code}/files/${fileId}/trash`, { reason }));
+}
+
+export function restoreRoomFile(code: string, fileId: string) {
+  return unwrap<FileRestoreResult>(apiClient.post<ApiResponse<FileRestoreResult>>(`/api/v1/rooms/${code}/files/${fileId}/restore`));
+}
+
+export function purgeRoomFile(code: string, fileId: string) {
+  return unwrap<null>(apiClient.delete<ApiResponse<null>>(`/api/v1/rooms/${code}/files/${fileId}/purge`));
+}
+
+export function approveFileRestore(code: string, requestId: string) {
+  return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/file-restore-requests/${requestId}/approve`));
+}
+
+export function rejectFileRestore(code: string, requestId: string, reason = "") {
+  return unwrap<null>(apiClient.post<ApiResponse<null>>(`/api/v1/rooms/${code}/file-restore-requests/${requestId}/reject`, { reason }));
 }
 
 export function listReusablePrivateFiles(code: string) {

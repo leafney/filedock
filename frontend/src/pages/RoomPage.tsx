@@ -39,7 +39,7 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const [profileOpen, setProfileOpen] = useState(false);
   const [actionError, setActionError] = useState<unknown>();
   const [chatLaunch, setChatLaunch] = useState<{ roomCode: string; peerUserId: string; token: string }>();
-  const [fileLaunch, setFileLaunch] = useState<{ roomCode: string; token: string }>();
+  const [fileLaunch, setFileLaunch] = useState<{ roomCode: string; token: string; view: "list" | "timeline" | "trash"; requestId?: string }>();
   const validCode = /^\d{4}$/.test(code);
   const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: listRooms, enabled: Boolean(session), retry: false });
   const ownerRoom = useMemo(() => roomsQuery.data?.items.find((room) => room.role === "owner"), [roomsQuery.data?.items]);
@@ -54,6 +54,8 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     if (fileTarget) {
       setFileLaunch({ roomCode: code, ...fileTarget });
       void queryClient.invalidateQueries({ queryKey: ["room-files", code] });
+      void queryClient.invalidateQueries({ queryKey: ["file-trash", code] });
+      void queryClient.invalidateQueries({ queryKey: ["file-trash-count", code] });
       void queryClient.invalidateQueries({ queryKey: ["file-events", code] });
       void queryClient.invalidateQueries({ queryKey: ["room", code] });
     }
@@ -140,7 +142,7 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     onOpenProfile={() => setProfileOpen(true)}
     actionError={actionError}
     chatLaunch={chatLaunch?.roomCode === code ? chatLaunch : undefined}
-    fileLaunchToken={fileLaunch?.roomCode === code ? fileLaunch.token : undefined}
+    fileLaunch={fileLaunch?.roomCode === code ? { token: fileLaunch.token, view: fileLaunch.view, requestId: fileLaunch.requestId } : undefined}
   />{profileOpen && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={() => {
     if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
     void resetSession().then(() => {
