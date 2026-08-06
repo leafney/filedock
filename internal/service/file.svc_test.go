@@ -131,6 +131,11 @@ func TestUploadPartRetryIsIdempotentAfterCompletion(t *testing.T) {
 	if err != nil || retry.Status != model.UploadSessionCompleted {
 		t.Fatalf("retry result=%+v error=%v", retry, err)
 	}
+	other := []byte("world")
+	otherDigest := sha256.Sum256(other)
+	if _, err := fixture.svc.UploadPart(context.Background(), fixture.uploader.UserID, fixture.room.Code, batch.Files[0].ID, 0, 0, 4, 5, 5, hex.EncodeToString(otherDigest[:]), bytes.NewReader(other)); errx.Code(err) != errc.ErrUploadChunkConflict {
+		t.Fatalf("conflict error=%v code=%d", err, errx.Code(err))
+	}
 }
 
 func TestUploadContentSizeMismatchFailsAndReleasesReservation(t *testing.T) {

@@ -10,12 +10,13 @@ import { FileTrash } from "./FileTrash";
 import { FileTimeline } from "./FileTimeline";
 import { FileDetailsDialog, ReusePrivateDialog, UploadComposer } from "./UploadComposer";
 import { streamEventName, type StreamEventMessage } from "../../hooks/use-stream";
-import { acceptPrivateFile, createFileDownload, createUploadBatch, declinePrivateFile, listFileTrash, publishPrivateFile, reusePrivateFiles, trashRoomFile } from "../../services/api";
-import { applyDownloadProgress, enqueueDownload, enqueueUploadBatch, fileRefreshEventName } from "../../stores/transfer-store";
+import { acceptPrivateFile, createFileDownload, createUploadBatch, declinePrivateFile, getUploadStatus, listFileTrash, publishPrivateFile, reusePrivateFiles, trashRoomFile } from "../../services/api";
+import { applyDownloadProgress, enqueueDownload, enqueueResumedUpload, enqueueUploadBatch, fileRefreshEventName } from "../../stores/transfer-store";
 import type { FileIdentity, FileRange, FileScope, FileSort, RoomFile, RoomMember } from "../../types/domain";
 import { formatBytes } from "../../utils/format";
 import { moveRovingFocus } from "../../utils/keyboard";
 import { shouldConsumeNotificationLaunch } from "../../utils/notifications";
+import { findUploadResume, listUploadResumes, removeUploadResume } from "../../utils/upload-resume";
 
 export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchConsumed }: { code: string; members: RoomMember[]; selfId: string; fileLaunch?: { token: string; view: "list" | "timeline" | "trash"; requestId?: string }; onFileLaunchConsumed: (token: string) => void }) {
   const { t } = useTranslation();
@@ -40,6 +41,10 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   const [trashLaunch, setTrashLaunch] = useState<{ token: string; requestId?: string }>();
   const consumedFileLaunchToken = useRef<string>();
   const trashCountQuery = useQuery({ queryKey: ["file-trash-count", code], queryFn: () => listFileTrash(code, "", "", 1), retry: false });
+
+  useEffect(() => {
+    listUploadResumes(code);
+  }, [code]);
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["room-files", code] });
@@ -78,8 +83,33 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   }, [code, refresh]);
 
   const upload = useMutation({
-    mutationFn: ({ files, scope, recipientIds }: { files: File[]; scope: FileScope; recipientIds: string[] }) => createUploadBatch(code, makeRequestId(), scope, recipientIds, files.map((file) => ({ originalName: file.name, declaredSize: file.size, declaredMime: file.type || "application/octet-stream" }))),
-    onSuccess: (batch, variables) => { enqueueUploadBatch(code, batch, variables.files, variables.recipientIds); setDrafts([]); refresh(); },
+    mutationFn: async ({ files, scope, recipientIds }: { files: File[]; scope: FileScope; recipientIds: string[] }) => {
+      const freshFiles: File[] = [];
+      for (const file of files) {
+        const record = findUploadResume(code, file);
+        if (!record) {
+          freshFiles.push(file);
+          continue;
+        }
+        try {
+          const session = await getUploadStatus(code, record.fileId);
+          if (session.status === "active" && session.expiresAt * 1000 > Date.now()) {
+            enqueueResumedUpload(code, session, record, file);
+            message.info(t("room.files.resumeUploadNotice", { name: file.name }));
+            continue;
+          }
+        } catch {
+          // A missing or expired server session is removed below and starts fresh.
+        }
+        removeUploadResume(code, record.uploadId);
+        freshFiles.push(file);
+      }
+      if (freshFiles.length > 0) {
+        const batch = await createUploadBatch(code, makeRequestId(), scope, recipientIds, freshFiles.map((file) => ({ originalName: file.name, declaredSize: file.size, declaredMime: file.type || "application/octet-stream" })));
+        enqueueUploadBatch(code, batch, freshFiles, recipientIds);
+      }
+    },
+    onSuccess: () => { setDrafts([]); refresh(); },
   });
   const reuse = useMutation({ mutationFn: ({ fileIds, recipientIds }: { fileIds: string[]; recipientIds: string[] }) => reusePrivateFiles(code, fileIds, recipientIds), onSuccess: () => { setReuseFiles(null); refresh(); } });
 

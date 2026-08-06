@@ -1,8 +1,8 @@
-import { ChevronUp, CircleCheck, CircleX, Download, RefreshCw, Trash2, Upload, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronUp, CircleCheck, CircleX, Download, Pause, Play, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { cancelUploadTransfer, retryUploadTransfer, useTransferStore, type UploadTransferTask } from "../../stores/transfer-store";
+import { cancelUploadTransfer, pauseUploadTransfer, retryUploadTransfer, resumeUploadTransfer, useTransferStore, type UploadTransferTask } from "../../stores/transfer-store";
 import { formatBytes } from "../../utils/format";
 
 export function TransferBar({ roomCode }: { roomCode: string }) {
@@ -16,6 +16,22 @@ export function TransferBar({ roomCode }: { roomCode: string }) {
   const active = roomUploads.filter((task) => task.status === "queued" || task.status === "uploading").length + roomDownloads.filter((task) => task.status === "queued" || task.status === "starting" || task.status === "downloading").length;
   const failed = roomUploads.filter((task) => task.status === "failed").length + roomDownloads.filter((task) => task.status === "failed").length;
   const latest = roomUploads.find((task) => task.status === "uploading") ?? roomUploads.find((task) => task.status === "queued");
+  const previousActive = useRef(0);
+  const previousCount = useRef(0);
+  const closeTimer = useRef<number>();
+
+  useEffect(() => {
+    const total = roomUploads.length + roomDownloads.length;
+    if (total > previousCount.current || active > 0) {
+      setOpen(true);
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    } else if (previousActive.current > 0 && active === 0) {
+      closeTimer.current = window.setTimeout(() => setOpen(false), 5000);
+    }
+    previousActive.current = active;
+    previousCount.current = total;
+    return () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); };
+  }, [active, roomDownloads.length, roomUploads.length]);
 
   return <footer className="room-transfer-bar">
     <button className="transfer-summary" type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -28,9 +44,11 @@ export function TransferBar({ roomCode }: { roomCode: string }) {
       <header><strong>{t("room.files.transferTasks")}</strong><button type="button" onClick={clearFinished}><Trash2 aria-hidden="true" />{t("room.files.clearFinished")}</button></header>
       <div className="transfer-task-list">
         {roomUploads.map((task) => <article key={task.clientId}>
-          <Upload aria-hidden="true" /><div><strong>{task.file.name}</strong><span>{uploadStatusLabel(task, t)} · {formatBytes(task.loaded)} / {formatBytes(task.total)}{task.speed > 0 ? ` · ${formatBytes(task.speed)}/s` : ""}</span><progress max={100} value={task.progress} aria-label={t("room.files.uploadProgress", { percent: String(task.progress) })} /></div>
-          {(task.status === "queued" || task.status === "uploading") && <button type="button" aria-label={t("room.files.cancelTransfer")} onClick={() => cancelUploadTransfer(task.clientId)}><X aria-hidden="true" /></button>}
+          <Upload aria-hidden="true" /><div><strong>{task.file.name}</strong><span>{uploadStatusLabel(task, t)} · {task.completedParts.length}/{task.totalParts} · {formatBytes(task.loaded)} / {formatBytes(task.total)}{task.speed > 0 ? ` · ${formatBytes(task.speed)}/s` : ""}</span><progress max={100} value={task.progress} aria-label={t("room.files.uploadProgress", { percent: String(task.progress) })} /></div>
+          {task.status === "uploading" && <button type="button" aria-label={t("room.files.pauseTransfer")} onClick={() => pauseUploadTransfer(task.clientId)}><Pause aria-hidden="true" /></button>}
+          {task.status === "paused" && <button type="button" aria-label={t("room.files.resumeTransfer")} onClick={() => resumeUploadTransfer(task.clientId)}><Play aria-hidden="true" /></button>}
           {task.status === "failed" && <button type="button" onClick={() => void retryUploadTransfer(task)}>{t("room.files.retry")}</button>}
+          {task.status !== "completed" && task.status !== "cancelled" && <button type="button" aria-label={t("room.files.deleteTransfer")} onClick={() => { if (window.confirm(t("room.files.deleteTransferConfirm", { name: task.file.name }))) cancelUploadTransfer(task.clientId); }}><X aria-hidden="true" /></button>}
         </article>)}
         {roomDownloads.map((task) => <article key={task.taskId}>
           <Download aria-hidden="true" /><div><strong>{task.fileName}</strong><span>{t(`room.files.downloadStatus.${task.status}`)} · {formatBytes(task.transferred)} / {formatBytes(task.total)}</span><progress max={100} value={task.progress} aria-label={t("room.files.downloadProgress", { percent: String(task.progress) })} /></div>
@@ -42,6 +60,8 @@ export function TransferBar({ roomCode }: { roomCode: string }) {
 }
 
 function uploadStatusLabel(task: UploadTransferTask, t: ReturnType<typeof useTranslation>["t"]) {
+  if (task.error === "other_tab") return t("room.files.uploadErrors.otherTab");
+  if (task.error === "content_changed") return t("room.files.uploadErrors.contentChanged");
   if (task.status === "failed" && task.error && task.error !== "network" && task.error !== "upload") return task.error;
   return t(`room.files.uploadStatus.${task.status}`);
 }

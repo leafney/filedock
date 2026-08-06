@@ -23,6 +23,7 @@ import type {
   Session,
   UploadBatch,
   UploadManifest,
+  UploadSession,
 } from "../types/domain";
 import { currentLanguage } from "../i18n";
 
@@ -214,6 +215,10 @@ export function cancelFileUpload(code: string, fileId: string) {
   return unwrap<null>(apiClient.delete<ApiResponse<null>>(`/api/v1/rooms/${code}/files/${fileId}/upload`));
 }
 
+export function getUploadStatus(code: string, fileId: string) {
+  return unwrap<UploadSession>(apiClient.get<ApiResponse<UploadSession>>(`/api/v1/rooms/${code}/files/${fileId}/upload`));
+}
+
 export function acceptPrivateFile(code: string, fileId: string) {
   return unwrap<DownloadTask>(apiClient.post<ApiResponse<DownloadTask>>(`/api/v1/rooms/${code}/files/${fileId}/accept`));
 }
@@ -240,6 +245,11 @@ export interface UploadProgress {
   percent: number;
 }
 
+export interface UploadPartProgress {
+  loaded: number;
+  total: number;
+}
+
 export function uploadFileContent(uploadUrl: string, file: File, onProgress: (progress: UploadProgress) => void) {
   const request = new XMLHttpRequest();
   const promise = new Promise<void>((resolve, reject) => {
@@ -262,14 +272,49 @@ export function uploadFileContent(uploadUrl: string, file: File, onProgress: (pr
   return { request, promise };
 }
 
+export function uploadFilePart(uploadUrl: string, part: Blob, partNumber: number, startOffset: number, endOffset: number, totalSize: number, sha256: string, onProgress: (progress: UploadPartProgress) => void) {
+  const request = new XMLHttpRequest();
+  const promise = new Promise<void>((resolve, reject) => {
+    request.open("PUT", uploadUrl);
+    request.withCredentials = true;
+    request.setRequestHeader("Accept-Language", currentLanguage());
+    request.setRequestHeader("Content-Type", "application/octet-stream");
+    request.setRequestHeader("Content-Range", `bytes ${startOffset}-${endOffset}/${totalSize}`);
+    request.setRequestHeader("X-Chunk-Number", String(partNumber));
+    request.setRequestHeader("X-Chunk-SHA256", sha256);
+    request.upload.onprogress = (event) => {
+      const total = event.lengthComputable ? event.total : part.size;
+      onProgress({ loaded: event.loaded, total });
+    };
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) resolve();
+      else reject(readXHRFailure(request));
+    };
+    request.onerror = () => reject(new Error("network"));
+    request.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+    request.send(part);
+  });
+  return { request, promise };
+}
+
+export class UploadRequestError extends Error {
+  readonly code?: number;
+
+  constructor(message: string, code?: number) {
+    super(message);
+    this.name = "UploadRequestError";
+    this.code = code;
+  }
+}
+
 function readXHRFailure(request: XMLHttpRequest) {
   try {
     const response = JSON.parse(request.responseText) as ApiResponse<unknown>;
-    if (response.message) return new Error(response.message);
+    if (response.message) return new UploadRequestError(response.message, response.code);
   } catch {
     // Use the HTTP status fallback when the response is not JSON.
   }
-  return new Error(`HTTP ${request.status}`);
+  return new UploadRequestError(`HTTP ${request.status}`);
 }
 
 export function startNativeDownload(task: DownloadTask) {

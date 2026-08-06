@@ -155,8 +155,11 @@ func (s *FileSvc) UploadPart(ctx context.Context, userID, roomCode, fileID strin
 	}
 	if session.Status == model.UploadSessionCompleted || file.Status == model.FileStatusAvailable {
 		var completedPart model.UploadPart
-		if err := s.db.Where("file_id = ? AND part_number = ?", fileID, partNumber).First(&completedPart).Error; err == nil && completedPart.StartOffset == startOffset && completedPart.EndOffset == endOffset && completedPart.Length == contentLength && strings.EqualFold(completedPart.SHA256, actualSHA) {
-			return s.UploadStatus(userID, roomCode, fileID)
+		if err := s.db.Where("file_id = ? AND part_number = ?", fileID, partNumber).First(&completedPart).Error; err == nil {
+			if completedPart.StartOffset == startOffset && completedPart.EndOffset == endOffset && completedPart.Length == contentLength && strings.EqualFold(completedPart.SHA256, actualSHA) {
+				return s.UploadStatus(userID, roomCode, fileID)
+			}
+			return UploadSessionResult{}, errx.New(errc.ErrUploadChunkConflict, nil)
 		}
 		return UploadSessionResult{}, errx.New(errc.ErrFileState, nil)
 	}

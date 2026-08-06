@@ -33,7 +33,11 @@ func (b *FileBiz) CreateUploadBatch(userID, roomCode string, request dto.CreateU
 	response := dto.UploadBatchDTO{BatchID: result.Batch.ID, Scope: result.Batch.Scope, Status: result.Batch.Status, DeclaredTotalSize: result.Batch.DeclaredTotalSize, Files: make([]dto.UploadFileDTO, 0, len(result.Files))}
 	for _, file := range result.Files {
 		chunkSize, totalParts := service.UploadChunkPlan(file.DeclaredSize)
-		response.Files = append(response.Files, dto.UploadFileDTO{FileID: file.ID, UploadID: file.ID, DisplayName: file.OriginalName, PrivateCode: file.PrivateCode, DeclaredSize: file.DeclaredSize, Status: file.Status, ChunkSize: chunkSize, TotalParts: totalParts, UploadURL: fmt.Sprintf("/api/v1/rooms/%s/files/%s/content", roomCode, file.ID)})
+		var expiresAt int64
+		if session, sessionErr := b.files.UploadStatus(userID, roomCode, file.ID); sessionErr == nil {
+			expiresAt = session.ExpiresAt
+		}
+		response.Files = append(response.Files, dto.UploadFileDTO{FileID: file.ID, UploadID: file.ID, DisplayName: file.OriginalName, PrivateCode: file.PrivateCode, DeclaredSize: file.DeclaredSize, Status: file.Status, ChunkSize: chunkSize, TotalParts: totalParts, ExpiresAt: expiresAt, UploadURL: fmt.Sprintf("/api/v1/rooms/%s/files/%s/content", roomCode, file.ID)})
 	}
 	return response, nil
 }

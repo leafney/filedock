@@ -338,11 +338,35 @@ export interface UploadManifest {
 
 export interface UploadBatchFile {
   fileId: string;
+  uploadId: string;
   displayName: string;
   privateCode?: string;
   declaredSize: number;
   status: string;
+  chunkSize: number;
+  totalParts: number;
+  expiresAt: number;
   uploadUrl: string;
+}
+
+export interface UploadPart {
+  partNumber: number;
+  startOffset: number;
+  endOffset: number;
+  length: number;
+  sha256: string;
+}
+
+export interface UploadSession {
+  uploadId: string;
+  fileId: string;
+  status: string;
+  declaredSize: number;
+  chunkSize: number;
+  totalParts: number;
+  receivedBytes: number;
+  expiresAt: number;
+  parts: UploadPart[];
 }
 
 export interface UploadBatch {

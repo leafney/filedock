@@ -30,6 +30,7 @@ type UploadFileDTO struct {
 	Status       string `json:"status"`
 	ChunkSize    int64  `json:"chunkSize"`
 	TotalParts   int    `json:"totalParts"`
+	ExpiresAt    int64  `json:"expiresAt"`
 	UploadURL    string `json:"uploadUrl"`
 }
 
