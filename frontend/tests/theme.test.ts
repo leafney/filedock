@@ -38,5 +38,6 @@ describe("主题纯逻辑", () => {
     expect(readThemeModeFromStorageEvent({ key: "other", newValue: "dark" } as StorageEvent)).toBeNull();
     expect(readThemeModeFromStorageEvent({ key: themeStorageKey, newValue: "light" } as StorageEvent)).toBe("light");
     expect(readThemeModeFromStorageEvent({ key: themeStorageKey, newValue: "invalid" } as StorageEvent)).toBe("system");
+    expect(readThemeModeFromStorageEvent({ key: null, newValue: null } as StorageEvent)).toBe("system");
   });
 });

@@ -31,7 +31,7 @@ export function writeStoredThemeMode(storage: Pick<Storage, "setItem"> | undefin
 }
 
 export function readThemeModeFromStorageEvent(event: StorageEvent): ThemeMode | null {
-  if (event.key !== themeStorageKey) return null;
+  if (event.key !== themeStorageKey && event.key !== null) return null;
   return normalizeThemeMode(event.newValue) ?? "system";
 }
 

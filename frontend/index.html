@@ -19,6 +19,7 @@
         const resolved = mode === "dark" || (mode === "system" && systemDark) ? "dark" : "light";
         root.dataset.theme = resolved;
         root.style.colorScheme = resolved;
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "dark" ? "#0f172a" : "#f8fafc");
       })();
     </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

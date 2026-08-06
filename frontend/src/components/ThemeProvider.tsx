@@ -21,7 +21,21 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getInitialMode(): ThemeMode {
-  return readStoredThemeMode(typeof window === "undefined" ? undefined : window.localStorage);
+  if (typeof window === "undefined") return "system";
+  try {
+    return readStoredThemeMode(window.localStorage);
+  } catch {
+    return "system";
+  }
+}
+
+function getBrowserStorage(): Storage | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 function subscribeToSystemTheme(onChange: () => void): () => void {
@@ -42,7 +56,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setMode = useCallback((nextMode: ThemeMode) => {
     setModeState(nextMode);
-    writeStoredThemeMode(typeof window === "undefined" ? undefined : window.localStorage, nextMode);
+    writeStoredThemeMode(getBrowserStorage(), nextMode);
   }, []);
 
   useEffect(() => subscribeToSystemTheme(() => setSystemPrefersDark(detectSystemPrefersDark())), []);
