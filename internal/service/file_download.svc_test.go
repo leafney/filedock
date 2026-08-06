@@ -109,7 +109,41 @@ func TestDownloadRangeStreamsExactBytesAndOnlyEndRangeCompletes(t *testing.T) {
 	if storedTask.Status != model.DownloadTaskStreaming {
 		t.Fatalf("middle range status=%q", storedTask.Status)
 	}
-	fixture.svc.db.Model(&model.DownloadTask{}).Where("id = ?", task.TaskID).Updates(map[string]interface{}{"started_at": fixture.svc.now().Add(-DownloadReplayWindow - time.Second).Unix()})
+
+	tailTask, err := fixture.svc.CreateDownloadTask(fixture.outsider.UserID, fixture.room.Code, file.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tailRange := ByteRange{Start: 5, End: 9}
+	tailStream, err := fixture.svc.BeginDownloadRange(fixture.outsider.UserID, fixture.room.Code, tailTask.TaskID, &tailRange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tailOutput bytes.Buffer
+	if err := tailStream.WriteTo(context.Background(), &tailOutput); err != nil {
+		t.Fatal(err)
+	}
+	if string(tailOutput.Bytes()) != "56789" {
+		t.Fatalf("tail range output=%q", tailOutput.Bytes())
+	}
+	storedTask = model.DownloadTask{}
+	fixture.svc.db.First(&storedTask, "id = ?", tailTask.TaskID)
+	if storedTask.Status != model.DownloadTaskCompleted || storedTask.TransferredSize != int64(len(content)) {
+		t.Fatalf("tail range task=%+v", storedTask)
+	}
+}
+
+func TestDownloadReplayWindowBoundary(t *testing.T) {
+	startedAt := time.Unix(100, 0).Unix()
+	if !downloadReplayOpen(&startedAt, time.Unix(100, 0).Add(DownloadReplayWindow)) {
+		t.Fatal("replay window rejected inclusive boundary")
+	}
+	if downloadReplayOpen(&startedAt, time.Unix(100, 0).Add(DownloadReplayWindow+time.Nanosecond)) {
+		t.Fatal("replay window accepted time after boundary")
+	}
+	if downloadReplayOpen(&startedAt, time.Unix(99, 0)) {
+		t.Fatal("replay window accepted time before start")
+	}
 }
 
 func TestPrivateAcceptCreatesDownloadAndCompletionUpdatesReceipt(t *testing.T) {
@@ -151,6 +185,13 @@ func TestPrivateAcceptCreatesDownloadAndCompletionUpdatesReceipt(t *testing.T) {
 		t.Fatalf("replay changed download count=%d", recipient.DownloadCount)
 	}
 	assertNotificationRecordCount(t, fixture.svc.db, NotificationTypeFileDownloaded, 1)
+	var completedEvents int64
+	if err := fixture.svc.db.Model(&model.FileEvent{}).Where("file_id = ? AND type = ?", file.ID, FileEventDownloaded).Count(&completedEvents).Error; err != nil {
+		t.Fatal(err)
+	}
+	if completedEvents != 1 {
+		t.Fatalf("replay changed completed event count=%d", completedEvents)
+	}
 	secondTask, err := fixture.svc.CreateDownloadTask(fixture.recipient.UserID, fixture.room.Code, file.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -268,6 +309,26 @@ func TestDownloadRegistryEnforcesPerUserLimit(t *testing.T) {
 	defer finishTwo()
 	if _, _, err := registry.begin("task-3", "room", "file-3", "user"); errx.Code(err) != errc.ErrDownloadLimited {
 		t.Fatalf("third download error=%v", err)
+	}
+}
+
+func TestDownloadRegistryAllowsTwoAttemptsForSameTaskAndCancelsBoth(t *testing.T) {
+	registry := &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}
+	firstContext, finishFirst, err := registry.begin("task", "room", "file", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finishFirst()
+	secondContext, finishSecond, err := registry.begin("task", "room", "file", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer finishSecond()
+	if matched := registry.cancelFile("file"); len(matched) != 2 {
+		t.Fatalf("cancelled attempts=%d, want 2", len(matched))
+	}
+	if firstContext.Err() == nil || secondContext.Err() == nil {
+		t.Fatal("same-task attempts were not both cancelled")
 	}
 }
 
