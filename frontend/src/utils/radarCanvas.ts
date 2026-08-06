@@ -9,12 +9,14 @@ const FRAME_INTERVAL_MS = 1_000 / 60;
 const DESKTOP_BASE_OPACITY = 0.18;
 const MOBILE_BASE_OPACITY = 0.12;
 const MAX_DEVICE_PIXEL_RATIO = 2;
-const RING_COLOR = "13 148 136";
+const LIGHT_RING_COLOR = "13 148 136";
+const DARK_RING_COLOR = "45 212 191";
 
 export interface RadarWaveRenderer {
   resize: (bounds: RadarBounds) => void;
   setMobile: (mobile: boolean) => void;
   setReducedMotion: (reduced: boolean) => void;
+  setTheme: (theme: "light" | "dark") => void;
   start: () => void;
   pause: () => void;
   destroy: () => void;
@@ -22,7 +24,7 @@ export interface RadarWaveRenderer {
 
 export function createRadarWaveRenderer(
   canvas: HTMLCanvasElement,
-  options: { mobile: boolean; reducedMotion: boolean },
+  options: { mobile: boolean; reducedMotion: boolean; theme: "light" | "dark" },
 ): RadarWaveRenderer | null {
   const context = canvas.getContext("2d");
   if (!context || typeof window.requestAnimationFrame !== "function"
@@ -34,6 +36,7 @@ export function createRadarWaveRenderer(
   let bounds: RadarBounds = { width: 0, height: 0 };
   let mobile = options.mobile;
   let reducedMotion = options.reducedMotion;
+  let theme = options.theme;
   let accumulatedTime = 0;
   let animationFrame: number | undefined;
   let lastAnimationTime: number | undefined;
@@ -66,7 +69,8 @@ export function createRadarWaveRenderer(
 
       context.beginPath();
       context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
-      context.strokeStyle = `rgb(${RING_COLOR} / ${opacity})`;
+      const ringColor = theme === "dark" ? DARK_RING_COLOR : LIGHT_RING_COLOR;
+      context.strokeStyle = `rgb(${ringColor} / ${opacity})`;
       context.stroke();
     }
   };
@@ -145,6 +149,11 @@ export function createRadarWaveRenderer(
         draw(getPhase());
         start();
       }
+    },
+    setTheme(nextTheme) {
+      if (destroyed || theme === nextTheme) return;
+      theme = nextTheme;
+      draw(reducedMotion ? 0 : getPhase());
     },
     start,
     pause,

@@ -60,6 +60,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     root.dataset.theme = resolvedTheme;
     root.style.colorScheme = resolvedTheme;
+    const metaThemeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    metaThemeColor?.setAttribute("content", resolvedTheme === "dark" ? "#0f172a" : "#f8fafc");
     delete root.dataset.themeInitializing;
   }, [resolvedTheme]);
 

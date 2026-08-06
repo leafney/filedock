@@ -2,6 +2,7 @@ import { Avatar } from "antd";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { getAvatarInitial, getStableAvatarColor } from "../utils/avatar";
+import { useTheme } from "./ThemeProvider";
 import {
   DEFAULT_RADAR_BOUNDS,
   RADAR_NODE_COUNT,
@@ -32,6 +33,7 @@ function useMediaQuery(query: string) {
 }
 
 export function RadarCanvas({ displayName }: { displayName: string }) {
+  const { resolvedTheme } = useTheme();
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const mobile = useMediaQuery("(max-width: 768px)");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -55,7 +57,7 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
   useEffect(() => {
     const waveCanvas = waveCanvasRef.current;
     if (!waveCanvas) return;
-    const renderer = createRadarWaveRenderer(waveCanvas, { mobile, reducedMotion });
+    const renderer = createRadarWaveRenderer(waveCanvas, { mobile, reducedMotion, theme: resolvedTheme });
     waveRendererRef.current = renderer;
     return () => {
       renderer?.destroy();
@@ -70,6 +72,10 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
   useEffect(() => {
     waveRendererRef.current?.setMobile(mobile);
   }, [mobile]);
+
+  useEffect(() => {
+    waveRendererRef.current?.setTheme(resolvedTheme);
+  }, [resolvedTheme]);
 
   useEffect(() => {
     const container = containerRef.current;
