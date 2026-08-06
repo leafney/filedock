@@ -2,7 +2,7 @@ Related discussion: [docs/discuss/2026-08-06-notification-launch-consumption.md]
 
 # 通知导航状态一次性消费优化 PRD
 
-状态：已批准，实施中
+状态：实现完成，待人工验收
 
 日期：2026-08-06
 
