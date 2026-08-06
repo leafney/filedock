@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"sync"
@@ -53,6 +55,81 @@ func TestUploadContentStreamsSettlesAndStoresFile(t *testing.T) {
 	read, _ := io.ReadAll(stored)
 	if !bytes.Equal(read, content) {
 		t.Fatalf("stored content = %q", read)
+	}
+}
+
+func TestUploadPartsResumeOutOfOrderAndComplete(t *testing.T) {
+	fixture := newFileTestFixture(t, 20*1024*1024)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	content := make([]byte, 11*1024*1024)
+	for index := range content {
+		content[index] = byte('0' + index%10)
+	}
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-parts", model.FileScopeShared, []FileManifest{{OriginalName: "parts.bin", DeclaredSize: int64(len(content))}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileID := batch.Files[0].ID
+	upload := func(number int, start, end int64) UploadSessionResult {
+		t.Helper()
+		part := content[start : end+1]
+		digest := sha256.Sum256(part)
+		result, err := fixture.svc.UploadPart(context.Background(), fixture.uploader.UserID, fixture.room.Code, fileID, number, start, end, int64(len(content)), int64(len(part)), hex.EncodeToString(digest[:]), bytes.NewReader(part))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	first := upload(1, UploadChunkSize, 2*UploadChunkSize-1)
+	if first.ReceivedBytes != UploadChunkSize || first.Status != model.UploadSessionActive || len(first.Parts) != 1 {
+		t.Fatalf("first result=%+v", first)
+	}
+	upload(0, 0, UploadChunkSize-1)
+	last := upload(2, 2*UploadChunkSize, int64(len(content))-1)
+	if last.Status != model.UploadSessionCompleted || last.ReceivedBytes != int64(len(content)) || len(last.Parts) != 3 {
+		t.Fatalf("last result=%+v", last)
+	}
+	var file model.RoomFile
+	fixture.svc.db.First(&file, "id = ?", fileID)
+	if file.Status != model.FileStatusAvailable || file.Progress != 100 {
+		t.Fatalf("file=%+v", file)
+	}
+	stored, _, err := storage.Open(file.RoomID, file.StorageName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stored.Close()
+	actual, err := io.ReadAll(stored)
+	if err != nil || !bytes.Equal(actual, content) {
+		t.Fatalf("stored size=%d error=%v", len(actual), err)
+	}
+}
+
+func TestUploadPartRetryIsIdempotentAfterCompletion(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	content := []byte("hello")
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-part-idempotent", model.FileScopeShared, []FileManifest{{OriginalName: "hello.txt", DeclaredSize: int64(len(content))}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(content)
+	sha := hex.EncodeToString(digest[:])
+	first, err := fixture.svc.UploadPart(context.Background(), fixture.uploader.UserID, fixture.room.Code, batch.Files[0].ID, 0, 0, 4, 5, 5, sha, bytes.NewReader(content))
+	if err != nil || first.Status != model.UploadSessionCompleted {
+		t.Fatalf("first=%+v error=%v", first, err)
+	}
+	retry, err := fixture.svc.UploadPart(context.Background(), fixture.uploader.UserID, fixture.room.Code, batch.Files[0].ID, 0, 0, 4, 5, 5, sha, bytes.NewReader(content))
+	if err != nil || retry.Status != model.UploadSessionCompleted {
+		t.Fatalf("retry result=%+v error=%v", retry, err)
 	}
 }
 

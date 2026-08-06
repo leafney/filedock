@@ -378,6 +378,12 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 		return err
 	}
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("file_id IN (?)", tx.Model(&model.RoomFile{}).Select("id").Where("room_id = ?", roomID)).Delete(&model.UploadPart{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("room_id = ?", roomID).Delete(&model.UploadSession{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("message_id IN (?)", tx.Model(&model.ChatMessage{}).Select("id").Where("room_id = ?", roomID)).Delete(&model.ChatMessageDeletion{}).Error; err != nil {
 			return err
 		}
@@ -442,17 +448,16 @@ func (s *LifecycleSvc) runCleanup(roomID, jobID string, now time.Time) error {
 }
 
 func (s *LifecycleSvc) recoverInFlightUploads() error {
-	now := s.now()
-	if err := s.failAbandonedUploads([]string{model.FileStatusUploading}, nil, now); err != nil {
-		return err
-	}
-	if s.storage != nil {
-		return s.storage.CleanupTemporaryFiles(now)
+	if s.files != nil {
+		return s.files.ExpireUploadSessions(s.now())
 	}
 	return nil
 }
 
 func (s *LifecycleSvc) expireReservedUploads(now time.Time) error {
+	if s.files != nil {
+		return s.files.ExpireUploadSessions(now)
+	}
 	before := now.Add(-UploadStartTTL).Unix()
 	if err := s.failAbandonedUploads([]string{model.FileStatusReserved}, &before, now); err != nil {
 		return err

@@ -23,11 +23,34 @@ type UploadBatchDTO struct {
 
 type UploadFileDTO struct {
 	FileID       string `json:"fileId"`
+	UploadID     string `json:"uploadId"`
 	DisplayName  string `json:"displayName"`
 	PrivateCode  string `json:"privateCode,omitempty"`
 	DeclaredSize int64  `json:"declaredSize"`
 	Status       string `json:"status"`
+	ChunkSize    int64  `json:"chunkSize"`
+	TotalParts   int    `json:"totalParts"`
 	UploadURL    string `json:"uploadUrl"`
+}
+
+type UploadPartDTO struct {
+	PartNumber  int    `json:"partNumber"`
+	StartOffset int64  `json:"startOffset"`
+	EndOffset   int64  `json:"endOffset"`
+	Length      int64  `json:"length"`
+	SHA256      string `json:"sha256"`
+}
+
+type UploadSessionDTO struct {
+	UploadID      string          `json:"uploadId"`
+	FileID        string          `json:"fileId"`
+	Status        string          `json:"status"`
+	DeclaredSize  int64           `json:"declaredSize"`
+	ChunkSize     int64           `json:"chunkSize"`
+	TotalParts    int             `json:"totalParts"`
+	ReceivedBytes int64           `json:"receivedBytes"`
+	ExpiresAt     int64           `json:"expiresAt"`
+	Parts         []UploadPartDTO `json:"parts"`
 }
 
 type ReusePrivateFilesRequest struct {

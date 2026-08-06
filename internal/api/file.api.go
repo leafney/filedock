@@ -50,14 +50,35 @@ func (a *FileAPI) HandleUploadContent(c *fiber.Ctx) error {
 		return response.Error(c, errc.ErrUnAuthorized, nil)
 	}
 	contentLength := int64(c.Context().Request.Header.ContentLength())
+	partNumber, err := strconv.Atoi(strings.TrimSpace(c.Get("X-Chunk-Number")))
+	if err != nil || partNumber < 0 {
+		return response.Error(c, errc.ErrUploadChunkInvalid, nil)
+	}
+	startOffset, endOffset, totalSize, err := service.ParseUploadContentRange(c.Get(fiber.HeaderContentRange))
+	if err != nil {
+		return response.Error(c, errc.ErrUploadChunkInvalid, nil)
+	}
 	var source io.Reader = c.Context().RequestBodyStream()
 	if source == nil {
 		source = bytes.NewReader(c.Body())
 	}
-	if err := a.biz.UploadContent(c.UserContext(), principal.UserID, c.Params("code"), c.Params("fileId"), contentLength, source); err != nil {
+	result, err := a.biz.UploadPart(c.UserContext(), principal.UserID, c.Params("code"), c.Params("fileId"), partNumber, startOffset, endOffset, totalSize, contentLength, c.Get("X-Chunk-SHA256"), source)
+	if err != nil {
 		return response.Failed(c, err)
 	}
-	return response.Success(c, nil)
+	return response.Success(c, result)
+}
+
+func (a *FileAPI) HandleUploadStatus(c *fiber.Ctx) error {
+	principal, ok := Principal(c)
+	if !ok {
+		return response.Error(c, errc.ErrUnAuthorized, nil)
+	}
+	result, err := a.biz.UploadStatus(principal.UserID, c.Params("code"), c.Params("fileId"))
+	if err != nil {
+		return response.Failed(c, err)
+	}
+	return response.Success(c, result)
 }
 
 func (a *FileAPI) HandleCancelUpload(c *fiber.Ctx) error {

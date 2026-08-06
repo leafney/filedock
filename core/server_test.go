@@ -2,6 +2,8 @@ package core
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -400,16 +402,47 @@ func TestServerFileUploadBatchAndStreamingContent(t *testing.T) {
 	var batchBody struct {
 		Data struct {
 			Files []struct {
-				FileID string `json:"fileId"`
+				FileID     string `json:"fileId"`
+				UploadID   string `json:"uploadId"`
+				ChunkSize  int64  `json:"chunkSize"`
+				TotalParts int    `json:"totalParts"`
 			} `json:"files"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(batchResponse.Body).Decode(&batchBody); err != nil || len(batchBody.Data.Files) != 1 {
 		t.Fatalf("decode batch response: %+v error=%v", batchBody, err)
 	}
+	if batchBody.Data.Files[0].UploadID != batchBody.Data.Files[0].FileID || batchBody.Data.Files[0].ChunkSize != 5 || batchBody.Data.Files[0].TotalParts != 1 {
+		t.Fatalf("upload plan=%+v", batchBody.Data.Files[0])
+	}
+	statusRequest := httptest.NewRequest(fiber.MethodGet, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/files/"+batchBody.Data.Files[0].FileID+"/upload", nil)
+	statusRequest.Header.Set(fiber.HeaderCookie, cookie)
+	statusResponse, err := server.App().Test(statusRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var statusBody struct {
+		Data struct {
+			Status        string `json:"status"`
+			ReceivedBytes int64  `json:"receivedBytes"`
+			Parts         []any  `json:"parts"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(statusResponse.Body).Decode(&statusBody); err != nil {
+		_ = statusResponse.Body.Close()
+		t.Fatal(err)
+	}
+	_ = statusResponse.Body.Close()
+	if statusResponse.StatusCode != fiber.StatusOK || statusBody.Data.Status != "active" || statusBody.Data.ReceivedBytes != 0 || len(statusBody.Data.Parts) != 0 {
+		t.Fatalf("upload status=%d body=%+v", statusResponse.StatusCode, statusBody)
+	}
 	upload := httptest.NewRequest(fiber.MethodPut, "/api/v1/rooms/"+roomBody.Data.RoomCode+"/files/"+batchBody.Data.Files[0].FileID+"/content", bytes.NewBufferString("hello"))
 	upload.Header.Set(fiber.HeaderContentType, fiber.MIMEOctetStream)
 	upload.Header.Set(fiber.HeaderCookie, cookie)
+	upload.Header.Set(fiber.HeaderContentRange, "bytes 0-4/5")
+	upload.Header.Set("X-Chunk-Number", "0")
+	digest := sha256.Sum256([]byte("hello"))
+	upload.Header.Set("X-Chunk-SHA256", hex.EncodeToString(digest[:]))
 	uploadResponse, err := server.App().Test(upload, 5000)
 	if err != nil {
 		t.Fatal(err)

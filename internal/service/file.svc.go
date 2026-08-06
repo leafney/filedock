@@ -19,12 +19,14 @@ import (
 )
 
 const (
-	MaxUploadFiles       = 100
-	MaxOriginalNameRunes = 255
-	UploadStartTTL       = 10 * time.Minute
-	UploadGlobalLimit    = 4
-	UploadRoomLimit      = 2
-	UploadUserLimit      = 2
+	MaxUploadFiles             = 100
+	MaxOriginalNameRunes       = 255
+	UploadStartTTL             = 10 * time.Minute
+	UploadSmallFileLimit int64 = 10 * 1024 * 1024
+	UploadChunkSize      int64 = 5 * 1024 * 1024
+	UploadGlobalLimit          = 4
+	UploadRoomLimit            = 2
+	UploadUserLimit            = 2
 
 	FileEventBatchCreated     = "batch_created"
 	FileEventUploadStarted    = "upload_started"
@@ -108,6 +110,7 @@ type FileSvc struct {
 	downloads     *downloadRegistry
 	notifications *FileNotificationRecorder
 	now           func() time.Time
+	finalizeMu    sync.Mutex
 }
 
 type uploadRegistry struct {
@@ -115,9 +118,11 @@ type uploadRegistry struct {
 	active map[string]uploadActive
 	rooms  map[string]int
 	users  map[string]int
+	files  map[string]int
 }
 
 type uploadActive struct {
+	fileID string
 	roomID string
 	userID string
 	cancel context.CancelFunc
@@ -135,7 +140,7 @@ func NewFileSvc(db *gorm.DB, hub *StreamHub, storages ...*FileStorage) (*FileSvc
 	if err != nil {
 		return nil, err
 	}
-	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]uploadActive), rooms: make(map[string]int), users: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}, notifications: notifications, now: time.Now}, nil
+	return &FileSvc{db: db, hub: hub, storage: storage, uploads: &uploadRegistry{active: make(map[string]uploadActive), rooms: make(map[string]int), users: make(map[string]int), files: make(map[string]int)}, downloads: &downloadRegistry{active: make(map[string]downloadActive), rooms: make(map[string]int), users: make(map[string]int)}, notifications: notifications, now: time.Now}, nil
 }
 
 // CreateUploadBatch validates and reserves the complete batch atomically.
@@ -216,6 +221,10 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 			}
 			file := model.RoomFile{ID: fileID, RoomID: room.ID, BatchID: batchID, UploaderUserID: userID, StorageName: storageName, OriginalName: strings.TrimSpace(manifest.OriginalName), DeclaredMIME: strings.TrimSpace(manifest.DeclaredMIME), DeclaredSize: manifest.DeclaredSize, Scope: scope, PrivateCode: privateCode, Status: model.FileStatusReserved, CreatedAt: now}
 			if err := tx.Create(&file).Error; err != nil {
+				return err
+			}
+			chunkSize, totalParts := uploadChunkPlan(file.DeclaredSize)
+			if err := tx.Create(&model.UploadSession{FileID: file.ID, RoomID: room.ID, UploaderUserID: userID, DeclaredSize: file.DeclaredSize, ChunkSize: chunkSize, TotalParts: totalParts, Status: model.UploadSessionActive, ExpiresAt: room.ExpiresAt, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 				return err
 			}
 			for _, recipient := range recipients {
@@ -347,6 +356,13 @@ func (s *FileSvc) CancelUpload(userID, roomCode, fileID string) error {
 	if err := s.ReleaseUpload(userID, file.ID, model.FileStatusCancelled, errc.ErrUploadCancelled); err != nil {
 		return err
 	}
+	_ = s.db.Where("file_id = ?", file.ID).Delete(&model.UploadPart{}).Error
+	_ = s.db.Where("file_id = ?", file.ID).Delete(&model.UploadSession{}).Error
+	if s.storage != nil {
+		if err := s.storage.DeleteTemporaryFile(file.RoomID, file.StorageName); err != nil {
+			return errx.Wrap(errc.ErrFileStorage, err, nil)
+		}
+	}
 	s.refreshBatchStatus(file.BatchID)
 	s.publishFileProjection(file.ID, "file.upload_cancelled", map[string]interface{}{"failureCode": errc.ErrUploadCancelled})
 	return nil
@@ -378,6 +394,9 @@ func (s *FileSvc) CompleteUpload(userID, fileID, detectedMIME string, actualSize
 		}
 		if fileResult.RowsAffected != 1 {
 			return errx.New(errc.ErrFileState, nil)
+		}
+		if err := tx.Model(&model.UploadSession{}).Where("file_id = ? AND status = ?", file.ID, model.UploadSessionActive).Updates(map[string]interface{}{"status": model.UploadSessionCompleted, "received_bytes": actualSize, "updated_at": now, "completed_at": now}).Error; err != nil {
+			return err
 		}
 		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventUploadCompleted, now)
 		if err != nil {
@@ -422,6 +441,13 @@ func (s *FileSvc) ReleaseUpload(userID, fileID, targetStatus string, failureCode
 			return errx.New(errc.ErrFileState, nil)
 		}
 		if err := tx.Model(&model.RoomFile{}).Where("id = ? AND status IN ?", file.ID, []string{model.FileStatusReserved, model.FileStatusUploading}).Updates(map[string]interface{}{"status": targetStatus, "failure_code": failureCode, "failed_at": now}).Error; err != nil {
+			return err
+		}
+		sessionStatus := model.UploadSessionFailed
+		if targetStatus == model.FileStatusCancelled {
+			sessionStatus = model.UploadSessionCancelled
+		}
+		if err := tx.Model(&model.UploadSession{}).Where("file_id = ? AND status = ?", file.ID, model.UploadSessionActive).Updates(map[string]interface{}{"status": sessionStatus, "updated_at": now}).Error; err != nil {
 			return err
 		}
 		eventType := FileEventUploadFailed
@@ -469,25 +495,34 @@ func (s *FileSvc) refreshBatchStatus(batchID string) {
 }
 
 func (r *uploadRegistry) begin(parent context.Context, fileID, roomID, userID string) (context.Context, func(), error) {
+	return r.beginPart(parent, fileID, fileID, roomID, userID)
+}
+
+func (r *uploadRegistry) beginPart(parent context.Context, key, fileID, roomID, userID string) (context.Context, func(), error) {
 	if parent == nil {
 		parent = context.Background()
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.active[fileID]; exists || len(r.active) >= UploadGlobalLimit || r.rooms[roomID] >= UploadRoomLimit || r.users[userID] >= UploadUserLimit {
+	if r.files == nil {
+		r.files = make(map[string]int)
+	}
+	if _, exists := r.active[key]; exists || len(r.active) >= UploadGlobalLimit || r.rooms[roomID] >= UploadRoomLimit || r.users[userID] >= UploadUserLimit || r.files[fileID] >= 2 {
 		return nil, nil, errx.New(errc.ErrUploadLimited, nil)
 	}
 	ctx, cancel := context.WithCancel(parent)
-	r.active[fileID] = uploadActive{roomID: roomID, userID: userID, cancel: cancel}
+	r.active[key] = uploadActive{fileID: fileID, roomID: roomID, userID: userID, cancel: cancel}
 	r.rooms[roomID]++
 	r.users[userID]++
+	r.files[fileID]++
 	var once sync.Once
 	finish := func() {
 		once.Do(func() {
 			r.mu.Lock()
-			delete(r.active, fileID)
+			delete(r.active, key)
 			r.rooms[roomID]--
 			r.users[userID]--
+			r.files[fileID]--
 			r.mu.Unlock()
 			cancel()
 		})
@@ -500,10 +535,15 @@ func (r *uploadRegistry) cancel(fileID string) {
 		return
 	}
 	r.mu.Lock()
-	active := r.active[fileID]
+	cancels := make([]context.CancelFunc, 0)
+	for _, active := range r.active {
+		if active.fileID == fileID {
+			cancels = append(cancels, active.cancel)
+		}
+	}
 	r.mu.Unlock()
-	if active.cancel != nil {
-		active.cancel()
+	for _, cancel := range cancels {
+		cancel()
 	}
 }
 

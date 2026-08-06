@@ -22,6 +22,8 @@ const (
 	ErrChatContent         = 40010
 	ErrChatRecipient       = 40011
 	ErrFileLifecycleReason = 40012
+	ErrUploadChunkInvalid  = 40013
+	ErrUploadChunkHash     = 40014
 
 	ErrUnAuthorized             = 40101
 	ErrAuthExpired              = 40102
@@ -71,6 +73,7 @@ const (
 	ErrChatRecallExpired       = 40926
 	ErrFileRestoreRequestState = 40927
 	ErrDownloadCancelled       = 40928
+	ErrUploadChunkConflict     = 40929
 	ErrDownloadRangeInvalid    = 41601
 
 	ErrRateLimited     = 42901
@@ -112,6 +115,8 @@ var definitions = map[int]Definition{
 	ErrChatContent:              {Code: ErrChatContent, MessageKey: "error.chat_content_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrChatRecipient:            {Code: ErrChatRecipient, MessageKey: "error.chat_recipient_invalid", HTTPStatus: http.StatusBadRequest},
 	ErrFileLifecycleReason:      {Code: ErrFileLifecycleReason, MessageKey: "error.file_lifecycle_reason_invalid", HTTPStatus: http.StatusBadRequest},
+	ErrUploadChunkInvalid:       {Code: ErrUploadChunkInvalid, MessageKey: "error.upload_chunk_invalid", HTTPStatus: http.StatusBadRequest},
+	ErrUploadChunkHash:          {Code: ErrUploadChunkHash, MessageKey: "error.upload_chunk_hash_mismatch", HTTPStatus: http.StatusBadRequest},
 	ErrUnAuthorized:             {Code: ErrUnAuthorized, MessageKey: "error.unauthorized", HTTPStatus: http.StatusUnauthorized},
 	ErrAuthExpired:              {Code: ErrAuthExpired, MessageKey: "error.auth_expired", HTTPStatus: http.StatusUnauthorized},
 	ErrTokenInvalid:             {Code: ErrTokenInvalid, MessageKey: "error.token_invalid", HTTPStatus: http.StatusUnauthorized},
@@ -156,6 +161,7 @@ var definitions = map[int]Definition{
 	ErrChatRecallExpired:        {Code: ErrChatRecallExpired, MessageKey: "error.chat_recall_expired", HTTPStatus: http.StatusConflict},
 	ErrFileRestoreRequestState:  {Code: ErrFileRestoreRequestState, MessageKey: "error.file_restore_request_state_conflict", HTTPStatus: http.StatusConflict},
 	ErrDownloadCancelled:        {Code: ErrDownloadCancelled, MessageKey: "error.download_cancelled_by_file_trash", HTTPStatus: http.StatusConflict},
+	ErrUploadChunkConflict:      {Code: ErrUploadChunkConflict, MessageKey: "error.upload_chunk_conflict", HTTPStatus: http.StatusConflict},
 	ErrDownloadRangeInvalid:     {Code: ErrDownloadRangeInvalid, MessageKey: "error.download_range_invalid", HTTPStatus: http.StatusRequestedRangeNotSatisfiable},
 	ErrRateLimited:              {Code: ErrRateLimited, MessageKey: "error.rate_limited", HTTPStatus: http.StatusTooManyRequests},
 	ErrPINPaused:                {Code: ErrPINPaused, MessageKey: "error.pin_paused", HTTPStatus: http.StatusTooManyRequests},

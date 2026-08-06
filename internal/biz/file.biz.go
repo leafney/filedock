@@ -32,13 +32,38 @@ func (b *FileBiz) CreateUploadBatch(userID, roomCode string, request dto.CreateU
 	}
 	response := dto.UploadBatchDTO{BatchID: result.Batch.ID, Scope: result.Batch.Scope, Status: result.Batch.Status, DeclaredTotalSize: result.Batch.DeclaredTotalSize, Files: make([]dto.UploadFileDTO, 0, len(result.Files))}
 	for _, file := range result.Files {
-		response.Files = append(response.Files, dto.UploadFileDTO{FileID: file.ID, DisplayName: file.OriginalName, PrivateCode: file.PrivateCode, DeclaredSize: file.DeclaredSize, Status: file.Status, UploadURL: fmt.Sprintf("/api/v1/rooms/%s/files/%s/content", roomCode, file.ID)})
+		chunkSize, totalParts := service.UploadChunkPlan(file.DeclaredSize)
+		response.Files = append(response.Files, dto.UploadFileDTO{FileID: file.ID, UploadID: file.ID, DisplayName: file.OriginalName, PrivateCode: file.PrivateCode, DeclaredSize: file.DeclaredSize, Status: file.Status, ChunkSize: chunkSize, TotalParts: totalParts, UploadURL: fmt.Sprintf("/api/v1/rooms/%s/files/%s/content", roomCode, file.ID)})
 	}
 	return response, nil
 }
 
+func (b *FileBiz) UploadStatus(userID, roomCode, fileID string) (dto.UploadSessionDTO, error) {
+	result, err := b.files.UploadStatus(userID, roomCode, fileID)
+	if err != nil {
+		return dto.UploadSessionDTO{}, err
+	}
+	return uploadSessionDTO(result), nil
+}
+
 func (b *FileBiz) UploadContent(ctx context.Context, userID, roomCode, fileID string, contentLength int64, source io.Reader) error {
 	return b.files.UploadContent(ctx, userID, roomCode, fileID, contentLength, source)
+}
+
+func (b *FileBiz) UploadPart(ctx context.Context, userID, roomCode, fileID string, partNumber int, startOffset, endOffset, totalSize, contentLength int64, expectedSHA string, source io.Reader) (dto.UploadSessionDTO, error) {
+	result, err := b.files.UploadPart(ctx, userID, roomCode, fileID, partNumber, startOffset, endOffset, totalSize, contentLength, expectedSHA, source)
+	if err != nil {
+		return dto.UploadSessionDTO{}, err
+	}
+	return uploadSessionDTO(result), nil
+}
+
+func uploadSessionDTO(value service.UploadSessionResult) dto.UploadSessionDTO {
+	parts := make([]dto.UploadPartDTO, 0, len(value.Parts))
+	for _, part := range value.Parts {
+		parts = append(parts, dto.UploadPartDTO{PartNumber: part.PartNumber, StartOffset: part.StartOffset, EndOffset: part.EndOffset, Length: part.Length, SHA256: part.SHA256})
+	}
+	return dto.UploadSessionDTO{UploadID: value.UploadID, FileID: value.FileID, Status: value.Status, DeclaredSize: value.DeclaredSize, ChunkSize: value.ChunkSize, TotalParts: value.TotalParts, ReceivedBytes: value.ReceivedBytes, ExpiresAt: value.ExpiresAt, Parts: parts}
 }
 
 func (b *FileBiz) CancelUpload(userID, roomCode, fileID string) error {

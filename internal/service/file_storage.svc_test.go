@@ -188,13 +188,15 @@ func TestLifecycleCleanupDeletesFileStorageAndMetadata(t *testing.T) {
 	if _, _, err := storage.Open(fixture.room.ID, file.StorageName); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stored file still available: %v", err)
 	}
-	var files, batches, recipients, events int64
+	var files, batches, sessions, parts, recipients, events int64
 	fixture.svc.db.Model(&model.RoomFile{}).Count(&files)
 	fixture.svc.db.Model(&model.UploadBatch{}).Count(&batches)
+	fixture.svc.db.Model(&model.UploadSession{}).Count(&sessions)
+	fixture.svc.db.Model(&model.UploadPart{}).Count(&parts)
 	fixture.svc.db.Model(&model.FileRecipient{}).Count(&recipients)
 	fixture.svc.db.Model(&model.FileEvent{}).Count(&events)
-	if files+batches+recipients+events != 0 {
-		t.Fatalf("file metadata remains: files=%d batches=%d recipients=%d events=%d", files, batches, recipients, events)
+	if files+batches+sessions+parts+recipients+events != 0 {
+		t.Fatalf("file metadata remains: files=%d batches=%d sessions=%d parts=%d recipients=%d events=%d", files, batches, sessions, parts, recipients, events)
 	}
 }
 
