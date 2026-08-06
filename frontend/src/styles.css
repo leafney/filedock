@@ -1149,6 +1149,8 @@ html[data-theme="dark"] .room-chat-placeholder,
 html[data-theme="dark"] .room-chat-empty,
 html[data-theme="dark"] .chat-empty-state,
 html[data-theme="dark"] .file-empty-state { color: var(--fd-text-muted); }
+html[data-theme="dark"] .room-chat-workspace,
+html[data-theme="dark"] .room-chat-empty { background: var(--fd-page); }
 html[data-theme="dark"] .chat-panel-heading,
 html[data-theme="dark"] .chat-composer,
 html[data-theme="dark"] .room-transfer-bar,
@@ -1167,6 +1169,14 @@ html[data-theme="dark"] .file-timeline { background: linear-gradient(180deg, var
 html[data-theme="dark"] .chat-bubble { background: var(--fd-surface); color: var(--fd-text-secondary); box-shadow: 0 1px 3px rgb(2 6 23 / 35%); }
 html[data-theme="dark"] .chat-message-row.is-own .chat-bubble { background: var(--fd-primary-soft); color: #ccfbf1; }
 html[data-theme="dark"] .chat-bubble.is-recalled { background: var(--fd-surface-hover); color: var(--fd-text-muted); }
+html[data-theme="dark"] .chat-composer textarea {
+  border-color: var(--fd-border);
+  background: var(--fd-surface-soft);
+  color: var(--fd-text);
+  caret-color: var(--fd-primary);
+}
+html[data-theme="dark"] .chat-composer textarea::placeholder { color: var(--fd-text-faint); opacity: 1; }
+html[data-theme="dark"] .chat-composer textarea:focus { border-color: var(--fd-focus); box-shadow: 0 0 0 3px rgb(45 212 191 / 16%); }
 html[data-theme="dark"] .chat-bubble small,
 html[data-theme="dark"] .chat-message-meta,
 html[data-theme="dark"] .chat-load-newer-state,
