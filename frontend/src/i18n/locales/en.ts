@@ -16,6 +16,12 @@ const en = {
     zhCN: "简体中文",
     en: "English",
   },
+  theme: {
+    mode: "Theme mode",
+    system: "Follow system",
+    dark: "Dark",
+    light: "Light",
+  },
   home: {
     loading: "Checking service status…",
     unavailable: "The service is unavailable. Make sure the backend is running, then refresh the page.",

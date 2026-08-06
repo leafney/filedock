@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f8fafc" />
+    <script>
+      (() => {
+        const root = document.documentElement;
+        root.dataset.themeInitializing = "true";
+        let mode = "system";
+        try {
+          const stored = window.localStorage.getItem("filedock.theme");
+          if (stored === "dark" || stored === "light" || stored === "system") mode = stored;
+        } catch {
+          // 使用默认的跟随系统模式。
+        }
+        const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+        const resolved = mode === "dark" || (mode === "system" && systemDark) ? "dark" : "light";
+        root.dataset.theme = resolved;
+        root.style.colorScheme = resolved;
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>FileDock</title>
   </head>

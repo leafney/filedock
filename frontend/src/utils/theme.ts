@@ -34,3 +34,9 @@ export function readThemeModeFromStorageEvent(event: StorageEvent): ThemeMode | 
   if (event.key !== themeStorageKey) return null;
   return normalizeThemeMode(event.newValue) ?? "system";
 }
+
+export function detectSystemPrefersDark(): boolean {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}

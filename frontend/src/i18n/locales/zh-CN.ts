@@ -10,6 +10,12 @@ const zhCN = {
     zhCN: "简体中文",
     en: "English",
   },
+  theme: {
+    mode: "主题模式",
+    system: "跟随系统",
+    dark: "深色",
+    light: "浅色",
+  },
   home: {
     loading: "正在检查服务状态…",
     unavailable: "服务暂不可用，请确认后端已启动后刷新页面。",

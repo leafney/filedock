@@ -1,4 +1,4 @@
-import { BellOutlined, DownOutlined, GlobalOutlined, ShareAltOutlined, SettingOutlined } from "@ant-design/icons";
+import { BellOutlined, BgColorsOutlined, DownOutlined, GlobalOutlined, ShareAltOutlined, SettingOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { Avatar, Badge, Button, Dropdown } from "antd";
 import type { ReactNode } from "react";
@@ -9,6 +9,7 @@ import type { Session } from "../types/domain";
 import { getAvatarInitial, getStableAvatarColor } from "../utils/avatar";
 import { normalizeLanguage } from "../i18n";
 import { openNotificationCenter, useNotificationCenter } from "./NotificationCenter";
+import { useTheme } from "./ThemeProvider";
 
 export interface RoomHeaderActions {
   role: "owner" | "member";
@@ -31,6 +32,7 @@ interface Props {
 
 export function GlobalHeader({ variant, session, fallbackName = "?", center, onOpenProfile, onShare, extraActions, roomActions }: Props) {
   const { t, i18n } = useTranslation();
+  const { mode, setMode } = useTheme();
   const notifications = useNotificationCenter();
   const roomVariant = variant === "room";
   const displayName = session?.displayName || fallbackName || "?";
@@ -46,14 +48,27 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, onO
     }
     if (children.length > 0) roomItems.push({ key: "room-actions", icon: <SettingOutlined />, label: t("room.workspace.roomActions"), children });
   }
+  const themeItems: NonNullable<MenuProps["items"]> = (["system", "dark", "light"] as const).map((value) => ({
+    key: `theme-${value}`,
+    label: (
+      <span className="theme-menu-option" role="menuitemradio" aria-checked={mode === value}>
+        <span className={`theme-menu-dot${mode === value ? " is-selected" : ""}`} aria-hidden="true" />
+        {t(`theme.${value}`)}
+      </span>
+    ),
+  }));
   const menuItems: MenuProps["items"] = [
     ...(session ? [{ key: "profile", icon: <SettingOutlined />, label: t("home.profile") }] : []),
     ...roomItems,
+    { key: "theme", icon: <BgColorsOutlined />, label: t("theme.mode"), children: themeItems },
     { key: "language", icon: <GlobalOutlined />, label: language === "zh-CN" ? t("language.en") : t("language.zhCN") },
   ];
   const onMenuClick: MenuProps["onClick"] = ({ key }) => {
     if (key === "profile") { onOpenProfile(); return; }
     if (key === "language") { void i18n.changeLanguage(language === "zh-CN" ? "en" : "zh-CN"); return; }
+    if (key === "theme-system") { setMode("system"); return; }
+    if (key === "theme-dark") { setMode("dark"); return; }
+    if (key === "theme-light") { setMode("light"); return; }
     if (key === "room-extend") { roomActions?.onExtend?.(); return; }
     if (key === "room-dissolve") { roomActions?.onDissolve?.(); return; }
     if (key === "room-leave") roomActions?.onLeave?.();
