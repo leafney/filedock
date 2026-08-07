@@ -167,8 +167,6 @@ const en = {
       shareRoom: "Share room",
       openMembers: "View room members",
       more: "More actions",
-      fileWorkspace: "File workspace",
-      roomFiles: "Room files",
       addFiles: "Add files",
       sendExisting: "Send existing private files",
       fileList: "File list",

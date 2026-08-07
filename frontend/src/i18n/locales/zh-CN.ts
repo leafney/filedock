@@ -161,8 +161,6 @@ const zhCN = {
       shareRoom: "分享房间",
       openMembers: "查看房间成员",
       more: "更多操作",
-      fileWorkspace: "文件工作区",
-      roomFiles: "房间文件",
       addFiles: "添加文件",
       sendExisting: "发送已有私密文件",
       fileList: "文件列表",
