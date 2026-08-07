@@ -13,6 +13,7 @@ import type { RoomMember, RoomSnapshot, Session } from "../../types/domain";
 import { durationParts, formatBytes } from "../../utils/format";
 import { useDialogFocus } from "../../hooks/use-dialog-focus";
 import { copyText } from "../../utils/clipboard";
+import { roomCapacitySummary } from "../../utils/room-capacity";
 
 interface Props {
   room: RoomSnapshot;
@@ -70,7 +71,7 @@ export function RoomWorkspace(props: Props) {
   const expires = Math.max(0, props.room.expiresAt - now);
   const duration = durationParts(expires);
   const countdown = props.destroyAt ? Math.max(0, Math.ceil(props.destroyAt - now)) : 0;
-  const capacityPercent = props.room.capacity.capacityBytes > 0 ? Math.min(100, props.room.capacity.usedBytes * 100 / props.room.capacity.capacityBytes) : 0;
+  const capacity = roomCapacitySummary(props.room.capacity, props.room.role);
   return <main className="room-page">
     <GlobalHeader
       variant="room"
@@ -79,8 +80,8 @@ export function RoomWorkspace(props: Props) {
         <Summary label={t("room.members")} value={t("room.workspace.people", { count: props.room.members.length })} />
         <Summary label={t("room.workspace.remaining")} value={t("room.workspace.duration", { hours: String(duration.hours), minutes: String(duration.minutes), seconds: String(duration.seconds) })} />
         <button className="room-capacity-summary" type="button" onClick={() => setCapacityOpen(true)}>
-          <span>{t("room.workspace.capacity")}</span><strong>{formatBytes(props.room.capacity.usedBytes)} / {formatBytes(props.room.capacity.capacityBytes)}</strong>
-          <i><i style={{ width: `${capacityPercent}%` }} /></i>
+          <span>{t("room.workspace.capacity")}</span><strong>{formatBytes(capacity.occupiedBytes)} / {formatBytes(props.room.capacity.capacityBytes)}</strong>
+          <i><i style={{ width: `${capacity.percent}%` }} /></i>
         </button>
       </div>}
       extraActions={<><button className="room-icon-button room-chat-mobile-trigger" type="button" aria-label={t("chat.openMobile")} onClick={() => setChatMobileOpen(true)}><MessageSquare aria-hidden="true" />{chatUnread > 0 && <b>{chatUnread > 99 ? "99+" : chatUnread}</b>}</button><button className="room-icon-button room-members-trigger" type="button" aria-label={t("room.workspace.openMembers")} onClick={() => setMembersOpen(true)}><Users aria-hidden="true" /></button></>}
