@@ -430,21 +430,22 @@ func (s *FileSvc) projectEventGroup(events []model.FileEvent, viewer model.RoomM
 		return FileEventProjection{}, false, nil
 	}
 	latest := events[0]
+	initiator := events[len(events)-1]
 	operationID := latest.OperationID
 	if operationID == "" {
 		operationID = latest.FileID
 	}
-	projection := FileEventProjection{EventID: latest.ID, OperationID: operationID, OperationType: fileEventOperationType(events), Type: latest.Type, ActorID: latest.ActorUserID, CreatedAt: latest.CreatedAt, History: make([]FileEventHistory, 0, len(events))}
-	if latest.ActorUserID != "" {
+	projection := FileEventProjection{EventID: latest.ID, OperationID: operationID, OperationType: fileEventOperationType(events), Type: latest.Type, ActorID: initiator.ActorUserID, CreatedAt: latest.CreatedAt, History: make([]FileEventHistory, 0, len(events))}
+	if initiator.ActorUserID != "" {
 		var actor model.RoomMember
-		if err := s.db.Where("room_id = ? AND user_id = ?", latest.RoomID, latest.ActorUserID).First(&actor).Error; err == nil {
+		if err := s.db.Where("room_id = ? AND user_id = ?", latest.RoomID, initiator.ActorUserID).First(&actor).Error; err == nil {
 			projection.ActorName = actor.DisplayName
 		}
 	}
 	var file model.RoomFile
 	fileExists := s.db.Where("id = ? AND room_id = ?", latest.FileID, latest.RoomID).First(&file).Error == nil
 	if !fileExists {
-		return projection, viewer.Role == model.MemberRoleOwner || latest.ActorUserID == viewer.UserID, nil
+		return projection, viewer.Role == model.MemberRoleOwner || initiator.ActorUserID == viewer.UserID, nil
 	}
 	var recipients []model.FileRecipient
 	if err := s.db.Where("file_id = ?", file.ID).Order("sent_at ASC, id ASC").Find(&recipients).Error; err != nil {
