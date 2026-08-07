@@ -504,8 +504,8 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-topbar-actions,
 .room-topbar-summary,
 .room-topbar-identity button,
-.room-file-toolbar,
-.room-file-toolbar > div,
+.room-file-header,
+.room-file-actions,
 .room-member-item,
 .room-member-item strong,
 .room-member-chat-hit > div > span,
@@ -559,8 +559,8 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-member-panel { overflow: hidden; border-right: 1px solid var(--room-border); }
 .room-member-panel.is-drawer { border: 0; }
 .room-panel-heading { display: flex; min-height: 70px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--room-border); padding: 0.85rem 1rem; }
-.room-panel-heading span, .room-file-toolbar span { color: var(--room-primary); font-size: 0.62rem; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
-.room-panel-heading h2, .room-file-toolbar h1 { font-size: 1rem; margin: 0.22rem 0 0; }
+.room-panel-heading span { color: var(--room-primary); font-size: 0.62rem; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
+.room-panel-heading h2 { font-size: 1rem; margin: 0.22rem 0 0; }
 .room-panel-heading b { display: grid; min-width: 1.7rem; height: 1.7rem; place-items: center; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 0.68rem; }
 .room-panel-room-info { display: grid; min-width: 0; gap: 0.35rem; }
 .room-panel-room-info > strong { overflow: hidden; color: var(--room-text); font-size: 0.88rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -587,14 +587,14 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .presence.online { background: #22c55e; }
 .presence.away { background: #f59e0b; }
 
-.room-files-shell { display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
-.room-file-toolbar { justify-content: space-between; gap: 1rem; min-height: 70px; border-bottom: 1px solid var(--room-border); padding: 0.8rem 1.1rem; }
-.room-file-toolbar > div:last-child { justify-content: flex-end; gap: 0.5rem; }
-.room-file-toolbar button, .room-blocking-state button { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.25rem; border: 1px solid var(--room-primary); border-radius: 0.55rem; background: var(--room-primary); color: white; cursor: pointer; font-weight: 650; padding: 0.45rem 0.75rem; }
-.room-file-toolbar button + button { background: #fff; color: var(--room-primary); }
-.room-file-tabs { display: flex; gap: 1.2rem; min-height: 43px; align-items: end; border-bottom: 1px solid var(--room-border); padding: 0 1.1rem; }
-.room-file-tabs button { height: 43px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--room-muted); cursor: pointer; padding: 0 0.15rem; }
+.room-files-shell { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.room-file-header { min-width: 0; justify-content: space-between; gap: 1rem; min-height: 55px; border-bottom: 1px solid var(--room-border); padding: 0.35rem 1.1rem 0; }
+.room-file-tabs { display: flex; min-width: 0; align-items: end; gap: 1.2rem; overflow-x: auto; padding: 0; scrollbar-width: thin; }
+.room-file-tabs button { flex: 0 0 auto; height: 49px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--room-muted); cursor: pointer; padding: 0 0.15rem; white-space: nowrap; }
 .room-file-tabs button.active { border-bottom-color: var(--room-primary); color: var(--room-primary); font-weight: 700; }
+.room-file-actions { flex: 0 0 auto; justify-content: flex-end; gap: 0.5rem; }
+.room-file-actions button, .room-blocking-state button { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.25rem; border: 1px solid var(--room-primary); border-radius: 0.55rem; background: var(--room-primary); color: white; cursor: pointer; font-weight: 650; padding: 0.45rem 0.75rem; white-space: nowrap; }
+.room-file-actions button + button { background: #fff; color: var(--room-primary); }
 .file-tab-count { display: inline-grid; min-width: 1.2rem; height: 1.2rem; place-items: center; border-radius: 999px; background: #f1f5f9; color: #64748b; font-size: 0.58rem; margin-left: 0.35rem; padding: 0 0.28rem; }
 .room-file-tabs button.active .file-tab-count { background: #ccfbf1; color: #0f766e; }
 .room-file-stage-placeholder { display: flex; min-height: 0; align-items: center; justify-content: center; flex-direction: column; border: 2px dashed #cbd5e1; border-radius: 1rem; background: #f8fafc; color: #94a3b8; margin: 1rem; text-align: center; }
@@ -788,13 +788,12 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .chat-mobile-overlay .chat-history-status { min-height: 2rem; padding-inline: 0.55rem; }
   .chat-mobile-overlay .chat-return-latest { right: 0.65rem; bottom: max(0.65rem, env(safe-area-inset-bottom)); }
   .chat-mobile-overlay .chat-composer { padding-bottom: max(0.55rem, env(safe-area-inset-bottom)); }
-  .room-file-toolbar { min-height: 62px; padding: 0.65rem 0.8rem; }
-  .room-file-toolbar > div:first-child span { display: none; }
-  .room-file-toolbar h1 { margin: 0; }
-  .room-file-toolbar > div:last-child button { width: 2.3rem; padding: 0; justify-content: center; }
-  .room-file-toolbar > div:last-child button { font-size: 0; }
-  .room-file-toolbar > div:last-child button svg { width: 1rem; height: 1rem; }
-  .room-file-tabs { padding: 0 0.8rem; }
+  .room-file-header { flex-wrap: wrap; gap: 0.35rem; min-height: 52px; padding: 0.35rem 0.65rem 0; }
+  .room-file-tabs { flex: 1 1 14rem; gap: 0.8rem; }
+  .room-file-actions { gap: 0.3rem; }
+  .room-file-actions button { width: 2.3rem; justify-content: center; padding: 0; }
+  .room-file-actions button { font-size: 0; }
+  .room-file-actions button svg { width: 1rem; height: 1rem; }
   .room-file-stage-placeholder { margin: 0.75rem; }
   .room-transfer-placeholder { justify-content: center; min-height: 52px; }
   .room-overlay { align-items: end; padding: 0; }
@@ -1124,7 +1123,7 @@ html[data-theme="dark"] .room-owner-corner { border-color: var(--fd-surface); }
 html[data-theme="dark"] .room-member-unread { border-color: var(--fd-surface); }
 html[data-theme="dark"] .room-member-item strong small { background: var(--fd-primary-soft); color: #5eead4; }
 html[data-theme="dark"] .presence { background: #475569; }
-html[data-theme="dark"] .room-file-toolbar button + button,
+html[data-theme="dark"] .room-file-actions button + button,
 html[data-theme="dark"] .room-share-actions button,
 html[data-theme="dark"] .upload-scope button,
 html[data-theme="dark"] .upload-composer > section > footer button,
