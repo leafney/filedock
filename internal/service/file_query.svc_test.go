@@ -134,3 +134,72 @@ func TestFileEventsPersistAndRespectViewerVisibility(t *testing.T) {
 		}
 	}
 }
+
+func TestFileEventsAggregateOperationsAndTransferLifecycle(t *testing.T) {
+	fixture := newFileTestFixture(t, 10_000)
+	file := makeAvailableFile(t, fixture, "aggregate-events", model.FileScopeDirect, "aggregate-secret.bin", 100, []string{fixture.recipient.UserID})
+	if _, err := fixture.svc.TrashFile(fixture.uploader.UserID, fixture.room.Code, file.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	uploaderEvents, err := fixture.svc.ListFileEvents(fixture.uploader.UserID, fixture.room.Code, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(uploaderEvents.Items) != 2 {
+		t.Fatalf("expected upload and trash cards, got %+v", uploaderEvents.Items)
+	}
+	for _, item := range uploaderEvents.Items {
+		if len(item.History) == 0 {
+			t.Fatalf("card history is empty: %+v", item)
+		}
+	}
+
+	// Restore the file, decline the original delivery, then reuse it. The
+	// second delivery must create a new transfer operation instead of mutating
+	// the original upload card.
+	if _, err := fixture.svc.RestoreFile(fixture.uploader.UserID, fixture.room.Code, file.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.DeclineFile(fixture.recipient.UserID, fixture.room.Code, file.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.svc.ReusePrivateFiles(fixture.uploader.UserID, fixture.room.Code, []string{file.ID}, []string{fixture.recipient.UserID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.AcceptFile(fixture.recipient.UserID, fixture.room.Code, file.ID); err != nil {
+		t.Fatal(err)
+	}
+	uploaderEvents, err = fixture.svc.ListFileEvents(fixture.uploader.UserID, fixture.room.Code, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(uploaderEvents.Items) != 4 {
+		t.Fatalf("expected four independent operation cards, got %+v", uploaderEvents.Items)
+	}
+	transferCards := 0
+	for _, item := range uploaderEvents.Items {
+		if item.OperationType != "transfer" {
+			continue
+		}
+		transferCards++
+		if item.RecipientSummary == nil || item.RecipientSummary.Accepted != 1 || item.RecipientSummary.Total != 1 {
+			t.Fatalf("transfer summary = %+v", item)
+		}
+	}
+	if transferCards != 1 {
+		t.Fatalf("transfer cards = %d, events=%+v", transferCards, uploaderEvents.Items)
+	}
+	ownerEvents, err := fixture.svc.ListFileEvents(fixture.owner.UserID, fixture.room.Code, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range ownerEvents.Items {
+		if item.RecipientSummary != nil && len(item.History) > 0 {
+			for _, history := range item.History {
+				if len(history.Recipients) > 0 {
+					t.Fatalf("owner saw private recipient details: %+v", item)
+				}
+			}
+		}
+	}
+}

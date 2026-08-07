@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -49,12 +50,40 @@ type FileListResult struct {
 }
 
 type FileEventProjection struct {
-	EventID   string          `json:"eventId"`
-	Type      string          `json:"type"`
-	ActorID   string          `json:"actorId,omitempty"`
-	ActorName string          `json:"actorName,omitempty"`
-	CreatedAt int64           `json:"createdAt"`
-	File      *FileProjection `json:"file,omitempty"`
+	EventID           string                     `json:"eventId"`
+	OperationID       string                     `json:"operationId"`
+	OperationType     string                     `json:"operationType"`
+	Type              string                     `json:"type"`
+	ActorID           string                     `json:"actorId,omitempty"`
+	ActorName         string                     `json:"actorName,omitempty"`
+	CreatedAt         int64                      `json:"createdAt"`
+	File              *FileProjection            `json:"file,omitempty"`
+	History           []FileEventHistory         `json:"history"`
+	RecipientSummary  *FileRecipientEventSummary `json:"recipientSummary,omitempty"`
+	SkippedRecipients []FileEventRecipient       `json:"skippedRecipients,omitempty"`
+}
+
+type FileEventHistory struct {
+	EventID    string               `json:"eventId"`
+	Type       string               `json:"type"`
+	ActorID    string               `json:"actorId,omitempty"`
+	ActorName  string               `json:"actorName,omitempty"`
+	CreatedAt  int64                `json:"createdAt"`
+	Recipients []FileEventRecipient `json:"recipients,omitempty"`
+}
+
+type FileEventRecipient struct {
+	UserID      string `json:"userId"`
+	DisplayName string `json:"displayName"`
+	Status      string `json:"status,omitempty"`
+}
+
+type FileRecipientEventSummary struct {
+	Total    int `json:"total"`
+	Pending  int `json:"pending"`
+	Accepted int `json:"accepted"`
+	Declined int `json:"declined"`
+	Skipped  int `json:"skipped,omitempty"`
 }
 
 type FileEventPage struct {
@@ -129,28 +158,50 @@ func (s *FileSvc) ListFileEvents(userID, roomCode, cursor string, limit int) (Fi
 	}
 	limit = normalizeLimit(limit)
 	var events []model.FileEvent
-	if err := s.db.Where("room_id = ?", room.ID).Order("created_at DESC, id DESC").Find(&events).Error; err != nil {
+	if err := s.db.Where("room_id = ? AND file_id <> ''", room.ID).Order("created_at DESC, id DESC").Find(&events).Error; err != nil {
 		return FileEventPage{}, err
 	}
-	start := cursorStart(events, cursor, func(event model.FileEvent) string { return event.ID })
-	items := make([]FileEventProjection, 0, limit)
-	next := ""
-	for index := start; index < len(events); index++ {
-		event := events[index]
-		projection, visible, err := s.projectEvent(event, viewer)
-		if err != nil {
-			return FileEventPage{}, err
+	groups := make(map[string][]model.FileEvent)
+	order := make([]string, 0)
+	for _, event := range events {
+		operationID := event.OperationID
+		if operationID == "" {
+			operationID = event.FileID
 		}
-		if !visible {
-			continue
+		key := event.FileID + "\x00" + operationID
+		if _, exists := groups[key]; !exists {
+			order = append(order, key)
 		}
-		if len(items) == limit {
-			next = encodeCursor(items[len(items)-1].EventID)
-			break
-		}
-		items = append(items, projection)
+		groups[key] = append(groups[key], event)
 	}
-	return FileEventPage{Items: items, NextCursor: next}, nil
+	cards := make([]FileEventProjection, 0, len(order))
+	for _, key := range order {
+		card, visible, projectErr := s.projectEventGroup(groups[key], viewer)
+		if projectErr != nil {
+			return FileEventPage{}, projectErr
+		}
+		if visible {
+			cards = append(cards, card)
+		}
+	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		if cards[i].CreatedAt != cards[j].CreatedAt {
+			return cards[i].CreatedAt > cards[j].CreatedAt
+		}
+		return cards[i].EventID > cards[j].EventID
+	})
+	start := cursorStart(cards, cursor, func(card FileEventProjection) string { return card.EventID })
+	if start > len(cards) {
+		start = len(cards)
+	}
+	end := start + limit
+	next := ""
+	if end < len(cards) {
+		next = encodeCursor(cards[end-1].EventID)
+	} else {
+		end = len(cards)
+	}
+	return FileEventPage{Items: cards[start:end], NextCursor: next}, nil
 }
 
 func (s *FileSvc) AcceptFile(userID, roomCode, fileID string) error {
@@ -374,30 +425,181 @@ func (s *FileSvc) projectFiles(files []model.RoomFile, viewer model.RoomMember) 
 	return result, nil
 }
 
-func (s *FileSvc) projectEvent(event model.FileEvent, viewer model.RoomMember) (FileEventProjection, bool, error) {
-	projection := FileEventProjection{EventID: event.ID, Type: event.Type, ActorID: event.ActorUserID, CreatedAt: event.CreatedAt}
-	if event.ActorUserID != "" {
+func (s *FileSvc) projectEventGroup(events []model.FileEvent, viewer model.RoomMember) (FileEventProjection, bool, error) {
+	if len(events) == 0 {
+		return FileEventProjection{}, false, nil
+	}
+	latest := events[0]
+	operationID := latest.OperationID
+	if operationID == "" {
+		operationID = latest.FileID
+	}
+	projection := FileEventProjection{EventID: latest.ID, OperationID: operationID, OperationType: fileEventOperationType(events), Type: latest.Type, ActorID: latest.ActorUserID, CreatedAt: latest.CreatedAt, History: make([]FileEventHistory, 0, len(events))}
+	if latest.ActorUserID != "" {
 		var actor model.RoomMember
-		if err := s.db.Where("room_id = ? AND user_id = ?", event.RoomID, event.ActorUserID).First(&actor).Error; err == nil {
+		if err := s.db.Where("room_id = ? AND user_id = ?", latest.RoomID, latest.ActorUserID).First(&actor).Error; err == nil {
 			projection.ActorName = actor.DisplayName
 		}
 	}
-	if event.FileID == "" {
-		return projection, event.ActorUserID == viewer.UserID || viewer.Role == model.MemberRoleOwner, nil
-	}
 	var file model.RoomFile
-	if err := s.db.Where("id = ? AND room_id = ?", event.FileID, event.RoomID).First(&file).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return projection, false, nil
+	fileExists := s.db.Where("id = ? AND room_id = ?", latest.FileID, latest.RoomID).First(&file).Error == nil
+	if !fileExists {
+		return projection, viewer.Role == model.MemberRoleOwner || latest.ActorUserID == viewer.UserID, nil
+	}
+	var recipients []model.FileRecipient
+	if err := s.db.Where("file_id = ?", file.ID).Order("sent_at ASC, id ASC").Find(&recipients).Error; err != nil {
+		return FileEventProjection{}, false, err
+	}
+	recipientMembers := make(map[string]model.RoomMember, len(recipients))
+	for _, recipient := range recipients {
+		var member model.RoomMember
+		if err := s.db.Where("room_id = ? AND user_id = ?", file.RoomID, recipient.RecipientUserID).First(&member).Error; err == nil {
+			recipientMembers[recipient.RecipientUserID] = member
 		}
-		return projection, false, err
+	}
+	payloads := make([]fileEventPayload, len(events))
+	operationRecipientIDs := make(map[string]struct{})
+	operationRecipientStatus := make(map[string]string)
+	skippedRecipientIDs := make(map[string]struct{})
+	for index, event := range events {
+		payloads[index] = decodeFileEventPayload(event)
+		payload := payloads[index]
+		for _, recipientID := range payload.RecipientIDs {
+			operationRecipientIDs[recipientID] = struct{}{}
+			if _, exists := operationRecipientStatus[recipientID]; !exists {
+				operationRecipientStatus[recipientID] = model.RecipientPending
+			}
+		}
+		for _, recipientID := range payload.SkippedRecipientIDs {
+			skippedRecipientIDs[recipientID] = struct{}{}
+		}
+		if payload.RecipientUserID != "" {
+			operationRecipientIDs[payload.RecipientUserID] = struct{}{}
+			switch event.Type {
+			case FileEventAccepted:
+				operationRecipientStatus[payload.RecipientUserID] = model.RecipientAccepted
+			case FileEventDeclined:
+				operationRecipientStatus[payload.RecipientUserID] = model.RecipientDeclined
+			}
+		}
+	}
+	participant := file.UploaderUserID == viewer.UserID
+	viewerRecipient := ""
+	for recipientID := range operationRecipientIDs {
+		if recipientID == viewer.UserID {
+			participant = true
+			viewerRecipient = recipientID
+			break
+		}
+	}
+	if file.Scope == model.FileScopeDirect && !participant && viewer.Role != model.MemberRoleOwner {
+		return projection, false, nil
 	}
 	files, err := s.projectFiles([]model.RoomFile{file}, viewer)
-	if err != nil || len(files) == 0 {
-		return projection, false, err
+	if err != nil {
+		return FileEventProjection{}, false, err
+	}
+	if len(files) == 0 {
+		return projection, false, nil
 	}
 	projection.File = &files[0]
+	if file.Scope == model.FileScopeDirect {
+		if viewer.Role == model.MemberRoleOwner && !participant {
+			projection.File.Recipients = nil
+		} else if viewerRecipient != "" && viewerRecipient != file.UploaderUserID {
+			filtered := make([]FileRecipientView, 0, 1)
+			for _, recipient := range projection.File.Recipients {
+				if recipient.UserID == viewerRecipient {
+					filtered = append(filtered, recipient)
+				}
+			}
+			projection.File.Recipients = filtered
+		}
+		if len(operationRecipientIDs) > 0 {
+			summary := &FileRecipientEventSummary{Total: len(operationRecipientIDs), Skipped: len(skippedRecipientIDs)}
+			for recipientID := range operationRecipientIDs {
+				switch operationRecipientStatus[recipientID] {
+				case model.RecipientAccepted, model.RecipientDownloaded:
+					summary.Accepted++
+				case model.RecipientDeclined:
+					summary.Declined++
+				default:
+					summary.Pending++
+				}
+			}
+			projection.RecipientSummary = summary
+		}
+	}
+	for index, event := range events {
+		history := FileEventHistory{EventID: event.ID, Type: event.Type, ActorID: event.ActorUserID, CreatedAt: event.CreatedAt}
+		if event.ActorUserID != "" {
+			var actor model.RoomMember
+			if err := s.db.Where("room_id = ? AND user_id = ?", event.RoomID, event.ActorUserID).First(&actor).Error; err == nil {
+				history.ActorName = actor.DisplayName
+			}
+		}
+		if file.Scope == model.FileScopeDirect && (viewer.UserID == file.UploaderUserID || viewerRecipient != "") {
+			payload := payloads[index]
+			for _, recipientID := range payload.RecipientIDs {
+				if viewerRecipient != "" && recipientID != viewerRecipient {
+					continue
+				}
+				history.Recipients = append(history.Recipients, projectEventRecipient(recipientID, operationRecipientStatus[recipientID], recipientMembers))
+			}
+			for _, recipientID := range payload.SkippedRecipientIDs {
+				if viewerRecipient != "" && recipientID != viewerRecipient {
+					continue
+				}
+				history.Recipients = append(history.Recipients, projectEventRecipient(recipientID, "skipped", recipientMembers))
+			}
+			if payload.RecipientUserID != "" && (viewerRecipient == "" || payload.RecipientUserID == viewerRecipient) {
+				history.Recipients = append(history.Recipients, projectEventRecipient(payload.RecipientUserID, operationRecipientStatus[payload.RecipientUserID], recipientMembers))
+			}
+		}
+		projection.History = append(projection.History, history)
+	}
+	for recipientID := range skippedRecipientIDs {
+		if viewer.UserID == file.UploaderUserID {
+			projection.SkippedRecipients = append(projection.SkippedRecipients, projectEventRecipient(recipientID, "skipped", recipientMembers))
+		}
+	}
 	return projection, true, nil
+}
+
+func decodeFileEventPayload(event model.FileEvent) fileEventPayload {
+	var payload fileEventPayload
+	if event.PayloadJSON != "" {
+		_ = json.Unmarshal([]byte(event.PayloadJSON), &payload)
+	}
+	return payload
+}
+
+func projectEventRecipient(userID, status string, members map[string]model.RoomMember) FileEventRecipient {
+	name := userID
+	if member, ok := members[userID]; ok {
+		name = member.DisplayName
+	}
+	return FileEventRecipient{UserID: userID, DisplayName: name, Status: status}
+}
+
+func fileEventOperationType(events []model.FileEvent) string {
+	for _, event := range events {
+		switch event.Type {
+		case FileEventReused:
+			return "transfer"
+		case FileEventDownloadStarted, FileEventDownloaded, FileEventDownloadFailed, FileEventDownloadCancelled:
+			return "download"
+		case FileEventTrashed:
+			return "trash"
+		case FileEventRestoreRequested, FileEventRestoreRejected, FileEventRestored:
+			return "restore"
+		case FileEventPurged:
+			return "purge"
+		case FileEventPublished:
+			return "publish"
+		}
+	}
+	return "upload"
 }
 
 func normalizeFileListQuery(query *FileListQuery) {

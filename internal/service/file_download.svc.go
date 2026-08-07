@@ -388,13 +388,18 @@ func (stream *DownloadStream) fail(transferred int64) {
 		return
 	}
 	now := stream.svc.now().Unix()
+	failed := false
 	_ = stream.svc.db.Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", stream.task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "transferred_size": transferred, "failed_at": now})
 		if result.Error != nil || result.RowsAffected == 0 {
 			return result.Error
 		}
+		failed = true
 		return createFileEventWithOperation(tx, stream.fileRecord.RoomID, stream.fileRecord.ID, stream.fileRecord.BatchID, stream.task.UserID, FileEventDownloadFailed, stream.task.ID, now, nil)
 	})
+	if failed {
+		stream.svc.publishFileProjection(stream.fileRecord.ID, "file.download_failed", map[string]interface{}{"taskId": stream.task.ID, "downloaderUserId": stream.task.UserID})
+	}
 }
 
 func (stream *DownloadStream) close() {

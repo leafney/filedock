@@ -250,6 +250,9 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 				}
 				recipientIDs = append(recipientIDs, recipient.UserID)
 			}
+			if err := createFileEventWithOperation(tx, room.ID, file.ID, batchID, userID, FileEventBatchCreated, file.ID, now, nil); err != nil {
+				return err
+			}
 			if scope == model.FileScopeDirect {
 				if _, err := createFileEventRecordWithOperation(tx, room.ID, file.ID, batchID, userID, FileEventDirectSent, file.ID, now, fileEventPayload{RecipientIDs: recipientIDs}); err != nil {
 					return err
