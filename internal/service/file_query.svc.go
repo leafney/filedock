@@ -515,6 +515,15 @@ func (s *FileSvc) projectEventGroup(events []model.FileEvent, viewer model.RoomM
 				}
 			}
 			projection.File.Recipients = filtered
+		} else if len(operationRecipientIDs) > 0 {
+			filtered := make([]FileRecipientView, 0, len(operationRecipientIDs))
+			for _, recipient := range projection.File.Recipients {
+				if _, included := operationRecipientIDs[recipient.UserID]; included {
+					recipient.Status = operationRecipientStatus[recipient.UserID]
+					filtered = append(filtered, recipient)
+				}
+			}
+			projection.File.Recipients = filtered
 		}
 		if len(operationRecipientIDs) > 0 {
 			summary := &FileRecipientEventSummary{Total: len(operationRecipientIDs), Skipped: len(skippedRecipientIDs)}
