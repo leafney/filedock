@@ -7,7 +7,10 @@ export function durationParts(seconds: number) {
 }
 
 export function formatDate(timestamp: number) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(timestamp * 1000));
+  const date = new Date(timestamp * 1000);
+  if (Number.isNaN(date.getTime())) return "-";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 export function formatBytes(bytes: number) {
