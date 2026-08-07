@@ -104,6 +104,7 @@ type FileRestoreRequest struct {
 	TrashCycleID    string `gorm:"type:text;not null;uniqueIndex:idx_file_restore_requests_cycle_id"`
 	TrashVersion    int64  `gorm:"not null"`
 	RequesterUserID string `gorm:"type:text;not null;index:idx_file_restore_requests_requester_status"`
+	OperationID     string `gorm:"type:text;not null;index:idx_file_restore_requests_operation_id"`
 	Status          string `gorm:"type:text;not null;index:idx_file_restore_requests_room_status;index:idx_file_restore_requests_requester_status"`
 	CreatedAt       int64  `gorm:"not null;index:idx_file_restore_requests_created_at"`
 	DecidedAt       *int64 `gorm:"index:idx_file_restore_requests_decided_at"`
@@ -117,6 +118,7 @@ type FileRecipient struct {
 	ID                string `gorm:"type:text;primaryKey;size:26"`
 	FileID            string `gorm:"type:text;not null;uniqueIndex:idx_file_recipients_file_user"`
 	RecipientUserID   string `gorm:"type:text;not null;uniqueIndex:idx_file_recipients_file_user;index:idx_file_recipients_user_status"`
+	OperationID       string `gorm:"type:text;not null;index:idx_file_recipients_operation_id"`
 	DeliveryVersion   int64  `gorm:"not null;default:1"`
 	Status            string `gorm:"type:text;not null;index:idx_file_recipients_user_status"`
 	SentAt            int64  `gorm:"not null"`
@@ -137,6 +139,7 @@ type FileEvent struct {
 	FileID      string `gorm:"type:text;index:idx_file_events_file_id"`
 	BatchID     string `gorm:"type:text;index:idx_file_events_batch_id"`
 	ActorUserID string `gorm:"type:text;index:idx_file_events_actor_user_id"`
+	OperationID string `gorm:"type:text;not null;index:idx_file_events_operation_id"`
 	Type        string `gorm:"type:text;not null;index:idx_file_events_type"`
 	PayloadJSON string `gorm:"type:text;not null;default:'{}'"`
 	CreatedAt   int64  `gorm:"not null;index:idx_file_events_room_cursor"`

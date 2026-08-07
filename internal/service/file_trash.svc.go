@@ -66,6 +66,10 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 		if err != nil {
 			return err
 		}
+		operationID, err := ulidx.New()
+		if err != nil {
+			return err
+		}
 		now := s.now().Unix()
 		if err := tx.Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).Find(&cancelledTasks).Error; err != nil {
 			return err
@@ -75,6 +79,11 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 				Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).
 				Updates(map[string]interface{}{"status": model.DownloadTaskCancelled, "cancelled_at": now}).Error; err != nil {
 				return err
+			}
+			for _, task := range cancelledTasks {
+				if err := createFileEventWithOperation(tx, file.RoomID, file.ID, file.BatchID, task.UserID, FileEventDownloadCancelled, task.ID, now, nil); err != nil {
+					return err
+				}
 			}
 		}
 		cycle = model.FileTrashCycle{ID: cycleID, RoomID: room.ID, FileID: file.ID, Version: version, DeletedByUserID: userID, DeletedAt: now, DeleteReason: reason, Outcome: model.FileTrashActive}
@@ -86,7 +95,7 @@ func (s *FileSvc) TrashFile(userID, roomCode, fileID, reason string) (model.File
 			Update("read_at_ms", now*1000).Error; err != nil {
 			return err
 		}
-		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventTrashed, now)
+		event, err := createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventTrashed, operationID, now, fileEventPayload{Reason: reason})
 		if err != nil {
 			return err
 		}
@@ -147,7 +156,7 @@ func (s *FileSvc) RestoreFile(userID, roomCode, fileID string) (FileRestoreActio
 			return err
 		}
 		result = FileRestoreActionResult{Status: FileRestoreActionPending, RequestID: request.ID, NotificationUserID: room.OwnerUserID, OwnerUserID: room.OwnerUserID}
-		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventRestoreRequested, request.CreatedAt)
+		event, err := createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventRestoreRequested, request.OperationID, request.CreatedAt, fileEventPayload{Reason: "pending"})
 		if err != nil {
 			return err
 		}
@@ -250,7 +259,7 @@ func (s *FileSvc) RejectFileRestore(ownerID, roomCode, requestID, reason string)
 		if update.RowsAffected != 1 {
 			return errx.New(errc.ErrFileRestoreRequestState, nil)
 		}
-		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, ownerID, FileEventRestoreRejected, now)
+		event, err := createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, ownerID, FileEventRestoreRejected, request.OperationID, now, fileEventPayload{Reason: reason})
 		if err != nil {
 			return err
 		}
@@ -308,6 +317,11 @@ func (s *FileSvc) PurgeFile(userID, roomCode, fileID string) error {
 			Where("file_id = ? AND status IN ?", file.ID, []string{model.DownloadTaskPending, model.DownloadTaskStreaming}).
 			Updates(map[string]interface{}{"status": model.DownloadTaskCancelled, "cancelled_at": now}).Error; err != nil {
 			return err
+		}
+		for _, task := range cancelledTasks {
+			if err := createFileEventWithOperation(tx, file.RoomID, file.ID, file.BatchID, task.UserID, FileEventDownloadCancelled, task.ID, now, nil); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -405,7 +419,11 @@ func (s *FileSvc) finalizePurge(fileID string, version int64, actorID string, no
 			Updates(map[string]interface{}{"status": model.FileRestoreInvalidated, "decided_at": now, "decided_by_user_id": actorID}).Error; err != nil {
 			return err
 		}
-		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventPurged, now)
+		operationID, err := ulidx.New()
+		if err != nil {
+			return err
+		}
+		event, err := createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventPurged, operationID, now, nil)
 		if err != nil {
 			return err
 		}
@@ -509,7 +527,18 @@ func restoreTrashCycle(tx *gorm.DB, file model.RoomFile, cycle model.FileTrashCy
 			return model.FileEvent{}, errx.New(errc.ErrFileState, nil)
 		}
 	}
-	return createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventRestored, now)
+	operationID := ""
+	if request != nil {
+		operationID = request.OperationID
+	}
+	if operationID == "" {
+		var err error
+		operationID, err = ulidx.New()
+		if err != nil {
+			return model.FileEvent{}, err
+		}
+	}
+	return createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, actorID, FileEventRestored, operationID, now, nil)
 }
 
 func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle model.FileTrashCycle, requesterID string, now int64) (model.FileRestoreRequest, error) {
@@ -520,7 +549,11 @@ func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle
 		if idErr != nil {
 			return request, idErr
 		}
-		request = model.FileRestoreRequest{ID: requestID, RoomID: roomID, FileID: file.ID, TrashCycleID: cycle.ID, TrashVersion: cycle.Version, RequesterUserID: requesterID, Status: model.FileRestorePending, CreatedAt: now}
+		operationID, idErr := ulidx.New()
+		if idErr != nil {
+			return request, idErr
+		}
+		request = model.FileRestoreRequest{ID: requestID, RoomID: roomID, FileID: file.ID, TrashCycleID: cycle.ID, TrashVersion: cycle.Version, RequesterUserID: requesterID, OperationID: operationID, Status: model.FileRestorePending, CreatedAt: now}
 		return request, tx.Create(&request).Error
 	}
 	if err != nil {
@@ -529,9 +562,13 @@ func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle
 	if request.RequesterUserID != requesterID || request.Status != model.FileRestoreInvalidated {
 		return request, errx.New(errc.ErrFileRestoreRequestState, nil)
 	}
+	operationID, idErr := ulidx.New()
+	if idErr != nil {
+		return request, idErr
+	}
 	update := tx.Model(&model.FileRestoreRequest{}).
 		Where("id = ? AND status = ?", request.ID, model.FileRestoreInvalidated).
-		Updates(map[string]interface{}{"status": model.FileRestorePending, "created_at": now, "decided_at": nil, "decided_by_user_id": "", "rejection_reason": ""})
+		Updates(map[string]interface{}{"status": model.FileRestorePending, "operation_id": operationID, "created_at": now, "decided_at": nil, "decided_by_user_id": "", "rejection_reason": ""})
 	if update.Error != nil {
 		return request, update.Error
 	}
@@ -539,6 +576,7 @@ func upsertRestoreRequest(tx *gorm.DB, roomID string, file model.RoomFile, cycle
 		return request, errx.New(errc.ErrFileRestoreRequestState, nil)
 	}
 	request.Status = model.FileRestorePending
+	request.OperationID = operationID
 	request.CreatedAt = now
 	request.DecidedAt = nil
 	request.DecidedByUserID = ""

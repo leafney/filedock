@@ -240,7 +240,7 @@ func (s *FileSvc) BeginDownloadRange(userID, roomCode, taskID string, requested 
 		return nil, errx.Wrap(errc.ErrFileStorage, err, nil)
 	}
 	if !replay {
-		if err := createFileEvent(s.db, descriptor.File.RoomID, descriptor.File.ID, descriptor.File.BatchID, userID, FileEventDownloadStarted, now); err != nil {
+		if err := createFileEventWithOperation(s.db, descriptor.File.RoomID, descriptor.File.ID, descriptor.File.BatchID, userID, FileEventDownloadStarted, task.ID, now, nil); err != nil {
 			_ = stored.Close()
 			finish()
 			_ = s.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "failed_at": now}).Error
@@ -372,7 +372,7 @@ func (stream *DownloadStream) complete(transferred int64) error {
 				return errx.New(errc.ErrFileRecipientState, nil)
 			}
 		}
-		event, err := createFileEventRecord(tx, stream.fileRecord.RoomID, stream.fileRecord.ID, stream.fileRecord.BatchID, stream.task.UserID, FileEventDownloaded, now)
+		event, err := createFileEventRecordWithOperation(tx, stream.fileRecord.RoomID, stream.fileRecord.ID, stream.fileRecord.BatchID, stream.task.UserID, FileEventDownloaded, stream.task.ID, now, nil)
 		if err != nil {
 			return err
 		}
@@ -388,7 +388,13 @@ func (stream *DownloadStream) fail(transferred int64) {
 		return
 	}
 	now := stream.svc.now().Unix()
-	_ = stream.svc.db.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", stream.task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "transferred_size": transferred, "failed_at": now}).Error
+	_ = stream.svc.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.DownloadTask{}).Where("id = ? AND status = ?", stream.task.ID, model.DownloadTaskStreaming).Updates(map[string]interface{}{"status": model.DownloadTaskFailed, "transferred_size": transferred, "failed_at": now})
+		if result.Error != nil || result.RowsAffected == 0 {
+			return result.Error
+		}
+		return createFileEventWithOperation(tx, stream.fileRecord.RoomID, stream.fileRecord.ID, stream.fileRecord.BatchID, stream.task.UserID, FileEventDownloadFailed, stream.task.ID, now, nil)
+	})
 }
 
 func (stream *DownloadStream) close() {

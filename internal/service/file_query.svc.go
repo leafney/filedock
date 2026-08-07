@@ -192,7 +192,7 @@ func (s *FileSvc) changeRecipientStatus(userID, roomCode, fileID, from, to, even
 		if result.RowsAffected != 1 {
 			return errx.New(errc.ErrFileRecipientState, nil)
 		}
-		event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, eventType, now)
+		event, err := createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, userID, eventType, recipient.OperationID, now, fileEventPayload{RecipientUserID: userID, DeliveryVersion: recipient.DeliveryVersion})
 		if err != nil {
 			return err
 		}
@@ -235,6 +235,11 @@ func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientI
 		now := s.now().Unix()
 		for _, file := range files {
 			changedRecipients := make([]model.FileRecipient, 0, len(recipients))
+			skippedRecipientIDs := make([]string, 0)
+			reuseOperationID, idErr := ulidx.New()
+			if idErr != nil {
+				return idErr
+			}
 			for _, recipient := range recipients {
 				var relation model.FileRecipient
 				err := tx.Where("file_id = ? AND recipient_user_id = ?", file.ID, recipient.UserID).First(&relation).Error
@@ -244,7 +249,7 @@ func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientI
 					if idErr != nil {
 						return idErr
 					}
-					relation = model.FileRecipient{ID: id, FileID: file.ID, RecipientUserID: recipient.UserID, DeliveryVersion: 1, Status: model.RecipientPending, SentAt: now}
+					relation = model.FileRecipient{ID: id, FileID: file.ID, RecipientUserID: recipient.UserID, OperationID: reuseOperationID, DeliveryVersion: 1, Status: model.RecipientPending, SentAt: now}
 					if err := tx.Create(&relation).Error; err != nil {
 						return err
 					}
@@ -273,14 +278,23 @@ func (s *FileSvc) ReusePrivateFiles(userID, roomCode string, fileIDs, recipientI
 					if err := tx.First(&relation, "id = ?", relation.ID).Error; err != nil {
 						return err
 					}
+					if err := tx.Model(&model.FileRecipient{}).Where("id = ?", relation.ID).Update("operation_id", reuseOperationID).Error; err != nil {
+						return err
+					}
+					relation.OperationID = reuseOperationID
 					result.Changed++
 					changedRecipients = append(changedRecipients, relation)
 				default:
 					result.Skipped++
+					skippedRecipientIDs = append(skippedRecipientIDs, recipient.UserID)
 				}
 			}
 			if len(changedRecipients) > 0 {
-				event, err := createFileEventRecord(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventReused, now)
+				changedRecipientIDs := make([]string, 0, len(changedRecipients))
+				for _, relation := range changedRecipients {
+					changedRecipientIDs = append(changedRecipientIDs, relation.RecipientUserID)
+				}
+				event, err := createFileEventRecordWithOperation(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventReused, reuseOperationID, now, fileEventPayload{RecipientIDs: changedRecipientIDs, SkippedRecipientIDs: skippedRecipientIDs})
 				if err != nil {
 					return err
 				}
@@ -310,6 +324,10 @@ func (s *FileSvc) PublishShared(userID, roomCode, fileID string) error {
 		return err
 	}
 	now := s.now().Unix()
+	operationID, err := ulidx.New()
+	if err != nil {
+		return err
+	}
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var file model.RoomFile
 		if err := tx.Where("id = ? AND room_id = ? AND uploader_user_id = ? AND scope = ? AND status = ?", fileID, room.ID, userID, model.FileScopeDirect, model.FileStatusAvailable).First(&file).Error; err != nil {
@@ -322,7 +340,7 @@ func (s *FileSvc) PublishShared(userID, roomCode, fileID string) error {
 		if result.RowsAffected != 1 {
 			return errx.New(errc.ErrFileState, nil)
 		}
-		return createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventPublished, now)
+		return createFileEventWithOperation(tx, file.RoomID, file.ID, file.BatchID, userID, FileEventPublished, operationID, now, nil)
 	})
 	if err == nil {
 		s.publishFileProjection(fileID, "file.published_shared", nil)

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -28,29 +29,40 @@ const (
 	UploadRoomLimit            = 2
 	UploadUserLimit            = 2
 
-	FileEventBatchCreated     = "batch_created"
-	FileEventUploadStarted    = "upload_started"
-	FileEventUploadCompleted  = "upload_completed"
-	FileEventUploadFailed     = "upload_failed"
-	FileEventUploadCancelled  = "upload_cancelled"
-	FileEventDirectSent       = "direct_sent"
-	FileEventReused           = "reused"
-	FileEventPublished        = "published_shared"
-	FileEventAccepted         = "accepted"
-	FileEventDeclined         = "declined"
-	FileEventDownloadStarted  = "download_started"
-	FileEventDownloaded       = "download_completed"
-	FileEventTrashed          = "trashed"
-	FileEventRestoreRequested = "restore_requested"
-	FileEventRestoreRejected  = "restore_rejected"
-	FileEventRestored         = "restored"
-	FileEventPurged           = "purged"
+	FileEventBatchCreated      = "batch_created"
+	FileEventUploadStarted     = "upload_started"
+	FileEventUploadCompleted   = "upload_completed"
+	FileEventUploadFailed      = "upload_failed"
+	FileEventUploadCancelled   = "upload_cancelled"
+	FileEventDirectSent        = "direct_sent"
+	FileEventReused            = "reused"
+	FileEventPublished         = "published_shared"
+	FileEventAccepted          = "accepted"
+	FileEventDeclined          = "declined"
+	FileEventDownloadStarted   = "download_started"
+	FileEventDownloaded        = "download_completed"
+	FileEventDownloadFailed    = "download_failed"
+	FileEventDownloadCancelled = "download_cancelled"
+	FileEventTrashed           = "trashed"
+	FileEventRestoreRequested  = "restore_requested"
+	FileEventRestoreRejected   = "restore_rejected"
+	FileEventRestored          = "restored"
+	FileEventPurged            = "purged"
 )
 
 type FileManifest struct {
 	OriginalName string
 	DeclaredSize int64
 	DeclaredMIME string
+}
+
+type fileEventPayload struct {
+	RecipientIDs        []string `json:"recipientIds,omitempty"`
+	SkippedRecipientIDs []string `json:"skippedRecipientIds,omitempty"`
+	RecipientUserID     string   `json:"recipientUserId,omitempty"`
+	DeliveryVersion     int64    `json:"deliveryVersion,omitempty"`
+	FailureCode         int      `json:"failureCode,omitempty"`
+	Reason              string   `json:"reason,omitempty"`
 }
 
 type UploadBatchResult struct {
@@ -227,17 +239,19 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 			if err := tx.Create(&model.UploadSession{FileID: file.ID, RoomID: room.ID, UploaderUserID: userID, DeclaredSize: file.DeclaredSize, ChunkSize: chunkSize, TotalParts: totalParts, Status: model.UploadSessionActive, ExpiresAt: room.ExpiresAt, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
 				return err
 			}
+			recipientIDs := make([]string, 0, len(recipients))
 			for _, recipient := range recipients {
 				relationID, err := ulidx.New()
 				if err != nil {
 					return err
 				}
-				if err := tx.Create(&model.FileRecipient{ID: relationID, FileID: fileID, RecipientUserID: recipient.UserID, DeliveryVersion: 1, Status: model.RecipientPending, SentAt: now}).Error; err != nil {
+				if err := tx.Create(&model.FileRecipient{ID: relationID, FileID: fileID, RecipientUserID: recipient.UserID, OperationID: fileID, DeliveryVersion: 1, Status: model.RecipientPending, SentAt: now}).Error; err != nil {
 					return err
 				}
+				recipientIDs = append(recipientIDs, recipient.UserID)
 			}
 			if scope == model.FileScopeDirect {
-				if err := createFileEvent(tx, room.ID, file.ID, batchID, userID, FileEventDirectSent, now); err != nil {
+				if _, err := createFileEventRecordWithOperation(tx, room.ID, file.ID, batchID, userID, FileEventDirectSent, file.ID, now, fileEventPayload{RecipientIDs: recipientIDs}); err != nil {
 					return err
 				}
 			}
@@ -247,7 +261,7 @@ func (s *FileSvc) CreateUploadBatch(userID, roomCode, idempotencyKey, scope stri
 		if err != nil {
 			return err
 		}
-		if err := tx.Create(&model.FileEvent{ID: eventID, RoomID: room.ID, BatchID: batchID, ActorUserID: userID, Type: FileEventBatchCreated, CreatedAt: now}).Error; err != nil {
+		if err := tx.Create(&model.FileEvent{ID: eventID, RoomID: room.ID, BatchID: batchID, ActorUserID: userID, OperationID: batchID, Type: FileEventBatchCreated, PayloadJSON: "{}", CreatedAt: now}).Error; err != nil {
 			return err
 		}
 		result = UploadBatchResult{Batch: batch, Files: files}
@@ -763,12 +777,35 @@ func createFileEvent(tx *gorm.DB, roomID, fileID, batchID, actorID, eventType st
 	return err
 }
 
+func createFileEventWithOperation(tx *gorm.DB, roomID, fileID, batchID, actorID, eventType, operationID string, now int64, payload interface{}) error {
+	_, err := createFileEventRecordWithOperation(tx, roomID, fileID, batchID, actorID, eventType, operationID, now, payload)
+	return err
+}
+
 func createFileEventRecord(tx *gorm.DB, roomID, fileID, batchID, actorID, eventType string, now int64) (model.FileEvent, error) {
+	return createFileEventRecordWithOperation(tx, roomID, fileID, batchID, actorID, eventType, fileID, now, nil)
+}
+
+func createFileEventRecordWithOperation(tx *gorm.DB, roomID, fileID, batchID, actorID, eventType, operationID string, now int64, payload interface{}) (model.FileEvent, error) {
 	id, err := ulidx.New()
 	if err != nil {
 		return model.FileEvent{}, err
 	}
-	event := model.FileEvent{ID: id, RoomID: roomID, FileID: fileID, BatchID: batchID, ActorUserID: actorID, Type: eventType, CreatedAt: now}
+	if operationID == "" {
+		operationID = fileID
+	}
+	if operationID == "" {
+		operationID = batchID
+	}
+	payloadJSON := "{}"
+	if payload != nil {
+		encoded, encodeErr := json.Marshal(payload)
+		if encodeErr != nil {
+			return model.FileEvent{}, encodeErr
+		}
+		payloadJSON = string(encoded)
+	}
+	event := model.FileEvent{ID: id, RoomID: roomID, FileID: fileID, BatchID: batchID, ActorUserID: actorID, OperationID: operationID, Type: eventType, PayloadJSON: payloadJSON, CreatedAt: now}
 	return event, tx.Create(&event).Error
 }
 
