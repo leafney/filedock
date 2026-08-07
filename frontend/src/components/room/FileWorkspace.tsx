@@ -10,13 +10,14 @@ import { FileTrash } from "./FileTrash";
 import { FileTimeline } from "./FileTimeline";
 import { FileDetailsDialog, ReusePrivateDialog, UploadComposer } from "./UploadComposer";
 import { streamEventName, type StreamEventMessage } from "../../hooks/use-stream";
+import { getApiErrorCode } from "../../lib/api-error";
 import { acceptPrivateFile, createFileDownload, createUploadBatch, declinePrivateFile, getUploadStatus, listFileTrash, publishPrivateFile, reusePrivateFiles, trashRoomFile } from "../../services/api";
-import { applyDownloadProgress, enqueueDownload, enqueueResumedUpload, enqueueUploadBatch, fileRefreshEventName } from "../../stores/transfer-store";
+import { applyDownloadProgress, enqueueDownload, enqueueResumedUpload, enqueueUploadBatch, fileRefreshEventName, markUploadResumeUnavailable, removeUploadTask, restoreUploadPlaceholders } from "../../stores/transfer-store";
 import type { FileIdentity, FileRange, FileScope, FileSort, RoomFile, RoomMember } from "../../types/domain";
 import { formatBytes } from "../../utils/format";
 import { moveRovingFocus } from "../../utils/keyboard";
 import { shouldConsumeNotificationLaunch } from "../../utils/notifications";
-import { findUploadResume, listUploadResumes, removeUploadResume } from "../../utils/upload-resume";
+import { findUploadResume, removeUploadResume } from "../../utils/upload-resume";
 
 export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchConsumed }: { code: string; members: RoomMember[]; selfId: string; fileLaunch?: { token: string; view: "list" | "timeline" | "trash"; requestId?: string }; onFileLaunchConsumed: (token: string) => void }) {
   const { t } = useTranslation();
@@ -43,7 +44,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   const trashCountQuery = useQuery({ queryKey: ["file-trash-count", code], queryFn: () => listFileTrash(code, "", "", 1), retry: false });
 
   useEffect(() => {
-    listUploadResumes(code);
+    restoreUploadPlaceholders(code);
   }, [code]);
 
   const refresh = useCallback(() => {
@@ -98,10 +99,17 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
             message.info(t("room.files.resumeUploadNotice", { name: file.name }));
             continue;
           }
-        } catch {
-          // A missing or expired server session is removed below and starts fresh.
+          if (session.status === "completed") {
+            removeUploadResume(code, record.uploadId);
+            removeUploadTask(record.uploadId);
+            continue;
+          }
+        } catch (error) {
+          const errorCode = getApiErrorCode(error);
+          if (![40403, 40405, 40921, 40922].includes(errorCode ?? 0)) throw error;
         }
         removeUploadResume(code, record.uploadId);
+        markUploadResumeUnavailable(record.uploadId);
         freshFiles.push(file);
       }
       if (freshFiles.length > 0) {

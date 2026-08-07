@@ -1,13 +1,14 @@
 import { create } from "zustand";
 
+import { getApiErrorCode } from "../lib/api-error";
 import { cancelFileUpload, createUploadBatch, getUploadStatus, startNativeDownload, uploadFilePart, UploadRequestError } from "../services/api";
 import type { DownloadTask, FileScope, UploadBatch, UploadBatchFile, UploadSession } from "../types/domain";
 import { downloadStatusForProgress, selectQueuedStarts, transferProgress } from "../utils/transfer-queue";
 import { broadcastUploadMessage, acquireUploadLease, releaseUploadLease, renewUploadLease, subscribeUploadMessages, uploadLeaseDuration } from "../utils/upload-coordinator";
-import { removeUploadResume, saveUploadResume, type UploadResumeRecord } from "../utils/upload-resume";
+import { listUploadResumes, removeUploadResume, saveUploadResume, type UploadResumeRecord } from "../utils/upload-resume";
 import { sha256Hex } from "../utils/sha256";
 
-export type UploadTransferStatus = "queued" | "uploading" | "paused" | "completed" | "failed" | "cancelled";
+export type UploadTransferStatus = "queued" | "uploading" | "paused" | "waiting_file" | "deleting" | "delete_failed" | "completed" | "failed" | "cancelled";
 export type DownloadTransferStatus = "queued" | "starting" | "downloading" | "completed" | "failed";
 
 export interface UploadTransferTask {
@@ -16,7 +17,9 @@ export interface UploadTransferTask {
   fileId: string;
   uploadId: string;
   uploadUrl: string;
-  file: File;
+  file?: File;
+  fileName: string;
+  lastModified: number;
   scope: FileScope;
   recipientIds: string[];
   status: UploadTransferStatus;
@@ -49,6 +52,7 @@ interface TransferState {
   downloads: DownloadTransfer[];
   addUploads: (tasks: UploadTransferTask[]) => void;
   patchUpload: (clientId: string, patch: Partial<UploadTransferTask>) => void;
+  removeUpload: (clientId: string) => void;
   addDownload: (roomCode: string, task: DownloadTask) => void;
   patchDownload: (taskId: string, patch: Partial<DownloadTransfer>) => void;
   clearFinished: () => void;
@@ -57,8 +61,20 @@ interface TransferState {
 export const useTransferStore = create<TransferState>((set) => ({
   uploads: [],
   downloads: [],
-  addUploads: (tasks) => set((state) => ({ uploads: [...state.uploads, ...tasks] })),
+  addUploads: (tasks) => set((state) => {
+    const uploads = [...state.uploads];
+    for (const task of tasks) {
+      const index = uploads.findIndex((item) => item.uploadId === task.uploadId);
+      if (index < 0) {
+        uploads.push(task);
+      } else if (uploads[index].status === "waiting_file" && task.status !== "waiting_file") {
+        uploads[index] = task;
+      }
+    }
+    return { uploads };
+  }),
   patchUpload: (clientId, patch) => set((state) => ({ uploads: state.uploads.map((task) => task.clientId === clientId ? { ...task, ...patch } : task) })),
+  removeUpload: (clientId) => set((state) => ({ uploads: state.uploads.filter((task) => task.clientId !== clientId) })),
   addDownload: (roomCode, task) => set((state) => ({
     downloads: [{ taskId: task.taskId, roomCode, fileId: task.fileId, fileName: task.fileName, status: "queued", progress: 0, transferred: 0, total: task.size, downloadUrl: task.downloadUrl, createdAt: Date.now() }, ...state.downloads.filter((item) => item.taskId !== task.taskId)],
   })),
@@ -81,17 +97,23 @@ function makeClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function buildResumeRecord(roomCode: string, task: Pick<UploadTransferTask, "fileId" | "uploadId" | "uploadUrl" | "file" | "scope" | "recipientIds" | "chunkSize" | "totalParts">, expiresAt: number): UploadResumeRecord {
-  return { uploadId: task.uploadId, fileId: task.fileId, roomCode, uploadUrl: task.uploadUrl, fileName: task.file.name, fileSize: task.file.size, lastModified: task.file.lastModified, expiresAt, scope: task.scope, recipientIds: task.recipientIds, chunkSize: task.chunkSize, totalParts: task.totalParts, createdAt: Date.now() };
+function buildResumeRecord(roomCode: string, task: Pick<UploadTransferTask, "fileId" | "uploadId" | "uploadUrl" | "file" | "fileName" | "lastModified" | "total" | "loaded" | "completedParts" | "scope" | "recipientIds" | "chunkSize" | "totalParts" | "createdAt">, expiresAt: number): UploadResumeRecord {
+  return { uploadId: task.uploadId, fileId: task.fileId, roomCode, uploadUrl: task.uploadUrl, fileName: task.file?.name ?? task.fileName, fileSize: task.file?.size ?? task.total, lastModified: task.file?.lastModified ?? task.lastModified, expiresAt, scope: task.scope, recipientIds: task.recipientIds, chunkSize: task.chunkSize, totalParts: task.totalParts, createdAt: task.createdAt, receivedBytes: task.loaded, completedParts: task.completedParts };
 }
 
 function taskFromBatch(roomCode: string, batchFile: UploadBatchFile, batch: UploadBatch, file: File, recipientIds: string[]): UploadTransferTask {
-  return { clientId: makeClientId(), roomCode, fileId: batchFile.fileId, uploadId: batchFile.uploadId || batchFile.fileId, uploadUrl: batchFile.uploadUrl, file, scope: batch.scope, recipientIds, status: "queued", progress: 0, loaded: 0, total: file.size, speed: 0, chunkSize: batchFile.chunkSize, totalParts: batchFile.totalParts, completedParts: [], createdAt: Date.now() };
+  return { clientId: makeClientId(), roomCode, fileId: batchFile.fileId, uploadId: batchFile.uploadId || batchFile.fileId, uploadUrl: batchFile.uploadUrl, file, fileName: file.name, lastModified: file.lastModified, scope: batch.scope, recipientIds, status: "queued", progress: 0, loaded: 0, total: file.size, speed: 0, chunkSize: batchFile.chunkSize, totalParts: batchFile.totalParts, completedParts: [], createdAt: Date.now() };
 }
 
 function taskFromResume(roomCode: string, session: UploadSession, record: UploadResumeRecord, file: File): UploadTransferTask {
   const completedParts = session.parts.map((part) => part.partNumber).sort((left, right) => left - right);
-  return { clientId: makeClientId(), roomCode, fileId: session.fileId, uploadId: session.uploadId, uploadUrl: record.uploadUrl, file, scope: record.scope, recipientIds: record.recipientIds, status: "queued", progress: session.receivedBytes >= session.declaredSize ? 100 : transferProgress(session.receivedBytes, session.declaredSize), loaded: session.receivedBytes, total: session.declaredSize, speed: 0, chunkSize: session.chunkSize, totalParts: session.totalParts, completedParts, createdAt: record.createdAt };
+  return { clientId: makeClientId(), roomCode, fileId: session.fileId, uploadId: session.uploadId, uploadUrl: record.uploadUrl, file, fileName: file.name, lastModified: file.lastModified, scope: record.scope, recipientIds: record.recipientIds, status: "queued", progress: session.receivedBytes >= session.declaredSize ? 100 : transferProgress(session.receivedBytes, session.declaredSize), loaded: session.receivedBytes, total: session.declaredSize, speed: 0, chunkSize: session.chunkSize, totalParts: session.totalParts, completedParts, createdAt: record.createdAt };
+}
+
+function taskFromResumePlaceholder(record: UploadResumeRecord): UploadTransferTask {
+  const loaded = Math.min(record.fileSize, Math.max(0, record.receivedBytes ?? 0));
+  const completedParts = record.completedParts ?? [];
+  return { clientId: makeClientId(), roomCode: record.roomCode, fileId: record.fileId, uploadId: record.uploadId, uploadUrl: record.uploadUrl, fileName: record.fileName, lastModified: record.lastModified, scope: record.scope, recipientIds: record.recipientIds, status: "waiting_file", progress: transferProgress(loaded, record.fileSize), loaded, total: record.fileSize, speed: 0, chunkSize: record.chunkSize, totalParts: record.totalParts, completedParts, createdAt: record.createdAt };
 }
 
 export function enqueueUploadBatch(roomCode: string, batch: UploadBatch, files: File[], recipientIds: string[]) {
@@ -110,6 +132,23 @@ export function enqueueResumedUpload(roomCode: string, session: UploadSession, r
   return task;
 }
 
+export function restoreUploadPlaceholders(roomCode: string) {
+  const records = listUploadResumes(roomCode);
+  const tasks = records.map(taskFromResumePlaceholder);
+  if (tasks.length > 0) useTransferStore.getState().addUploads(tasks);
+  return tasks;
+}
+
+export function markUploadResumeUnavailable(uploadId: string) {
+  const task = useTransferStore.getState().uploads.find((item) => item.uploadId === uploadId);
+  if (task) useTransferStore.getState().patchUpload(task.clientId, { status: "failed", error: "expired", speed: 0 });
+}
+
+export function removeUploadTask(uploadId: string) {
+  const task = useTransferStore.getState().uploads.find((item) => item.uploadId === uploadId);
+  if (task) useTransferStore.getState().removeUpload(task.clientId);
+}
+
 function pumpUploadQueue() {
   const state = useTransferStore.getState();
   const starts = selectQueuedStarts(state.uploads.map((task) => ({ id: task.clientId, status: task.status === "queued" ? "queued" : activeUploadClients.has(task.clientId) || task.status === "paused" ? "active" : task.status === "completed" ? "completed" : task.status === "failed" ? "failed" : "cancelled" })), new Set(activeUploadClients), maximumConcurrentFiles);
@@ -120,6 +159,7 @@ function pumpUploadQueue() {
 }
 
 async function startUpload(task: UploadTransferTask) {
+  if (!task.file) return;
   if (activeUploadClients.has(task.clientId) || !acquireUploadLease(task.uploadId)) {
     if (!activeUploadClients.has(task.clientId)) useTransferStore.getState().patchUpload(task.clientId, { status: "paused", error: "other_tab" });
     return;
@@ -179,6 +219,7 @@ async function startUpload(task: UploadTransferTask) {
 }
 
 async function uploadPartWithRetry(clientId: string, task: UploadTransferTask, partNumber: number) {
+  if (!task.file) throw new Error("upload file unavailable");
   const { start, end } = partBounds(task, partNumber);
   const blob = task.file.slice(start, end + 1);
   const sha256 = await digestSHA256(blob);
@@ -206,7 +247,7 @@ function syncSession(clientId: string, session: UploadSession) {
   if (!task) return;
   const completedParts = session.parts.map((part) => part.partNumber).sort((left, right) => left - right);
   useTransferStore.getState().patchUpload(clientId, { chunkSize: session.chunkSize, totalParts: session.totalParts, completedParts, loaded: session.receivedBytes, total: session.declaredSize, progress: transferProgress(session.receivedBytes, session.declaredSize) });
-  saveUploadResume({ ...buildResumeRecord(task.roomCode, task, session.expiresAt), expiresAt: session.expiresAt, chunkSize: session.chunkSize, totalParts: session.totalParts });
+  saveUploadResume({ ...buildResumeRecord(task.roomCode, task, session.expiresAt), expiresAt: session.expiresAt, chunkSize: session.chunkSize, totalParts: session.totalParts, receivedBytes: session.receivedBytes, completedParts });
 }
 
 function markPartCompleted(clientId: string, task: UploadTransferTask, partNumber: number) {
@@ -215,6 +256,9 @@ function markPartCompleted(clientId: string, task: UploadTransferTask, partNumbe
   const completedParts = current.completedParts.includes(partNumber) ? current.completedParts : [...current.completedParts, partNumber].sort((left, right) => left - right);
   useTransferStore.getState().patchUpload(clientId, { completedParts });
   updateTaskProgress(clientId, task);
+  const updated = useTransferStore.getState().uploads.find((item) => item.clientId === clientId);
+  const resume = updated && listUploadResumes(updated.roomCode).find((item) => item.uploadId === updated.uploadId);
+  if (updated && resume) saveUploadResume({ ...buildResumeRecord(updated.roomCode, updated, resume.expiresAt), expiresAt: resume.expiresAt, receivedBytes: updated.loaded, completedParts });
   broadcastUploadMessage({ uploadId: task.uploadId, type: "progress", payload: { completedParts, loaded: useTransferStore.getState().uploads.find((item) => item.clientId === clientId)?.loaded ?? 0, progress: useTransferStore.getState().uploads.find((item) => item.clientId === clientId)?.progress ?? 0 } });
 }
 
@@ -265,26 +309,55 @@ export function resumeUploadTransfer(clientId: string) {
 
 export function cancelUploadTransfer(clientId: string) {
   const task = useTransferStore.getState().uploads.find((item) => item.clientId === clientId);
-  if (!task || task.status === "completed" || task.status === "cancelled") return;
+  if (!task || task.status === "completed" || task.status === "cancelled" || task.status === "deleting") return;
   cancelRequested.add(clientId);
   pauseRequested.delete(clientId);
-  useTransferStore.getState().patchUpload(clientId, { status: "cancelled", speed: 0 });
+  useTransferStore.getState().patchUpload(clientId, { status: "deleting", speed: 0, error: undefined });
   activeRequests.get(clientId)?.forEach((request) => request.abort());
   releaseUploadLease(task.uploadId);
-  removeUploadResume(task.roomCode, task.uploadId);
-  broadcastUploadMessage({ uploadId: task.uploadId, type: "deleted" });
-  void cancelFileUpload(task.roomCode, task.fileId).finally(() => announceRefresh(task.roomCode));
-  if (!activeUploadClients.has(clientId)) pumpUploadQueue();
+  broadcastUploadMessage({ uploadId: task.uploadId, type: "status", payload: { status: "deleting" } });
+  void cancelFileUpload(task.roomCode, task.fileId).then(() => {
+    completeUploadDeletion(task);
+  }).catch((error) => {
+    if (isUploadCleanupCompleteError(error)) {
+      completeUploadDeletion(task);
+      return;
+    }
+    useTransferStore.getState().patchUpload(clientId, { status: "delete_failed", error: "delete_failed", speed: 0 });
+    broadcastUploadMessage({ uploadId: task.uploadId, type: "status", payload: { status: "delete_failed" } });
+    announceRefresh(task.roomCode);
+  }).finally(() => {
+    if (!activeUploadClients.has(clientId)) pumpUploadQueue();
+  });
 }
 
 export function retryUploadTransfer(task: UploadTransferTask) {
+  if (task.status === "delete_failed") {
+    cancelUploadTransfer(task.clientId);
+    return;
+  }
+  if (!task.file) return;
   pauseRequested.delete(task.clientId);
   cancelRequested.delete(task.clientId);
   useTransferStore.getState().patchUpload(task.clientId, { status: "queued", error: undefined, speed: 0 });
   pumpUploadQueue();
 }
 
+function completeUploadDeletion(task: UploadTransferTask) {
+  cancelRequested.delete(task.clientId);
+  removeUploadResume(task.roomCode, task.uploadId);
+  useTransferStore.getState().patchUpload(task.clientId, { status: "cancelled", speed: 0, error: undefined });
+  broadcastUploadMessage({ uploadId: task.uploadId, type: "deleted" });
+  announceRefresh(task.roomCode);
+}
+
+function isUploadCleanupCompleteError(error: unknown) {
+  const code = error instanceof UploadRequestError ? error.code : getApiErrorCode(error);
+  return [40403, 40405, 40921, 40922].includes(code ?? 0);
+}
+
 async function restartUploadTransfer(task: UploadTransferTask) {
+  if (!task.file) return;
   removeUploadResume(task.roomCode, task.uploadId);
   cancelRequested.add(task.clientId);
   useTransferStore.getState().patchUpload(task.clientId, { status: "cancelled", speed: 0, error: "content_changed" });
@@ -359,11 +432,31 @@ subscribeUploadMessages((message) => {
   const task = useTransferStore.getState().uploads.find((item) => item.uploadId === message.uploadId);
   if (!task) return;
   if (message.type === "deleted") {
+    cancelRequested.add(task.clientId);
+    activeRequests.get(task.clientId)?.forEach((request) => request.abort());
+    removeUploadResume(task.roomCode, task.uploadId);
     useTransferStore.getState().patchUpload(task.clientId, { status: "cancelled", speed: 0 });
     return;
   }
   if (message.type === "status" && message.payload?.status === "paused" && !activeUploadClients.has(task.clientId)) {
     useTransferStore.getState().patchUpload(task.clientId, { status: "paused", speed: 0 });
+    return;
+  }
+  if (message.type === "status" && message.payload?.status === "completed") {
+    removeUploadResume(task.roomCode, task.uploadId);
+    useTransferStore.getState().patchUpload(task.clientId, { status: "completed", progress: 100, loaded: task.total, speed: 0 });
+    return;
+  }
+  if (message.type === "status" && message.payload?.status === "deleting") {
+    cancelRequested.add(task.clientId);
+    pauseRequested.delete(task.clientId);
+    activeRequests.get(task.clientId)?.forEach((request) => request.abort());
+    releaseUploadLease(task.uploadId);
+    useTransferStore.getState().patchUpload(task.clientId, { status: "deleting", error: undefined, speed: 0 });
+    return;
+  }
+  if (message.type === "status" && message.payload?.status === "delete_failed") {
+    useTransferStore.getState().patchUpload(task.clientId, { status: "delete_failed", error: "delete_failed", speed: 0 });
     return;
   }
   if (message.type === "progress" && Array.isArray(message.payload?.completedParts)) {

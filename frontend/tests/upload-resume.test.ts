@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { findUploadResume, listUploadResumes, removeUploadResume, saveUploadResume, type UploadResumeRecord, type UploadResumeStorage } from "../src/utils/upload-resume";
+import { findUploadResume, isUploadResumeMatch, listUploadResumes, removeUploadResume, saveUploadResume, type UploadResumeRecord, type UploadResumeStorage } from "../src/utils/upload-resume";
 import { acquireUploadLease, releaseUploadLease, renewUploadLease } from "../src/utils/upload-coordinator";
 import { sha256Hex } from "../src/utils/sha256";
 
@@ -27,6 +27,18 @@ describe("上传恢复元数据", () => {
     expect(findUploadResume("1234", { name: "other.bin", size: 20, lastModified: 10 }, 100_000, storage)).toBeUndefined();
     removeUploadResume("1234", "file-1", storage);
     expect(listUploadResumes("1234", 100_000, storage)).toEqual([]);
+  });
+
+  it("保留已知分片进度并兼容旧版记录", () => {
+    const storage = new MemoryStorage();
+    saveUploadResume(record({ receivedBytes: 15, completedParts: [0, 2] }), storage);
+    saveUploadResume(record({ uploadId: "legacy", fileId: "legacy", fileName: "legacy.bin" }), storage);
+    const records = listUploadResumes("1234", 100_000, storage);
+    expect(records.find((item) => item.uploadId === "file-1")?.receivedBytes).toBe(15);
+    expect(records.find((item) => item.uploadId === "file-1")?.completedParts).toEqual([0, 2]);
+    expect(records.find((item) => item.uploadId === "legacy")?.receivedBytes).toBe(0);
+    expect(records.find((item) => item.uploadId === "legacy")?.completedParts).toEqual([]);
+    expect(isUploadResumeMatch(records[0], { name: records[0].fileName, size: records[0].fileSize, lastModified: records[0].lastModified })).toBe(true);
   });
 });
 
