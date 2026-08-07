@@ -280,11 +280,39 @@ export interface FileListResult {
 
 export interface FileEventItem {
   eventId: string;
+  operationId: string;
+  operationType: string;
   type: string;
   actorId?: string;
   actorName?: string;
   createdAt: number;
   file?: RoomFile;
+  history: FileEventHistory[];
+  recipientSummary?: FileRecipientEventSummary;
+  skippedRecipients?: FileEventRecipient[];
+}
+
+export interface FileEventHistory {
+  eventId: string;
+  type: string;
+  actorId?: string;
+  actorName?: string;
+  createdAt: number;
+  recipients?: FileEventRecipient[];
+}
+
+export interface FileEventRecipient {
+  userId: string;
+  displayName: string;
+  status?: string;
+}
+
+export interface FileRecipientEventSummary {
+  total: number;
+  pending: number;
+  accepted: number;
+  declined: number;
+  skipped?: number;
 }
 
 export interface FileEventPage {
