@@ -50,6 +50,7 @@ function FileEventCard({ item }: { item: FileEventItem }) {
   const fileName = item.file?.displayName || t("room.files.fileUnavailable");
   const actor = item.actorName || t("room.files.systemActor");
   return <article className={`file-event-card operation-${item.operationType} ${item.recipientSummary ? "has-recipients" : ""}`}>
+    <i className="file-event-axis-dot" aria-hidden="true" />
     <div className="file-event-card-main">
       <span className="file-event-status">{t(eventTranslationKey(item.type))}</span>
       <span className="file-event-subject" title={fileName}>{actor} · {fileName}</span>

@@ -873,8 +873,10 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .file-load-more { display: flex; align-items: center; justify-content: center; gap: 0.3rem; width: 100%; border: 0; border-top: 1px solid #f1f5f9; background: #fff; color: var(--room-primary); cursor: pointer; font-size: 0.68rem; padding: 0.65rem; }
 
 .file-timeline { min-height: 0; overflow: auto; background: #f8fafc; padding: 1rem clamp(0.8rem, 3vw, 2rem) 2rem; }
-.file-timeline-axis { display: grid; gap: 0.45rem; max-width: 68rem; margin: 0 auto; }
+.file-timeline-axis { position: relative; display: grid; gap: 0.45rem; max-width: 68rem; margin: 0 auto; padding-left: 3.4rem; }
+.file-timeline-axis::before { position: absolute; left: 1.15rem; top: 0.95rem; bottom: 0.95rem; width: 2px; background: #cbd5e1; content: ""; }
 .file-event-card { position: relative; min-width: 0; border: 1px solid var(--room-border); border-radius: 0.65rem; background: #fff; box-shadow: 0 2px 8px rgb(15 23 42 / 4%); }
+.file-event-axis-dot { position: absolute; left: -2.56rem; top: 0.95rem; z-index: 1; width: 0.7rem; height: 0.7rem; border: 2px solid #fff; border-radius: 999px; background: var(--room-primary); box-shadow: 0 0 0 2px #99f6e4; }
 .file-event-card-main { display: grid; grid-template-columns: auto minmax(8rem, 1.4fr) auto minmax(8rem, 1fr) auto auto; min-height: 2.8rem; align-items: center; gap: 0.65rem; padding: 0.48rem 0.55rem 0.48rem 0.65rem; }
 .file-event-status { border-radius: 999px; background: #ecfdf5; color: #047857; font-size: 0.62rem; font-weight: 700; padding: 0.22rem 0.45rem; white-space: nowrap; }
 .operation-download .file-event-status { background: #eff6ff; color: #1d4ed8; }
@@ -1042,6 +1044,9 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .transfer-summary progress { flex: 1; width: auto; }
   .transfer-panel { right: 0; bottom: 52px; width: 100%; max-height: 65vh; border-radius: 1rem 1rem 0 0; }
   .file-event-card-main { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 0.25rem 0.45rem; min-height: 3.15rem; padding: 0.5rem 0.55rem 0.5rem 0.65rem; }
+  .file-timeline-axis { padding-left: 2rem; }
+  .file-timeline-axis::before { left: 0.55rem; }
+  .file-event-axis-dot { left: -1.8rem; }
   .file-event-status { grid-column: 1; grid-row: 1; }
   .file-event-subject { grid-column: 2; grid-row: 1; }
   .file-event-time { grid-column: 3; grid-row: 2; }
@@ -1258,6 +1263,7 @@ html[data-theme="dark"] .file-drop-overlay strong { border-color: var(--fd-focus
 html[data-theme="dark"] .file-batch-bar { border-color: #0f766e; background: var(--fd-primary-soft); color: #ccfbf1; }
 html[data-theme="dark"] .file-batch-bar button { border-color: var(--fd-focus); background: var(--fd-surface); color: var(--fd-primary); }
 html[data-theme="dark"] .file-timeline-axis::before { background: var(--fd-border); }
+html[data-theme="dark"] .file-event-axis-dot { border-color: var(--fd-surface); box-shadow: 0 0 0 2px #115e59; }
 html[data-theme="dark"] .file-event-card { border-color: var(--fd-border); background: var(--fd-surface); box-shadow: 0 2px 8px rgb(2 6 23 / 28%); }
 html[data-theme="dark"] .file-event-subject { color: var(--fd-text-secondary); }
 html[data-theme="dark"] .file-event-history-trigger:hover,
