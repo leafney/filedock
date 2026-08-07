@@ -353,18 +353,34 @@ func (s *FileSvc) CancelUpload(userID, roomCode, fileID string) error {
 		return fileNotFound(err)
 	}
 	s.uploads.cancel(file.ID)
-	if err := s.ReleaseUpload(userID, file.ID, model.FileStatusCancelled, errc.ErrUploadCancelled); err != nil {
+	transitioned := false
+	switch file.Status {
+	case model.FileStatusReserved, model.FileStatusUploading:
+		transitioned, err = s.releaseUpload(userID, file.ID, model.FileStatusCancelled, errc.ErrUploadCancelled)
+		if err != nil {
+			return err
+		}
+	case model.FileStatusCancelled, model.FileStatusFailed:
+		// A previous request may have completed the state transition while its
+		// response was lost. Continue cleaning artifacts so retry is idempotent.
+	default:
+		return errx.New(errc.ErrFileState, nil)
+	}
+	if err := s.db.Where("file_id = ?", file.ID).Delete(&model.UploadPart{}).Error; err != nil {
 		return err
 	}
-	_ = s.db.Where("file_id = ?", file.ID).Delete(&model.UploadPart{}).Error
-	_ = s.db.Where("file_id = ?", file.ID).Delete(&model.UploadSession{}).Error
+	if err := s.db.Where("file_id = ?", file.ID).Delete(&model.UploadSession{}).Error; err != nil {
+		return err
+	}
 	if s.storage != nil {
 		if err := s.storage.DeleteTemporaryFile(file.RoomID, file.StorageName); err != nil {
 			return errx.Wrap(errc.ErrFileStorage, err, nil)
 		}
 	}
 	s.refreshBatchStatus(file.BatchID)
-	s.publishFileProjection(file.ID, "file.upload_cancelled", map[string]interface{}{"failureCode": errc.ErrUploadCancelled})
+	if transitioned {
+		s.publishFileProjection(file.ID, "file.upload_cancelled", map[string]interface{}{"failureCode": errc.ErrUploadCancelled})
+	}
 	return nil
 }
 
@@ -418,11 +434,17 @@ func (s *FileSvc) CompleteUpload(userID, fileID, detectedMIME string, actualSize
 }
 
 func (s *FileSvc) ReleaseUpload(userID, fileID, targetStatus string, failureCode int) error {
+	_, err := s.releaseUpload(userID, fileID, targetStatus, failureCode)
+	return err
+}
+
+func (s *FileSvc) releaseUpload(userID, fileID, targetStatus string, failureCode int) (bool, error) {
 	if targetStatus != model.FileStatusFailed && targetStatus != model.FileStatusCancelled {
-		return errx.New(errc.ErrFileState, nil)
+		return false, errx.New(errc.ErrFileState, nil)
 	}
 	now := s.now().Unix()
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	transitioned := false
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var file model.RoomFile
 		if err := tx.Where("id = ? AND uploader_user_id = ?", fileID, userID).First(&file).Error; err != nil {
 			return fileNotFound(err)
@@ -433,15 +455,19 @@ func (s *FileSvc) ReleaseUpload(userID, fileID, targetStatus string, failureCode
 		if file.Status != model.FileStatusReserved && file.Status != model.FileStatusUploading {
 			return errx.New(errc.ErrFileState, nil)
 		}
+		result := tx.Model(&model.RoomFile{}).Where("id = ? AND status IN ?", file.ID, []string{model.FileStatusReserved, model.FileStatusUploading}).Updates(map[string]interface{}{"status": targetStatus, "failure_code": failureCode, "failed_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
 		roomResult := tx.Model(&model.Room{}).Where("id = ? AND reserved_bytes >= ?", file.RoomID, file.DeclaredSize).UpdateColumn("reserved_bytes", gorm.Expr("reserved_bytes - ?", file.DeclaredSize))
 		if roomResult.Error != nil {
 			return roomResult.Error
 		}
 		if roomResult.RowsAffected != 1 {
 			return errx.New(errc.ErrFileState, nil)
-		}
-		if err := tx.Model(&model.RoomFile{}).Where("id = ? AND status IN ?", file.ID, []string{model.FileStatusReserved, model.FileStatusUploading}).Updates(map[string]interface{}{"status": targetStatus, "failure_code": failureCode, "failed_at": now}).Error; err != nil {
-			return err
 		}
 		sessionStatus := model.UploadSessionFailed
 		if targetStatus == model.FileStatusCancelled {
@@ -457,8 +483,10 @@ func (s *FileSvc) ReleaseUpload(userID, fileID, targetStatus string, failureCode
 		if err := createFileEvent(tx, file.RoomID, file.ID, file.BatchID, userID, eventType, now); err != nil {
 			return err
 		}
+		transitioned = true
 		return assertRoomCapacity(tx, file.RoomID)
 	})
+	return transitioned, err
 }
 
 func (s *FileSvc) refreshBatchStatus(batchID string) {

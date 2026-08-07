@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -250,6 +252,76 @@ func TestCancelActiveUploadStopsTaskAndReleasesReservation(t *testing.T) {
 	fixture.svc.db.First(&file, "id = ?", batch.Files[0].ID)
 	if file.Status != model.FileStatusCancelled {
 		t.Fatalf("file status = %q", file.Status)
+	}
+}
+
+func TestCancelUploadIsIdempotentAndCleansArtifacts(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	storage, err := NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.svc.storage = storage
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-cancel-idempotent", model.FileScopeShared, []FileManifest{{OriginalName: "cancel-idempotent.bin", DeclaredSize: 5}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := batch.Files[0]
+	if err := storage.PrepareUpload(file.RoomID, file.StorageName, file.DeclaredSize); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.db.Create(&model.UploadPart{ID: "01CANCELPART000000000000000", FileID: file.ID, PartNumber: 0, StartOffset: 0, EndOffset: 4, Length: 5, SHA256: "hash", CompletedAt: time.Now().Unix()}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := fixture.svc.CancelUpload(fixture.uploader.UserID, fixture.room.Code, file.ID); err != nil {
+		t.Fatalf("first cancel: %v", err)
+	}
+	if err := fixture.svc.CancelUpload(fixture.uploader.UserID, fixture.room.Code, file.ID); err != nil {
+		t.Fatalf("retry cancel: %v", err)
+	}
+
+	var current model.RoomFile
+	if err := fixture.svc.db.First(&current, "id = ?", file.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != model.FileStatusCancelled {
+		t.Fatalf("file status = %q", current.Status)
+	}
+	var room model.Room
+	if err := fixture.svc.db.First(&room, "id = ?", fixture.room.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if room.ReservedBytes != 0 || room.UsedBytes != 0 {
+		t.Fatalf("capacity after repeated cancel = used %d reserved %d", room.UsedBytes, room.ReservedBytes)
+	}
+	var parts, sessions, events int64
+	fixture.svc.db.Model(&model.UploadPart{}).Where("file_id = ?", file.ID).Count(&parts)
+	fixture.svc.db.Model(&model.UploadSession{}).Where("file_id = ?", file.ID).Count(&sessions)
+	fixture.svc.db.Model(&model.FileEvent{}).Where("file_id = ? AND type = ?", file.ID, FileEventUploadCancelled).Count(&events)
+	if parts != 0 || sessions != 0 || events != 1 {
+		t.Fatalf("cleanup counts: parts=%d sessions=%d cancelEvents=%d", parts, sessions, events)
+	}
+	if _, err := os.Stat(filepath.Join(storage.uploadRoot, file.RoomID, file.StorageName+".part")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary file remains: %v", err)
+	}
+}
+
+func TestCancelUploadRejectsRoomOwnerForAnotherMembersUpload(t *testing.T) {
+	fixture := newFileTestFixture(t, 1000)
+	batch, err := fixture.svc.CreateUploadBatch(fixture.uploader.UserID, fixture.room.Code, "upload-cancel-owner", model.FileScopeShared, []FileManifest{{OriginalName: "member.bin", DeclaredSize: 5}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.svc.CancelUpload(fixture.owner.UserID, fixture.room.Code, batch.Files[0].ID); errx.Code(err) != errc.ErrFileNotFound {
+		t.Fatalf("owner cancel error = %v", err)
+	}
+	var room model.Room
+	if err := fixture.svc.db.First(&room, "id = ?", fixture.room.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if room.ReservedBytes != 5 {
+		t.Fatalf("owner cancel changed reservation = %d", room.ReservedBytes)
 	}
 }
 
