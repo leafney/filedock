@@ -4,6 +4,7 @@ const RING_COUNT = 8;
 const LINE_WIDTH = 1;
 const RING_SPACING_DIVISOR = 9;
 const START_RADIUS = 33;
+const OUTER_COVERAGE_PADDING_RINGS = 1;
 const PHASE_DURATION_MS = 3_000;
 const FRAME_INTERVAL_MS = 1_000 / 60;
 const DESKTOP_BASE_OPACITY = 0.18;
@@ -54,16 +55,21 @@ export function createRadarWaveRenderer(
 
     const spacing = Math.max(1, Math.round(Math.max(width * 0.6, height) / RING_SPACING_DIVISOR));
     const phaseOffset = spacing * phase;
-    const maxDimension = Math.max(1, width, height);
+    // 以中心到角点的距离作为波纹覆盖范围，确保最外层波纹不会在上下边缘
+    // 之前就完全淡出。额外预留一圈，避免动画相位切换时出现断层。
+    const coverageRadius = Math.max(1, Math.hypot(width / 2, height / 2));
+    const outerRadius = coverageRadius + spacing * OUTER_COVERAGE_PADDING_RINGS;
+    const ringCount = Math.max(
+      RING_COUNT,
+      Math.ceil((outerRadius - START_RADIUS) / spacing) + 1,
+    );
     const baseOpacity = mobile ? MOBILE_BASE_OPACITY : DESKTOP_BASE_OPACITY;
 
-    for (let index = RING_COUNT - 1; index >= 0; index -= 1) {
+    for (let index = ringCount - 1; index >= 0; index -= 1) {
       const radius = spacing * index + phaseOffset + START_RADIUS;
-      let opacity = Math.max(0, baseOpacity * (1 - 1.2 * radius / maxDimension));
-      if (radius > spacing * 7) {
-        const outerFade = Math.min(1, Math.max(0, (spacing * 8 - radius) / spacing));
-        opacity *= outerFade;
-      }
+      const radialFade = Math.max(0, 1 - 0.82 * radius / coverageRadius);
+      const outerFade = Math.min(1, Math.max(0, (outerRadius - radius) / spacing));
+      let opacity = baseOpacity * radialFade * outerFade;
       opacity = Math.min(baseOpacity, Math.max(0, opacity));
       if (opacity <= 0) continue;
 
