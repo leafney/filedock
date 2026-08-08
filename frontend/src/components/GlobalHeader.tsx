@@ -85,7 +85,7 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, onO
         <span className={brandMarkClassName} aria-hidden="true">FD</span>
         <div><div className="home-brand-name">FileDock</div><div className="home-brand-subtitle">{t("brand.description")}</div></div>
       </Link>
-      {center}
+      {roomVariant && !center ? <span className="room-topbar-center-spacer" aria-hidden="true" /> : center}
       <div className={actionClassName}>
         {extraActions}
         {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<ShareAltOutlined />} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
