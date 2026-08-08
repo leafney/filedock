@@ -6,8 +6,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { AppFooter } from "../components/AppFooter";
-import { GlobalHeader } from "../components/GlobalHeader";
+import { AppShell } from "../components/AppShell";
 import { ProfileModal } from "../components/ProfileModal";
 import { RadarCanvas } from "../components/RadarCanvas";
 import { isUnauthorized } from "../components/common";
@@ -34,7 +33,7 @@ function ErrorAlert({ error }: { error: unknown }) {
 
 function HomeLoading() {
   const { t } = useTranslation();
-  return <div className="home-page"><div className="home-loading">{t("home.loading")}</div><AppFooter /></div>;
+  return <AppShell variant="home"><div className="home-loading">{t("home.loading")}</div></AppShell>;
 }
 
 function NicknamePanel({ name, setName, onRandomize, onSubmit, pending, error }: { name: string; setName: (value: string) => void; onRandomize: () => void; onSubmit: (event: FormEvent) => void; pending: boolean; error?: unknown }) {
@@ -91,7 +90,7 @@ export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   }, [draftName, nicknameQuery, session]);
 
   if (sessionQuery.isPending) return <HomeLoading />;
-  if (sessionQuery.error && !isUnauthorized(sessionQuery.error) && !session) return <div className="home-page"><div className="home-centered-error"><ErrorAlert error={sessionQuery.error} /><Button onClick={() => void sessionQuery.refetch()}>{t("home.retry")}</Button></div><AppFooter /></div>;
+  if (sessionQuery.error && !isUnauthorized(sessionQuery.error) && !session) return <AppShell variant="home"><div className="home-centered-error"><ErrorAlert error={sessionQuery.error} /><Button onClick={() => void sessionQuery.refetch()}>{t("home.retry")}</Button></div></AppShell>;
 
   const openRoom = (room: RoomSummary) => {
     if (room.status === "destroying") return;
@@ -107,5 +106,5 @@ export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
   const resetAccount = () => Modal.confirm({ title: t("home.resetConfirm"), okText: t("session.reset"), cancelText: t("room.backHome"), okButtonProps: { danger: true }, onOk: () => resetMutation.mutateAsync() });
   const submitName = (event: FormEvent) => { event.preventDefault(); if (draftName.trim()) createSessionMutation.mutate(); };
 
-  return <div className="home-page"><GlobalHeader variant="home" session={session} fallbackName={draftName} onOpenProfile={() => setProfileOpen(true)} /><main className="home-layout"><aside className="home-sidebar">{session ? <>{roomsQuery.isError && <ErrorAlert error={roomsQuery.error} />}{roomsQuery.isPending ? <div className="home-sidebar-card">{t("home.loading")}</div> : <RoomSection ownerRoom={ownerRoom} memberRooms={memberRooms ?? []} onCreate={() => setModal("create")} onJoin={() => setModal("join")} onEnter={openRoom} onAction={runRoomAction} />}</> : <NicknamePanel name={draftName} setName={setDraftName} onRandomize={() => void nicknameQuery.refetch().then((result) => { if (result.data?.displayName) setDraftName(result.data.displayName); })} onSubmit={submitName} pending={createSessionMutation.isPending} error={createSessionMutation.error} />}</aside><section className="home-radar-panel"><RadarCanvas displayName={session?.displayName ?? draftName} /></section></main><AppFooter /><CreateRoomModal open={modal === "create"} onClose={() => setModal(null)} onCreated={(roomCode) => { setModal(null); void queryClient.invalidateQueries({ queryKey: ["rooms"] }); navigate(`/rooms/${roomCode}`); }} /><JoinRoomModal open={modal === "join"} onClose={() => setModal(null)} onJoined={(roomCode) => navigate(`/rooms/${roomCode}`)} />{session && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={resetAccount} />}{selectedRoom && <Drawer title={`${t("room.code")} ${selectedRoom.roomCode}`} placement="bottom" height="auto" open={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} closeIcon={<CloseOutlined />}><Space direction="vertical" className="home-mobile-actions" size="middle"><Button block type="primary" onClick={() => runRoomAction(selectedRoom, "enter")}>{t("room.enter")}</Button>{selectedRoom.role === "owner" ? <Button block danger onClick={() => runRoomAction(selectedRoom, "dissolve")}>{t("room.dissolve")}</Button> : <Button block onClick={() => runRoomAction(selectedRoom, "leave")}>{t("room.leave")}</Button>}</Space></Drawer>}</div>;
+  return <AppShell variant="home" session={session} fallbackName={draftName} onOpenProfile={() => setProfileOpen(true)}><div className="home-layout"><aside className="home-sidebar">{session ? <>{roomsQuery.isError && <ErrorAlert error={roomsQuery.error} />}{roomsQuery.isPending ? <div className="home-sidebar-card">{t("home.loading")}</div> : <RoomSection ownerRoom={ownerRoom} memberRooms={memberRooms ?? []} onCreate={() => setModal("create")} onJoin={() => setModal("join")} onEnter={openRoom} onAction={runRoomAction} />}</> : <NicknamePanel name={draftName} setName={setDraftName} onRandomize={() => void nicknameQuery.refetch().then((result) => { if (result.data?.displayName) setDraftName(result.data.displayName); })} onSubmit={submitName} pending={createSessionMutation.isPending} error={createSessionMutation.error} />}</aside><section className="home-radar-panel"><RadarCanvas displayName={session?.displayName ?? draftName} /></section></div><CreateRoomModal open={modal === "create"} onClose={() => setModal(null)} onCreated={(roomCode) => { setModal(null); void queryClient.invalidateQueries({ queryKey: ["rooms"] }); navigate(`/rooms/${roomCode}`); }} /><JoinRoomModal open={modal === "join"} onClose={() => setModal(null)} onJoined={(roomCode) => navigate(`/rooms/${roomCode}`)} />{session && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={resetAccount} />}{selectedRoom && <Drawer title={`${t("room.code")} ${selectedRoom.roomCode}`} placement="bottom" height="auto" open={mobileDrawerOpen} onClose={() => setMobileDrawerOpen(false)} closeIcon={<CloseOutlined />}><Space direction="vertical" className="home-mobile-actions" size="middle"><Button block type="primary" onClick={() => runRoomAction(selectedRoom, "enter")}>{t("room.enter")}</Button>{selectedRoom.role === "owner" ? <Button block danger onClick={() => runRoomAction(selectedRoom, "dissolve")}>{t("room.dissolve")}</Button> : <Button block onClick={() => runRoomAction(selectedRoom, "leave")}>{t("room.leave")}</Button>}</Space></Drawer>}</AppShell>;
 }
