@@ -147,6 +147,7 @@ body {
 
 .app-footer-mobile-trigger { display: inline-flex; }
 .app-footer-mobile-trigger .app-footer-trigger { cursor: pointer; }
+.app-footer-mobile-trigger .app-footer-trigger > svg { display: none; }
 
 .app-footer-tooltip {
   line-height: 1.6;
