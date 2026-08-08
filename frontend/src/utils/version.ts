@@ -11,5 +11,14 @@ export function getVersionLabel(version: VersionResponse) {
 }
 
 export function getVersionDetails(version: VersionResponse) {
-  return { label: getVersionLabel(version), version: valid(version.version) ? version.version : "dev", branch: valid(version.git_branch) ? version.git_branch : "-", commit: valid(version.git_commit) ? version.git_commit : "-", buildTime: valid(version.build_time) ? version.build_time : "-" };
+  const versionLabel = valid(version.version) && !version.version.includes("-g") ? version.version : undefined;
+  const commit = valid(version.git_commit) ? version.git_commit : undefined;
+  return {
+    label: getVersionLabel(version),
+    version: versionLabel,
+    branch: valid(version.git_branch) ? version.git_branch : undefined,
+    commit,
+    shortCommit: commit?.slice(0, 7),
+    buildTime: valid(version.build_time) ? version.build_time : undefined,
+  };
 }

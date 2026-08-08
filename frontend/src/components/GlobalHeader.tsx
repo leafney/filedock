@@ -1,4 +1,4 @@
-import { BellOutlined, BgColorsOutlined, DownOutlined, GlobalOutlined, ShareAltOutlined, SettingOutlined } from "@ant-design/icons";
+import { BellOutlined, BgColorsOutlined, GlobalOutlined, ShareAltOutlined, SettingOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { Avatar, Badge, Button, Dropdown } from "antd";
 import type { ReactNode } from "react";
@@ -80,24 +80,25 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, onO
   const brandMarkClassName = roomVariant ? "room-brand-mark" : "home-brand-mark";
 
   return <header className={roomVariant ? "room-topbar" : "home-header"}>
-    <Link className={brandClassName} to="/" aria-label={t("brand.homeLink")}>
-      <span className={brandMarkClassName} aria-hidden="true">FD</span>
-      <div><div className="home-brand-name">FileDock</div><div className="home-brand-subtitle">{t("brand.description")}</div></div>
-    </Link>
-    {center}
-    <div className={actionClassName}>
-      {extraActions}
-      {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<ShareAltOutlined />} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
-      <Badge count={session ? notifications.totalCount : 0} size="small" overflowCount={99}>
-        <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={t("notification.open")} disabled={!session || !notifications.enabled} onClick={(event) => openNotificationCenter(event, notifications.open)} />
-      </Badge>
-      <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} trigger={["click"]} placement="bottomRight">
-        <button type="button" className={userClassName} aria-label={session ? t("home.profile") : t("language.label")}>
-          <Avatar size={34} style={{ backgroundColor: getStableAvatarColor(displayName) }}>{getAvatarInitial(displayName)}</Avatar>
-          <span className={roomVariant ? "room-user-name" : "home-user-name"}>{displayName}</span>
-          <DownOutlined className={roomVariant ? "room-user-chevron" : "home-user-chevron"} />
-        </button>
-      </Dropdown>
+    <div className="global-header-inner">
+      <Link className={brandClassName} to="/" aria-label={t("brand.homeLink")}>
+        <span className={brandMarkClassName} aria-hidden="true">FD</span>
+        <div><div className="home-brand-name">FileDock</div><div className="home-brand-subtitle">{t("brand.description")}</div></div>
+      </Link>
+      {center}
+      <div className={actionClassName}>
+        {extraActions}
+        {onShare && <Button className={iconClassName} type="text" shape="circle" icon={<ShareAltOutlined />} aria-label={t("room.workspace.shareRoom")} onClick={onShare} />}
+        <Badge count={session ? notifications.totalCount : 0} size="small" overflowCount={99}>
+          <Button className={iconClassName} type="text" shape="circle" icon={<BellOutlined />} aria-label={t("notification.open")} disabled={!session || !notifications.enabled} onClick={(event) => openNotificationCenter(event, notifications.open)} />
+        </Badge>
+        <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} trigger={["click"]} placement="bottomRight">
+          <button type="button" className={userClassName} aria-haspopup="menu" aria-label={session ? t("home.profile") : t("language.label")}>
+            <Avatar size={34} style={{ backgroundColor: getStableAvatarColor(displayName) }}>{getAvatarInitial(displayName)}</Avatar>
+            <span className={roomVariant ? "room-user-name" : "home-user-name"}>{displayName}</span>
+          </button>
+        </Dropdown>
+      </div>
     </div>
   </header>;
 }

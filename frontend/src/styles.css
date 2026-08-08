@@ -104,8 +104,17 @@ body {
 
 .app-footer {
   display: flex;
+  min-height: 44px;
   justify-content: center;
-  padding: 1.25rem 0 0.5rem;
+  align-items: center;
+  padding: 0.35rem 0.8rem;
+}
+
+.app-footer-inner {
+  display: flex;
+  width: min(1440px, 100%);
+  align-items: center;
+  justify-content: center;
 }
 
 .app-footer-trigger {
@@ -135,6 +144,9 @@ body {
   font-size: 0.75rem;
   padding: 0.35rem 0.6rem;
 }
+
+.app-footer-mobile-trigger { display: inline-flex; }
+.app-footer-mobile-trigger .app-footer-trigger { cursor: pointer; }
 
 .app-footer-tooltip {
   line-height: 1.6;
@@ -300,18 +312,23 @@ body {
   flex-direction: column;
 }
 
-.home-header,
-.home-layout {
+.home-layout { width: min(1440px, 100%); margin: 0 auto; }
+
+.home-header {
+  width: 100%;
+}
+
+.global-header-inner {
   width: min(1440px, 100%);
   margin: 0 auto;
 }
 
-.home-header {
+.home-header > .global-header-inner {
   display: flex;
+  min-height: 3.5rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 3.5rem;
 }
 
 .home-brand,
@@ -335,6 +352,11 @@ body {
 .home-user-button:focus-visible { outline: 2px solid #0f766e; outline-offset: 3px; border-radius: 999px; }
 .home-user-name { max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; font-weight: 600; }
 .home-user-chevron { color: #94a3b8; font-size: 0.65rem; }
+.home-user-button,
+.room-user-button { gap: 0.5rem; }
+.room-user-button { display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--room-text); cursor: pointer; padding: 0.2rem; }
+.room-user-button:focus-visible { outline: 2px solid var(--room-primary); outline-offset: 3px; border-radius: 999px; }
+.room-user-name { max-width: 8rem; overflow: hidden; font-size: 0.85rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 
 .home-layout { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: clamp(1rem, 3vw, 3rem); align-items: stretch; min-height: 0; padding: 0.6rem 0 1rem; }
 .home-radar-panel { min-width: 0; display: flex; align-items: center; justify-content: center; }
@@ -415,7 +437,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 @media (max-width: 560px) {
   .home-page { padding-inline: 0.8rem; }
   .home-brand-subtitle, .home-user-name, .home-user-chevron { display: none; }
-  .home-header { min-height: 3rem; }
+  .home-header > .global-header-inner { min-height: 3rem; }
   .home-radar-panel .radar-canvas { min-height: 43vh; }
   .home-room-actions { display: none; }
 }
@@ -536,12 +558,18 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 
 .room-topbar {
   z-index: 5;
+  display: block;
+  border-bottom: 1px solid var(--room-border);
+  background: var(--room-panel);
+  padding: 0;
+}
+
+.room-topbar > .global-header-inner {
   display: grid;
   grid-template-columns: minmax(270px, 1fr) auto minmax(180px, 1fr);
   align-items: center;
   gap: 1.5rem;
-  border-bottom: 1px solid var(--room-border);
-  background: var(--room-panel);
+  min-height: 64px;
   padding: 0 1.1rem;
 }
 
@@ -559,18 +587,19 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   align-items: center;
 }
 
-.room-topbar-leading { min-width: 0; gap: 0.65rem; }
+.room-topbar-leading { width: fit-content; min-width: 0; gap: 0.65rem; justify-self: start; }
 .global-header-brand { color: inherit; text-decoration: none; }
 .room-topbar-actions { justify-content: flex-end; gap: 0.2rem; }
-.room-topbar-summary { justify-content: center; gap: 1.7rem; }
+.room-topbar-summary { justify-content: center; gap: 0; }
 .room-brand-mark { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border-radius: 0.65rem; background: var(--room-primary); color: #fff; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; }
 .room-topbar-identity { min-width: 0; }
 .room-topbar-identity button { gap: 0.35rem; border: 0; background: transparent; color: var(--room-text); cursor: pointer; padding: 0; }
 .room-topbar-identity button svg { width: 0.85rem; }
 .room-topbar-identity > span { display: block; overflow: hidden; color: var(--room-muted); font-size: 0.72rem; margin-top: 0.12rem; text-overflow: ellipsis; white-space: nowrap; }
-.room-topbar-summary > div { min-width: 4.5rem; }
+.room-topbar-summary { display: grid; grid-template-columns: minmax(5.5rem, 7rem) minmax(9.5rem, 12rem) minmax(11rem, 15rem); align-items: center; }
+.room-topbar-summary > div { min-width: 0; }
 .room-topbar-summary span { display: block; color: #94a3b8; font-size: 0.62rem; }
-.room-topbar-summary strong { display: block; font-size: 0.74rem; margin-top: 0.15rem; white-space: nowrap; }
+.room-topbar-summary strong { display: block; overflow: hidden; font-size: 0.74rem; font-variant-numeric: tabular-nums; margin-top: 0.15rem; text-overflow: ellipsis; white-space: nowrap; }
 
 .room-icon-button {
   position: relative;
@@ -595,7 +624,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-action-menu button:hover { background: #f8fafc; }
 .room-action-menu button.danger { color: #dc2626; }
 
-.room-capacity-summary { width: 8rem; border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }
+.room-capacity-summary { width: 100%; min-width: 0; border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }
 .room-capacity-summary > i { display: block; height: 3px; overflow: hidden; border-radius: 999px; background: #e2e8f0; margin-top: 0.3rem; }
 .room-capacity-summary > i > i { display: block; height: 100%; border-radius: inherit; background: var(--room-primary); }
 
@@ -805,13 +834,13 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .room-workspace-layout { grid-template-columns: minmax(480px, 1fr) 300px; }
   .room-member-panel:not(.is-drawer) { display: none; }
   .room-members-trigger { display: inline-grid; }
-  .room-topbar { grid-template-columns: minmax(240px, 1fr) auto minmax(150px, 1fr); gap: 0.75rem; }
-  .room-topbar-summary { gap: 1rem; }
+  .room-topbar > .global-header-inner { grid-template-columns: minmax(240px, 1fr) auto minmax(150px, 1fr); gap: 0.75rem; }
+  .room-topbar-summary { grid-template-columns: minmax(4.8rem, 6rem) minmax(8.5rem, 10rem) minmax(9rem, 12rem); }
 }
 
 @media (max-width: 760px) {
   .room-page { min-height: 560px; grid-template-rows: 58px minmax(0, 1fr) 52px; }
-  .room-topbar { grid-template-columns: minmax(0, 1fr) auto; padding: 0 0.55rem; }
+  .room-topbar > .global-header-inner { grid-template-columns: minmax(0, 1fr) auto; min-height: 58px; padding: 0 0.55rem; }
   .room-brand-mark { width: 2rem; height: 2rem; }
   .room-topbar-summary { display: none; }
   .room-page > .language-selector { display: none; }
@@ -843,6 +872,10 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .room-transfer-placeholder { justify-content: center; min-height: 52px; }
   .room-overlay { align-items: end; padding: 0; }
   .room-overlay > section { width: 100%; max-height: 86vh; border-radius: 1rem 1rem 0 0; }
+}
+
+@media (min-width: 1181px) {
+  .room-chat-mobile-trigger { display: none; }
 }
 
 @media (max-width: 420px) {
@@ -1128,6 +1161,7 @@ html[data-theme="dark"] .app-footer-trigger:focus-visible { background: var(--fd
 html[data-theme="dark"] .home-page { background: var(--fd-page); color: var(--fd-text); }
 html[data-theme="dark"] .home-brand-name,
 html[data-theme="dark"] .home-user-button,
+html[data-theme="dark"] .room-user-button,
 html[data-theme="dark"] .home-section-heading,
 html[data-theme="dark"] .home-name-form label,
 html[data-theme="dark"] .home-profile-version-title { color: var(--fd-text-strong); }
