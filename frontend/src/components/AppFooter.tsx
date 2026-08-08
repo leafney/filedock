@@ -30,9 +30,9 @@ export function AppFooter() {
   const displayValue = details.version ?? details.shortCommit ?? "dev";
   const content = (
     <div className="app-footer-tooltip">
-      {details.version && <div>{t("home.fields.version")}: {details.version}</div>}
-      {details.shortCommit && <div>{t("home.fields.commit")}: {details.shortCommit}</div>}
-      {details.buildTime && <div>{t("home.fields.buildTime")}: {details.buildTime}</div>}
+      {details.version && <div><span>{t("home.fields.version")}:</span><strong>{details.version}</strong></div>}
+      {details.shortCommit && <div><span>{t("home.fields.commit")}:</span><strong>{details.shortCommit}</strong></div>}
+      {details.buildTime && <div><span>{t("home.fields.compileTime")}:</span><strong>{details.buildTime}</strong></div>}
     </div>
   );
   const copyCommit = async () => {

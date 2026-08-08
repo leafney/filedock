@@ -81,7 +81,7 @@ export function GlobalHeader({ variant, session, fallbackName = "?", center, onO
 
   return <header className={roomVariant ? "room-topbar" : "home-header"}>
     <div className="global-header-inner">
-      <Link className={brandClassName} to="/" aria-label={t("brand.homeLink")}>
+      <Link className={brandClassName} to="/" reloadDocument aria-label={t("brand.homeLink")}>
         <span className={brandMarkClassName} aria-hidden="true">FD</span>
         <div><div className="home-brand-name">FileDock</div><div className="home-brand-subtitle">{t("brand.description")}</div></div>
       </Link>

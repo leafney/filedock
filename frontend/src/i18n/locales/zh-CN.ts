@@ -47,6 +47,7 @@ const zhCN = {
       branch: "分支",
       commit: "提交",
       buildTime: "构建时间",
+      compileTime: "编译",
     },
   },
   error: {

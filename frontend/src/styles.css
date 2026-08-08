@@ -154,6 +154,10 @@ body {
   white-space: nowrap;
 }
 
+.app-footer-tooltip > div { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.4rem; align-items: baseline; }
+.app-footer-tooltip > div > span { color: inherit; }
+.app-footer-tooltip > div > strong { font-weight: 600; }
+
 .app-shell {
   min-height: 100dvh;
 }
@@ -547,12 +551,17 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 }
 
 .room-page > .app-shell-main {
+  display: grid;
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
 
 .room-workspace-content {
   position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -630,7 +639,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-capacity-summary > i { display: block; height: 3px; overflow: hidden; border-radius: 999px; background: #e2e8f0; margin-top: 0.3rem; }
 .room-capacity-summary > i > i { display: block; height: 100%; border-radius: inherit; background: var(--room-primary); }
 
-.room-workspace-layout { display: grid; grid-template-columns: 240px minmax(540px, 1fr) 320px; min-height: 0; overflow: hidden; }
+.room-workspace-layout { display: grid; grid-template-columns: 240px minmax(540px, 1fr) 320px; height: 100%; min-height: 0; overflow: hidden; }
 .room-member-panel, .room-files-shell, .room-chat-placeholder { min-width: 0; min-height: 0; background: var(--room-panel); }
 .room-member-panel { overflow: hidden; border-right: 1px solid var(--room-border); }
 .room-member-panel.is-drawer { border: 0; }

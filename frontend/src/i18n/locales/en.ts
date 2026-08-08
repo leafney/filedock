@@ -53,6 +53,7 @@ const en = {
       branch: "Branch",
       commit: "Commit",
       buildTime: "Build time",
+      compileTime: "Compile",
     },
   },
   error: {
