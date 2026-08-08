@@ -630,6 +630,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 }
 .room-icon-button:hover, .room-icon-button:focus-visible { background: #f1f5f9; color: var(--room-primary); }
 .room-icon-button b { position: absolute; right: -0.1rem; top: -0.1rem; display: grid; min-width: 1rem; height: 1rem; place-items: center; border-radius: 999px; background: #dc2626; color: white; font-size: 0.55rem; padding: 0 0.2rem; }
+.room-topbar-actions .ant-btn.room-icon-button { font-size: 1.2rem; }
 .room-members-trigger { display: none; }
 .room-menu-wrap { position: relative; }
 .room-action-menu { position: absolute; right: 0; top: calc(100% + 0.4rem); z-index: 9; width: 11rem; border: 1px solid var(--room-border); border-radius: 0.7rem; background: #fff; box-shadow: 0 12px 30px rgb(15 23 42 / 14%); padding: 0.35rem; }
