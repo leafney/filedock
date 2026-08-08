@@ -195,12 +195,10 @@ body {
 .radar-wave-canvas {
   z-index: 0;
   top: calc(-1 * var(--radar-wave-bleed, 4rem));
-  right: 0;
-  bottom: calc(-1 * var(--radar-wave-bleed, 4rem));
   left: 0;
   display: block;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: calc(100% + var(--radar-wave-bleed, 4rem) + var(--radar-wave-bleed, 4rem));
   pointer-events: none;
 }
 
