@@ -348,7 +348,8 @@ body {
   align-items: center;
 }
 
-.home-brand { gap: 0.75rem; }
+.home-brand,
+.room-topbar-leading { gap: 0.75rem; }
 .home-brand-mark { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: 0.7rem; background: #0f766e; color: #fff; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; }
 .home-brand-name { color: #0f172a; font-size: 1.05rem; font-weight: 750; letter-spacing: 0.08em; }
 .home-brand-subtitle { color: #64748b; font-size: 0.7rem; margin-top: 0.12rem; }
@@ -599,7 +600,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   align-items: center;
 }
 
-.room-topbar-leading { width: fit-content; min-width: 0; gap: 0.65rem; justify-self: start; }
+.room-topbar-leading { width: fit-content; min-width: 0; justify-self: start; }
 .global-header-brand { color: inherit; text-decoration: none; }
 .room-topbar-actions { justify-content: flex-end; gap: 0.2rem; }
 .room-topbar-summary { justify-content: center; gap: 0; }
