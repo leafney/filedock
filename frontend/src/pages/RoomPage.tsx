@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { ErrorNotice, LanguageSelector, PinInput } from "../components/common";
+import { AppShell } from "../components/AppShell";
+import { ErrorNotice, PinInput } from "../components/common";
 import { ProfileModal } from "../components/ProfileModal";
 import { RoomWorkspace } from "../components/room/RoomWorkspace";
 import { streamEventName, type StreamEventMessage } from "../hooks/use-stream";
@@ -23,7 +24,7 @@ import {
   leaveRoom,
   resetSession,
 } from "../services/api";
-import type { RoomJoinInfo } from "../types/domain";
+import type { RoomJoinInfo, Session } from "../types/domain";
 import { readNotificationChatLaunch, readNotificationFileLaunch } from "../utils/notifications";
 
 export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSessionQuery> }) {
@@ -127,13 +128,26 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     if (failed) setActionError(failed.error);
   }, [join, request, cancelRequest, extend, leave, dissolve]);
 
-  if (sessionQuery.isPending) return <RoomGate>{t("home.loading")}</RoomGate>;
-  if (!session) return <RoomGate><p>{t("session.nameRequired")}</p><Link to="/">{t("room.backHome")}</Link></RoomGate>;
-  if (!validCode || joinInfo.isError) return <RoomGate><ErrorNotice error={joinInfo.error} /><Link to="/">{t("room.backHome")}</Link></RoomGate>;
-  if (joinInfo.isPending) return <RoomGate>{t("room.loading")}</RoomGate>;
-  if (!joined && joinInfo.data) return <JoinPanel info={joinInfo.data} onJoin={(confirmed, pin) => join.mutate({ confirmed, pin })} onRequest={() => request.mutate()} onCancelRequest={() => cancelRequest.mutate()} loading={join.isPending || request.isPending || cancelRequest.isPending} error={join.isError ? join.error : request.isError ? request.error : cancelRequest.error} />;
-  if (snapshot.isPending) return <RoomGate>{t("room.loading")}</RoomGate>;
-  if (snapshot.isError || !snapshot.data) return <RoomGate><ErrorNotice error={snapshot.error} /><Link to="/">{t("room.backHome")}</Link></RoomGate>;
+  const resetAccount = () => {
+    if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
+    void resetSession().then(() => {
+      queryClient.removeQueries({ queryKey: ["session"] });
+      queryClient.removeQueries({ queryKey: ["rooms"] });
+      queryClient.removeQueries({ queryKey: ["notifications"] });
+      setProfileOpen(false);
+      navigate("/", { replace: true });
+    }).catch(setActionError);
+  };
+  const profileModal = session ? <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={resetAccount} /> : null;
+  const renderGate = (children: ReactNode) => <RoomGate session={session} onOpenProfile={session ? () => setProfileOpen(true) : undefined}>{children}{profileModal}</RoomGate>;
+
+  if (sessionQuery.isPending) return renderGate(t("home.loading"));
+  if (!session) return renderGate(<><p>{t("session.nameRequired")}</p><Link to="/">{t("room.backHome")}</Link></>);
+  if (!validCode || joinInfo.isError) return renderGate(<><ErrorNotice error={joinInfo.error} /><Link to="/">{t("room.backHome")}</Link></>);
+  if (joinInfo.isPending) return renderGate(t("room.loading"));
+  if (!joined && joinInfo.data) return <JoinPanel info={joinInfo.data} session={session} onOpenProfile={() => setProfileOpen(true)} profileModal={profileModal} onJoin={(confirmed, pin) => join.mutate({ confirmed, pin })} onRequest={() => request.mutate()} onCancelRequest={() => cancelRequest.mutate()} loading={join.isPending || request.isPending || cancelRequest.isPending} error={join.isError ? join.error : request.isError ? request.error : cancelRequest.error} />;
+  if (snapshot.isPending) return renderGate(t("room.loading"));
+  if (snapshot.isError || !snapshot.data) return renderGate(<><ErrorNotice error={snapshot.error} /><Link to="/">{t("room.backHome")}</Link></>);
   return <><RoomWorkspace
     room={snapshot.data}
     code={code}
@@ -151,23 +165,14 @@ export function RoomPage({ sessionQuery }: { sessionQuery: ReturnType<typeof use
     fileLaunch={fileLaunch?.roomCode === code ? { token: fileLaunch.token, view: fileLaunch.view, requestId: fileLaunch.requestId } : undefined}
     onChatLaunchConsumed={consumeChatLaunch}
     onFileLaunchConsumed={consumeFileLaunch}
-  />{profileOpen && <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} session={session} ownerRoom={ownerRoom} onReset={() => {
-    if (ownerRoom || !window.confirm(t("home.resetConfirm"))) return;
-    void resetSession().then(() => {
-      queryClient.removeQueries({ queryKey: ["session"] });
-      queryClient.removeQueries({ queryKey: ["rooms"] });
-      queryClient.removeQueries({ queryKey: ["notifications"] });
-      setProfileOpen(false);
-      navigate("/", { replace: true });
-    }).catch(setActionError);
-  }} />}</>;
+  />{profileModal}</>;
 }
 
-function RoomGate({ children }: { children: ReactNode }) {
-  return <main className="room-gate-page"><LanguageSelector /><section>{children}</section></main>;
+function RoomGate({ children, session, onOpenProfile }: { children: ReactNode; session?: Session; onOpenProfile?: () => void }) {
+  return <AppShell variant="room" session={session} onOpenProfile={onOpenProfile}><div className="room-gate-page"><section>{children}</section></div></AppShell>;
 }
 
-function JoinPanel({ info, onJoin, onRequest, onCancelRequest, loading, error }: { info: RoomJoinInfo; onJoin: (confirmed: boolean, pin?: string) => void; onRequest: () => void; onCancelRequest: () => void; loading: boolean; error?: unknown }) {
+function JoinPanel({ info, session, onOpenProfile, profileModal, onJoin, onRequest, onCancelRequest, loading, error }: { info: RoomJoinInfo; session: Session; onOpenProfile: () => void; profileModal: ReactNode; onJoin: (confirmed: boolean, pin?: string) => void; onRequest: () => void; onCancelRequest: () => void; loading: boolean; error?: unknown }) {
   const { t } = useTranslation();
   const [pin, setPin] = useState("");
   const autoSubmitted = useRef(false);
@@ -175,5 +180,5 @@ function JoinPanel({ info, onJoin, onRequest, onCancelRequest, loading, error }:
     if (pin.length === 4 && !autoSubmitted.current) { autoSubmitted.current = true; onJoin(true, pin); }
     if (pin.length < 4) autoSubmitted.current = false;
   }, [onJoin, pin]);
-  return <RoomGate><Link className="room-gate-back" to="/">← {t("room.backHome")}</Link><span className="room-gate-code">{t("room.code")} {info.roomCode}</span><h1>{info.title}</h1><p>{info.joinMode === "open" ? t("room.confirmJoin") : info.joinMode === "password" ? t("room.pinHint") : t("room.approvalHint")}</p>{error != null && <ErrorNotice error={error} />}{info.joinMode === "open" && <button disabled={loading} type="button" onClick={() => onJoin(true)}><Check aria-hidden="true" />{t("room.confirm")}</button>}{info.joinMode === "password" && <div className="room-gate-form"><PinInput id="join-pin" label={t("room.pin")} value={pin} onChange={setPin} /><button disabled={loading || pin.length !== 4} type="button" onClick={() => onJoin(true, pin)}><Shield aria-hidden="true" />{t("room.submitPIN")}</button></div>}{info.joinMode === "owner_approval" && (info.pendingRequest ? <button className="secondary" disabled={loading} type="button" onClick={onCancelRequest}><X aria-hidden="true" />{t("room.cancelRequest")}</button> : <button disabled={loading} type="button" onClick={onRequest}><Check aria-hidden="true" />{t("room.requestApproval")}</button>)}</RoomGate>;
+  return <RoomGate session={session} onOpenProfile={onOpenProfile}><Link className="room-gate-back" to="/">← {t("room.backHome")}</Link><span className="room-gate-code">{t("room.code")} {info.roomCode}</span><h1>{info.title}</h1><p>{info.joinMode === "open" ? t("room.confirmJoin") : info.joinMode === "password" ? t("room.pinHint") : t("room.approvalHint")}</p>{error != null && <ErrorNotice error={error} />}{info.joinMode === "open" && <button disabled={loading} type="button" onClick={() => onJoin(true)}><Check aria-hidden="true" />{t("room.confirm")}</button>}{info.joinMode === "password" && <div className="room-gate-form"><PinInput id="join-pin" label={t("room.pin")} value={pin} onChange={setPin} /><button disabled={loading || pin.length !== 4} type="button" onClick={() => onJoin(true, pin)}><Shield aria-hidden="true" />{t("room.submitPIN")}</button></div>}{info.joinMode === "owner_approval" && (info.pendingRequest ? <button className="secondary" disabled={loading} type="button" onClick={onCancelRequest}><X aria-hidden="true" />{t("room.cancelRequest")}</button> : <button disabled={loading} type="button" onClick={onRequest}><Check aria-hidden="true" />{t("room.requestApproval")}</button>)}{profileModal}</RoomGate>;
 }
