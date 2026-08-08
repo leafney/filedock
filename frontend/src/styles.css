@@ -182,7 +182,7 @@ body {
 .radar-canvas {
   position: relative;
   min-height: 560px;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
 }
 
@@ -194,10 +194,13 @@ body {
 
 .radar-wave-canvas {
   z-index: 0;
-  inset: 0;
+  top: calc(-1 * var(--radar-wave-bleed, 4rem));
+  right: 0;
+  bottom: calc(-1 * var(--radar-wave-bleed, 4rem));
+  left: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
   pointer-events: none;
 }
 
@@ -321,6 +324,8 @@ body {
 .home-layout { width: min(1440px, 100%); margin: 0 auto; padding-inline: clamp(1rem, 3vw, 3.5rem); }
 
 .home-header {
+  position: relative;
+  z-index: 1;
   width: 100%;
 }
 
@@ -367,7 +372,7 @@ body {
 .room-user-name { max-width: 8rem; overflow: hidden; font-size: 0.85rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 
 .home-layout { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: clamp(1rem, 3vw, 3rem); align-items: stretch; min-height: 0; padding: 0.6rem clamp(1rem, 3vw, 3.5rem) 1rem; }
-.home-radar-panel { min-width: 0; display: flex; align-items: center; justify-content: center; }
+.home-radar-panel { --radar-wave-bleed: 4rem; min-width: 0; display: flex; align-items: center; justify-content: center; }
 .home-radar-panel .radar-canvas { width: 100%; min-height: min(70vh, 650px); }
 .home-sidebar { width: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1rem; }
 .home-sidebar-card { border: 1px solid #e2e8f0; border-radius: 1.25rem; background: rgb(255 255 255 / 82%); box-shadow: 0 10px 30px rgb(15 23 42 / 5%); padding: 1.1rem; }
@@ -407,6 +412,11 @@ body {
 .home-profile-details dd { margin: 0; color: #334155; }
 .home-profile-version-title { color: #334155; font-size: 0.8rem; margin: 1rem 0 0.55rem; }
 .home-mobile-actions { width: 100%; align-items: stretch; }
+
+.home-page > .app-footer {
+  position: relative;
+  z-index: 1;
+}
 
 .global-notification-drawer .ant-drawer-body { padding: 0.75rem 1rem 1rem; }
 .global-notification-state { color: #64748b; padding: 1.5rem 0; text-align: center; }

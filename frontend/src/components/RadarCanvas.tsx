@@ -80,18 +80,36 @@ export function RadarCanvas({ displayName }: { displayName: string }) {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = Math.round(entry.contentRect.width);
-      const height = Math.round(entry.contentRect.height);
+    const waveCanvas = waveCanvasRef.current;
+    if (!waveCanvas) return;
+
+    const resizeWave = () => {
+      const rect = waveCanvas.getBoundingClientRect();
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (width <= 0 || height <= 0) return;
+      waveRendererRef.current?.resize({ width, height });
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      const containerEntry = entries.find((entry) => entry.target === container);
+      if (!containerEntry) {
+        resizeWave();
+        return;
+      }
+
+      const width = Math.round(containerEntry.contentRect.width);
+      const height = Math.round(containerEntry.contentRect.height);
       if (width <= 0 || height <= 0) return;
       const bounds = { width, height };
-      waveRendererRef.current?.resize(bounds);
+      resizeWave();
       const current = boundsRef.current;
       if (Math.abs(current.width - width) < 2 && Math.abs(current.height - height) < 2) return;
       boundsRef.current = bounds;
       commitNodes((value) => relayoutRadarNodes(value, bounds));
     });
     observer.observe(container);
+    observer.observe(waveCanvas);
     return () => observer.disconnect();
   }, []);
 
