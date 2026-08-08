@@ -309,7 +309,7 @@ body {
   color: #0f172a;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: 0 clamp(1rem, 3vw, 3.5rem) 0;
+  padding: 0;
 }
 
 .home-page > .app-shell-main {
@@ -318,7 +318,7 @@ body {
   flex-direction: column;
 }
 
-.home-layout { width: min(1440px, 100%); margin: 0 auto; }
+.home-layout { width: min(1440px, 100%); margin: 0 auto; padding-inline: clamp(1rem, 3vw, 3.5rem); }
 
 .home-header {
   width: 100%;
@@ -335,6 +335,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  padding: 0 1.1rem;
 }
 
 .home-brand,
@@ -364,7 +365,7 @@ body {
 .room-user-button:focus-visible { outline: 2px solid var(--room-primary); outline-offset: 3px; border-radius: 999px; }
 .room-user-name { max-width: 8rem; overflow: hidden; font-size: 0.85rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 
-.home-layout { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: clamp(1rem, 3vw, 3rem); align-items: stretch; min-height: 0; padding: 0.6rem 0 1rem; }
+.home-layout { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: clamp(1rem, 3vw, 3rem); align-items: stretch; min-height: 0; padding: 0.6rem clamp(1rem, 3vw, 3.5rem) 1rem; }
 .home-radar-panel { min-width: 0; display: flex; align-items: center; justify-content: center; }
 .home-radar-panel .radar-canvas { width: 100%; min-height: min(70vh, 650px); }
 .home-sidebar { width: 100%; display: flex; flex-direction: column; justify-content: center; gap: 1rem; }
@@ -441,7 +442,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 }
 
 @media (max-width: 560px) {
-  .home-page { padding-inline: 0.8rem; }
+  .home-layout { padding-inline: 0.8rem; }
   .home-brand-subtitle, .home-user-name, .home-user-chevron { display: none; }
   .home-header > .global-header-inner { min-height: 58px; }
   .home-radar-panel .radar-canvas { min-height: 43vh; }
