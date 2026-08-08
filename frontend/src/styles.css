@@ -309,7 +309,7 @@ body {
   color: #0f172a;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  padding: 1.25rem clamp(1rem, 3vw, 3.5rem) 0;
+  padding: 0 clamp(1rem, 3vw, 3.5rem) 0;
 }
 
 .home-page > .app-shell-main {
@@ -331,7 +331,7 @@ body {
 
 .home-header > .global-header-inner {
   display: flex;
-  min-height: 3.5rem;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -443,7 +443,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 @media (max-width: 560px) {
   .home-page { padding-inline: 0.8rem; }
   .home-brand-subtitle, .home-user-name, .home-user-chevron { display: none; }
-  .home-header > .global-header-inner { min-height: 3rem; }
+  .home-header > .global-header-inner { min-height: 58px; }
   .home-radar-panel .radar-canvas { min-height: 43vh; }
   .home-room-actions { display: none; }
 }
