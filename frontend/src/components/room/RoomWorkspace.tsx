@@ -81,7 +81,7 @@ export function RoomWorkspace(props: Props) {
       <Summary label={t("room.members")} value={t("room.workspace.people", { count: props.room.members.length })} />
       <Summary label={t("room.workspace.remaining")} value={t("room.workspace.duration", { hours: String(duration.hours), minutes: String(duration.minutes), seconds: String(duration.seconds) })} />
       <button className="room-capacity-summary" type="button" onClick={() => setCapacityOpen(true)}>
-        <span>{t("room.workspace.capacity")}</span><strong>{formatBytes(capacity.occupiedBytes)} / {formatBytes(props.room.capacity.capacityBytes)}</strong>
+        <span>{t("room.workspace.capacity")}</span><strong title={`${formatBytes(capacity.occupiedBytes)} / ${formatBytes(props.room.capacity.capacityBytes)}`}>{formatBytes(capacity.occupiedBytes)} / {formatBytes(props.room.capacity.capacityBytes)}</strong>
         <i><i style={{ width: `${capacity.percent}%` }} /></i>
       </button>
     </div>}
@@ -107,7 +107,7 @@ export function RoomWorkspace(props: Props) {
   </AppShell>;
 }
 
-function Summary({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
+function Summary({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong title={value}>{value}</strong></div>; }
 
 function MemberPanel({ room, session, onKick, onChat, selectedUserId, unreadByUser = {}, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; onChat?: (id: string) => void; selectedUserId?: string; unreadByUser?: Record<string, number>; drawer?: boolean }) {
   const { t } = useTranslation();
