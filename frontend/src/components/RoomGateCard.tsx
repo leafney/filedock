@@ -42,7 +42,7 @@ export function RoomGateCard({ tone, icon, label, title, description, roomCode, 
       {description && <p className="room-gate-description">{description}</p>}
       {hasRoomInfo && <div className="room-gate-room-info">
         {roomTitle && <strong className="room-gate-room-title">{roomTitle}</strong>}
-        {roomCode && <div className="room-gate-room-code"><span>{t("room.code")}</span><b>{roomCode}</b></div>}
+        {roomCode && <div className="room-gate-room-code"><b>{roomCode}</b></div>}
       </div>}
       {error && <div className="room-gate-error" role="alert">{error}</div>}
       {children}

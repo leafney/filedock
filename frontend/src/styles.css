@@ -528,7 +528,6 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-gate-room-info { display: grid; justify-items: center; gap: 0.45rem; margin: 1.15rem auto 0; }
 .room-gate-room-title { max-width: 100%; overflow: hidden; color: var(--room-text); font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .room-gate-room-code { display: inline-flex; align-items: baseline; gap: 0.75rem; color: var(--room-muted); }
-.room-gate-room-code span { font-size: 0.82rem; }
 .room-gate-room-code b { color: var(--gate-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: clamp(1.4rem, 4vw, 1.8rem); font-weight: 800; letter-spacing: 0.16em; line-height: 1.2; }
 .room-gate-error { max-width: 34rem; border: 1px solid rgb(220 38 38 / 24%); border-radius: 0.7rem; background: #fef2f2; color: #b91c1c; font-size: 0.78rem; line-height: 1.5; margin: 1rem auto 0; padding: 0.65rem 0.8rem; }
 
