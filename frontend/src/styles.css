@@ -417,6 +417,17 @@ body {
 .join-room-modal-content .ant-otp { column-gap: 0.65rem; }
 .join-room-modal-content .ant-otp-input { width: 2.75rem; height: 2.75rem; font-size: 1.25rem; }
 
+.create-room-modal { max-width: calc(100vw - 2rem); }
+.create-room-modal .ant-modal-body { padding: 0.35rem 1.35rem 1.35rem; }
+.create-room-modal-content > form { display: grid; gap: 0.9rem; }
+.create-room-modal-mode .ant-form-item,
+.create-room-modal-pin-fields .ant-form-item { margin-bottom: 0; }
+.create-room-modal-mode .ant-radio-group { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.create-room-modal-pin-fields { display: grid; gap: 0.85rem; }
+.create-room-modal-pin-fields .ant-input-otp { column-gap: 0.65rem; justify-content: center; }
+.create-room-modal-pin-fields .ant-otp-input { width: 2.75rem; height: 2.75rem; font-size: 1.25rem; }
+.create-room-modal-actions { display: flex; justify-content: flex-end; margin-top: 0.15rem; }
+
 .home-page > .app-footer {
   position: relative;
   z-index: 1;
@@ -465,6 +476,9 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .join-room-modal .ant-modal-body { padding-inline: 0.8rem; }
   .join-room-modal-content .ant-otp { column-gap: 0.5rem; }
   .join-room-modal-content .ant-otp-input { width: 2.55rem; height: 2.55rem; }
+  .create-room-modal .ant-modal-body { padding-inline: 0.85rem; }
+  .create-room-modal-mode .ant-radio-group { column-gap: 0.65rem; }
+  .create-room-modal-pin-fields .ant-otp-input { width: 2.55rem; height: 2.55rem; }
 }
 
 @media (max-width: 760px) {
