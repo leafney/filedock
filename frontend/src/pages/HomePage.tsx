@@ -1,8 +1,9 @@
 import { CloseOutlined, DeleteOutlined, LoginOutlined, PlusOutlined } from "@ant-design/icons";
 import { Alert, Button, Divider, Drawer, Empty, Form, Input, Modal, Radio, Space, Tag, Tooltip } from "antd";
+import type { OTPRef } from "antd/es/input/OTP";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dices } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -12,6 +13,7 @@ import { RadarCanvas } from "../components/RadarCanvas";
 import { isUnauthorized } from "../components/common";
 import { useSessionQuery } from "../hooks/use-session";
 import { getApiErrorMessage } from "../lib/api-error";
+import { createPinSubmissionGate, normalizePin } from "../utils/room-gate";
 import {
   createRoom,
   createSession,
@@ -65,7 +67,40 @@ function CreateRoomModal({ open, onClose, onCreated }: { open: boolean; onClose:
 function JoinRoomModal({ open, onClose, onJoined }: { open: boolean; onClose: () => void; onJoined: (roomCode: string) => void }) {
   const { t } = useTranslation();
   const [code, setCode] = useState("");
-  return <Modal title={t("room.join")} open={open} onCancel={onClose} destroyOnHidden cancelText={t("room.backHome")} okText={t("room.join")} okButtonProps={{ disabled: !/^\d{4}$/.test(code) }} onOk={() => onJoined(code)}><Form layout="vertical"><Form.Item label={t("room.code")} required><Input.OTP length={4} value={code} onChange={setCode} inputMode="numeric" /></Form.Item></Form></Modal>;
+  const inputRef = useRef<OTPRef>(null);
+  const submissionGate = useRef(createPinSubmissionGate());
+  const submitCode = useCallback((value: string) => {
+    const normalized = normalizePin(value);
+    if (!submissionGate.current.tryStart(normalized)) return;
+    try {
+      onJoined(normalized);
+      submissionGate.current.succeed();
+    } catch {
+      submissionGate.current.fail();
+    }
+  }, [onJoined]);
+  useEffect(() => {
+    if (!open) return;
+    setCode("");
+    submissionGate.current.reset();
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+  useEffect(() => {
+    if (/^\d{4}$/.test(code)) submitCode(code);
+  }, [code, submitCode]);
+  const handleClose = () => {
+    setCode("");
+    submissionGate.current.reset();
+    onClose();
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || !/^\d{4}$/.test(code)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    submitCode(code);
+  };
+  return <Modal className="join-room-modal" title={t("room.join")} open={open} onCancel={handleClose} destroyOnHidden footer={null} width={360}><div className="join-room-modal-content" onKeyDown={handleKeyDown}><Input.OTP ref={inputRef} aria-label={t("room.code")} length={4} value={code} onChange={(value) => setCode(normalizePin(value))} inputMode="numeric" type="tel" autoComplete="one-time-code" /></div></Modal>;
 }
 
 export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSessionQuery> }) {
