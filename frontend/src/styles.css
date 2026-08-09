@@ -411,6 +411,12 @@ body {
 .home-profile-version-title { color: #334155; font-size: 0.8rem; margin: 1rem 0 0.55rem; }
 .home-mobile-actions { width: 100%; align-items: stretch; }
 
+.join-room-modal { max-width: calc(100vw - 2rem); }
+.join-room-modal .ant-modal-body { padding: 0.35rem 1.25rem 1.55rem; }
+.join-room-modal-content { display: flex; justify-content: center; padding: 0.35rem 0 0.2rem; }
+.join-room-modal-content .ant-otp { column-gap: 0.65rem; }
+.join-room-modal-content .ant-otp-input { width: 2.75rem; height: 2.75rem; font-size: 1.25rem; }
+
 .home-page > .app-footer {
   position: relative;
   z-index: 1;
@@ -456,6 +462,9 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .home-header > .global-header-inner { min-height: 58px; }
   .home-radar-panel .radar-canvas { min-height: 43vh; }
   .home-room-actions { display: none; }
+  .join-room-modal .ant-modal-body { padding-inline: 0.8rem; }
+  .join-room-modal-content .ant-otp { column-gap: 0.5rem; }
+  .join-room-modal-content .ant-otp-input { width: 2.55rem; height: 2.55rem; }
 }
 
 @media (max-width: 760px) {
