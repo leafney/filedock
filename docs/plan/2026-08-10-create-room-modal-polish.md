@@ -38,7 +38,7 @@ Related discussion: [docs/discuss/2026-08-10-create-room-modal-polish.md](../dis
 ## Implementation Decisions
 
 - 仅修改首页创建房间弹窗组件及相关样式，不修改创建房间 API、请求参数、数据库结构、SSE、路由或成功后的房间跳转。
-- 保留三种验证方式及其现有业务值：open、password、owner_approval；默认模式为 open。
+- 保留三种验证方式及其现有业务值：open、owner_approval、password；默认模式为 open。展示顺序固定为“免验证 → 房主验证 → PIN 验证”，将无需 PIN 的两种模式放在一起。
 - 设置弹窗底部页脚只渲染创建按钮，取消按钮文本和“返回首页”按钮不再渲染；创建按钮右对齐，保留请求中的 loading 状态。
 - 保留 Ant Design `Modal` 的 `onCancel` 机制，继续支持关闭图标、遮罩关闭和 Esc 关闭。
 - 桌面端弹窗宽度设为约 420px，并限制最大宽度为 `calc(100vw - 32px)`；移动端不产生横向溢出。
