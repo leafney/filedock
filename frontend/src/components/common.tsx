@@ -8,6 +8,7 @@ import { normalizeLanguage } from "../i18n";
 import { getApiErrorMessage } from "../lib/api-error";
 import { getVersion } from "../services/version";
 import { AppFooter } from "./AppFooter";
+import { normalizePin } from "../utils/room-gate";
 
 export function LanguageSelector() {
   const { t, i18n } = useTranslation();
@@ -73,16 +74,23 @@ export function StatusBadge({ status }: { status: string }) {
   return <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs text-slate-300">{label}</span>;
 }
 
-export function PinInput({ id, label, value, onChange, onComplete, disabled = false }: { id: string; label: string; value: string; onChange: (value: string) => void; onComplete?: (value: string) => void; disabled?: boolean }) {
+export function PinInput({ id, label, value, onChange, onComplete, onSubmit, digitLabel, disabled = false, invalid = false, autoFocus = false }: { id: string; label: string; value: readonly string[]; onChange: (value: string[]) => void; onComplete?: (value: string) => void; onSubmit?: (value: string) => void; digitLabel?: (position: number) => string; disabled?: boolean; invalid?: boolean; autoFocus?: boolean }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
-  const completed = useRef(false);
+  const lastCompletedValue = useRef("");
+  const pin = value.join("");
+
   useEffect(() => {
-    if (value.length === 4 && !completed.current) {
-      completed.current = true;
-      onComplete?.(value);
+    if (!autoFocus) return;
+    refs.current[0]?.focus();
+  }, [autoFocus]);
+
+  useEffect(() => {
+    if (pin.length === 4 && pin !== lastCompletedValue.current) {
+      lastCompletedValue.current = pin;
+      onComplete?.(pin);
     }
-    if (value.length < 4) completed.current = false;
-  }, [onComplete, value]);
+    if (pin.length < 4) lastCompletedValue.current = "";
+  }, [onComplete, pin]);
 
   return (
     <fieldset className="block text-sm text-slate-400">
@@ -93,19 +101,40 @@ export function PinInput({ id, label, value, onChange, onComplete, disabled = fa
             key={`${id}-${index}`}
             ref={(element) => { refs.current[index] = element; }}
             id={`${id}-${index}`}
-            aria-label={`${label} ${index + 1}`}
+            aria-label={digitLabel?.(index + 1) ?? `${label} ${index + 1}`}
             className="h-14 w-full rounded-xl border border-slate-700 bg-slate-950 text-center font-mono text-2xl outline-none focus:border-cyan-400 disabled:opacity-50"
             value={value[index] ?? ""}
             disabled={disabled}
+            aria-invalid={invalid || undefined}
             onChange={(event) => {
-              const digit = event.target.value.replace(/\D/g, "").slice(-1);
-              const next = value.split("");
+              const digit = normalizePin(event.target.value).slice(-1);
+              const next = [...value];
               next[index] = digit;
-              onChange(next.join(""));
+              onChange(next);
               if (digit && index < 3) refs.current[index + 1]?.focus();
             }}
             onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (pin.length === 4) onSubmit?.(pin);
+                return;
+              }
               if (event.key === "Backspace" && !value[index] && index > 0) refs.current[index - 1]?.focus();
+            }}
+            onFocus={(event) => event.currentTarget.select()}
+            onPaste={(event) => {
+              const pasted = normalizePin(event.clipboardData.getData("text"));
+              if (!pasted) return;
+              event.preventDefault();
+              if (index === 0 && pasted.length > 1) {
+                onChange(Array.from({ length: 4 }, (_, position) => pasted[position] ?? ""));
+                refs.current[Math.min(pasted.length, 4) - 1]?.focus();
+                return;
+              }
+              const next = [...value];
+              next[index] = pasted[0];
+              onChange(next);
+              if (index < 3) refs.current[index + 1]?.focus();
             }}
             inputMode="numeric"
             maxLength={1}

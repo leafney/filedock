@@ -463,7 +463,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   .global-notification-drawer .ant-drawer-body { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
 
-/* Room entry and terminal states share the production light visual language. */
+/* Room entry and terminal states share one stable card structure. */
 .room-gate-page {
   --room-border: #e2e8f0;
   --room-primary: #0f766e;
@@ -477,69 +477,116 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
   place-items: center;
   background: radial-gradient(circle at 50% 15%, #ffffff 0, #f0fdfa 38%, #eef2f5 100%);
   color: var(--room-text);
-  padding: 5rem 1rem 2rem;
+  padding: 2rem 1.5rem;
 }
 
 .room-page > .app-shell-main > .room-gate-page {
   height: 100%;
   min-height: 0;
   overflow: auto;
-  padding: 2rem 1rem;
+  padding: 2rem 1.5rem;
 }
 
-.room-gate-page > label select {
-  border-color: #cbd5e1;
-  background: rgb(255 255 255 / 92%);
-  box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
-  color: #334155;
+.room-gate-content {
+  width: min(48rem, 100%);
 }
 
-.room-gate-page > section {
-  width: min(30rem, 100%);
+.room-gate-card {
+  --gate-accent: #0f766e;
+  --gate-accent-soft: #ccfbf1;
+  position: relative;
+  width: 100%;
   border: 1px solid var(--room-border);
   border-radius: 1.25rem;
   background: rgb(255 255 255 / 96%);
   box-shadow: 0 20px 55px rgb(15 23 42 / 10%);
-  padding: clamp(1.4rem, 5vw, 2.25rem);
+  padding: clamp(1.6rem, 4vw, 2.75rem);
+  text-align: center;
+  animation: room-gate-card-in 240ms ease both;
 }
 
-.room-gate-back {
-  display: inline-flex;
-  color: var(--room-muted);
-  font-size: 0.78rem;
-  margin-bottom: 1.35rem;
-  text-decoration: none;
+.room-gate-card-pin { --gate-accent: #0f7490; --gate-accent-soft: #cffafe; }
+.room-gate-card-waiting { --gate-accent: #b45309; --gate-accent-soft: #fef3c7; }
+.room-gate-card-error { --gate-accent: #b91c1c; --gate-accent-soft: #fee2e2; }
+.room-gate-card-unavailable { --gate-accent: #c2410c; --gate-accent-soft: #ffedd5; }
+
+.room-gate-status-icon {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 0.9rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gate-accent-soft);
+  color: var(--gate-accent);
 }
 
-.room-gate-back:hover,
-.room-gate-back:focus-visible { color: var(--room-primary); }
-.room-gate-code { display: block; color: var(--room-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; font-weight: 750; letter-spacing: 0.12em; }
-.room-gate-page h1 { color: var(--room-text); font-size: clamp(1.45rem, 5vw, 2rem); line-height: 1.2; margin: 0.6rem 0 0.55rem; overflow-wrap: anywhere; }
-.room-gate-page section > p { color: var(--room-muted); line-height: 1.65; margin: 0 0 1.35rem; }
-.room-gate-page section > button,
-.room-gate-form > button {
+.room-gate-status-icon svg { width: 1.55rem; height: 1.55rem; }
+.room-gate-status-label { color: var(--gate-accent); font-size: 0.75rem; font-weight: 750; letter-spacing: 0.12em; }
+.room-gate-card h1 { color: var(--room-text); font-size: clamp(1.45rem, 4vw, 2rem); line-height: 1.2; margin: 0.65rem 0 0.55rem; overflow-wrap: anywhere; }
+.room-gate-description { max-width: 34rem; color: var(--room-muted); line-height: 1.65; margin: 0 auto 1.1rem; }
+.room-gate-room-info { display: grid; justify-items: center; gap: 0.45rem; margin: 1.15rem auto 0; }
+.room-gate-room-title { max-width: 100%; overflow: hidden; color: var(--room-text); font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+.room-gate-room-code { display: inline-flex; align-items: baseline; gap: 0.75rem; color: var(--room-muted); }
+.room-gate-room-code span { font-size: 0.82rem; }
+.room-gate-room-code b { color: var(--gate-accent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: clamp(1.4rem, 4vw, 1.8rem); font-weight: 800; letter-spacing: 0.16em; line-height: 1.2; }
+.room-gate-error { max-width: 34rem; border: 1px solid rgb(220 38 38 / 24%); border-radius: 0.7rem; background: #fef2f2; color: #b91c1c; font-size: 0.78rem; line-height: 1.5; margin: 1rem auto 0; padding: 0.65rem 0.8rem; }
+
+.room-gate-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.6rem;
+}
+
+.room-gate-action {
   display: inline-flex;
   min-height: 2.65rem;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  border: 1px solid var(--room-primary);
+  border: 1px solid var(--gate-accent);
   border-radius: 0.65rem;
-  background: var(--room-primary);
+  background: var(--gate-accent);
   color: #fff;
   cursor: pointer;
   font: inherit;
   font-weight: 700;
   padding: 0.65rem 1rem;
+  text-decoration: none;
 }
 
-.room-gate-page section > button.secondary { border-color: var(--room-border); background: #fff; color: #475569; }
-.room-gate-page section > button:disabled,
-.room-gate-form > button:disabled { cursor: not-allowed; opacity: 0.5; }
-.room-gate-form { display: grid; gap: 1rem; }
-.room-gate-form fieldset { border: 0; color: var(--room-muted); margin: 0; padding: 0; }
-.room-gate-form input { border-color: #cbd5e1; background: #f8fafc; color: var(--room-text); }
-.room-gate-form input:focus { border-color: #14b8a6; box-shadow: 0 0 0 3px rgb(20 184 166 / 14%); }
+.room-gate-action svg { width: 1rem; height: 1rem; }
+.room-gate-action:hover, .room-gate-action:focus-visible { filter: brightness(0.95); outline: 2px solid var(--gate-accent); outline-offset: 2px; }
+.room-gate-action-secondary { border-color: var(--room-border); background: #fff; color: #475569; }
+.room-gate-action-secondary:hover, .room-gate-action-secondary:focus-visible { color: var(--gate-accent); filter: none; }
+.room-gate-action.is-danger { border-color: #dc2626; background: #dc2626; }
+.room-gate-action:disabled { cursor: not-allowed; opacity: 0.55; }
+.room-gate-action-spinner { width: 0.9rem; height: 0.9rem; border: 2px solid rgb(255 255 255 / 45%); border-top-color: #fff; border-radius: 50%; animation: spin 900ms linear infinite; }
+
+.room-gate-pin { width: min(23rem, 100%); margin: 1.35rem auto 0; }
+.room-gate-pin fieldset { border: 0; color: var(--room-muted); margin: 0; padding: 0; }
+.room-gate-pin fieldset > legend { font-size: 0.78rem; font-weight: 650; }
+.room-gate-pin input { border-color: #cbd5e1; background: #f8fafc; color: var(--room-text); }
+.room-gate-pin input:focus { border-color: var(--gate-accent); box-shadow: 0 0 0 3px rgb(14 116 144 / 14%); }
+.room-gate-pin input[aria-invalid="true"] { border-color: #dc2626; box-shadow: 0 0 0 3px rgb(220 38 38 / 12%); }
+.room-gate-pin-status { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; color: var(--room-muted); font-size: 0.75rem; margin-top: 0.85rem; }
+.room-gate-pin-status svg { width: 0.9rem; height: 0.9rem; }
+
+@keyframes room-gate-card-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 560px) {
+  .room-gate-page,
+  .room-page > .app-shell-main > .room-gate-page { padding: 1rem; }
+  .room-gate-card { border-radius: 1rem; padding: 1.5rem 1rem; }
+  .room-gate-actions { flex-wrap: wrap; }
+  .room-gate-action { flex: 1 1 8rem; }
+  .room-gate-actions.is-single .room-gate-action { flex: 0 1 auto; min-width: 8rem; }
+}
 
 /* Production room workspace. Keep all rules scoped to avoid changing the home page. */
 .room-page {
@@ -1229,15 +1276,14 @@ html[data-theme="dark"] .room-page {
   --room-muted: var(--fd-text-muted);
 }
 html[data-theme="dark"] .room-gate-page { background: radial-gradient(circle at 50% 15%, #1e293b 0, #123b3b 38%, #0f172a 100%); }
-html[data-theme="dark"] .room-gate-page > section,
-html[data-theme="dark"] .room-gate-page > label select,
+html[data-theme="dark"] .room-gate-card,
 html[data-theme="dark"] .room-overlay > section,
 html[data-theme="dark"] .chat-history-drawer,
 html[data-theme="dark"] .chat-forward-picker,
 html[data-theme="dark"] .transfer-panel { border-color: var(--fd-border); background: var(--fd-surface); box-shadow: 0 20px 55px rgb(2 6 23 / 42%); }
-html[data-theme="dark"] .room-gate-page > label select,
-html[data-theme="dark"] .room-gate-page section > button.secondary,
-html[data-theme="dark"] .room-gate-form input { background: var(--fd-surface-soft); color: var(--fd-text); }
+html[data-theme="dark"] .room-gate-action-secondary,
+html[data-theme="dark"] .room-gate-pin input { border-color: var(--fd-border); background: var(--fd-surface-soft); color: var(--fd-text); }
+html[data-theme="dark"] .room-gate-error { border-color: rgb(248 113 113 / 30%); background: var(--fd-danger-surface); color: #fca5a5; }
 html[data-theme="dark"] .room-action-menu,
 html[data-theme="dark"] .file-action-sheet,
 html[data-theme="dark"] .chat-context-menu { border-color: var(--fd-border); background: var(--fd-surface); box-shadow: 0 12px 30px rgb(2 6 23 / 42%); }
