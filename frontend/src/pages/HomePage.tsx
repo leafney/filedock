@@ -100,7 +100,7 @@ function JoinRoomModal({ open, onClose, onJoined }: { open: boolean; onClose: ()
     event.stopPropagation();
     submitCode(code);
   };
-  return <Modal className="join-room-modal" title={t("room.join")} open={open} onCancel={handleClose} destroyOnHidden footer={null} width={360}><div className="join-room-modal-content" onKeyDown={handleKeyDown}><Input.OTP ref={inputRef} aria-label={t("room.code")} length={4} value={code} onChange={(value) => setCode(normalizePin(value))} inputMode="numeric" type="tel" autoComplete="one-time-code" /></div></Modal>;
+  return <Modal className="join-room-modal" title={t("room.join")} open={open} onCancel={handleClose} destroyOnHidden footer={null} width={360}><div className="join-room-modal-content" onKeyDown={handleKeyDown}><Input.OTP ref={inputRef} aria-label={t("room.code")} length={4} value={code} onInput={(values) => setCode(normalizePin(values.join("")))} inputMode="numeric" type="tel" autoComplete="one-time-code" /></div></Modal>;
 }
 
 export function HomePage({ sessionQuery }: { sessionQuery: ReturnType<typeof useSessionQuery> }) {
