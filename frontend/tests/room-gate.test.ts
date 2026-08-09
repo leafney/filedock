@@ -4,6 +4,7 @@ import {
   classifyRoomGateError,
   createPinSubmissionGate,
   deriveJoinGateView,
+  isPinPairValid,
   normalizePin,
 } from "../src/utils/room-gate";
 
@@ -48,5 +49,12 @@ describe("PIN 过渡交互", () => {
     expect(gate.tryStart("5678")).toBeFalse();
     gate.reset();
     expect(gate.tryStart("5678")).toBeTrue();
+  });
+
+  test("创建房间只接受两组完整且一致的 PIN", () => {
+    expect(isPinPairValid("1234", "1234")).toBeTrue();
+    expect(isPinPairValid("123", "123")).toBeFalse();
+    expect(isPinPairValid("1234", "1235")).toBeFalse();
+    expect(isPinPairValid("１２34", "１２34")).toBeFalse();
   });
 });

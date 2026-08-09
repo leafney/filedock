@@ -13,7 +13,7 @@ import { RadarCanvas } from "../components/RadarCanvas";
 import { isUnauthorized } from "../components/common";
 import { useSessionQuery } from "../hooks/use-session";
 import { getApiErrorMessage } from "../lib/api-error";
-import { createPinSubmissionGate, normalizePin } from "../utils/room-gate";
+import { createPinSubmissionGate, isPinPairValid, normalizePin } from "../utils/room-gate";
 import {
   createRoom,
   createSession,
@@ -59,9 +59,58 @@ function CreateRoomModal({ open, onClose, onCreated }: { open: boolean; onClose:
   const [joinMode, setJoinMode] = useState<JoinMode>("open");
   const [pin, setPin] = useState("");
   const [pinConfirmation, setPinConfirmation] = useState("");
+  const modeRef = useRef<HTMLDivElement>(null);
+  const pinRef = useRef<OTPRef>(null);
+  const pinConfirmationRef = useRef<OTPRef>(null);
   const mutation = useMutation({ mutationFn: () => createRoom(joinMode, joinMode === "password" ? pin : "", joinMode === "password" ? pinConfirmation : ""), onSuccess: (room) => { onCreated(room.roomCode); setPin(""); setPinConfirmation(""); } });
   const pinMismatch = joinMode === "password" && pinConfirmation.length === 4 && pin !== pinConfirmation;
-  return <Modal title={t("room.create")} open={open} onCancel={onClose} destroyOnHidden cancelText={t("room.backHome")} okText={t("room.create")} confirmLoading={mutation.isPending} onOk={() => mutation.mutate()} okButtonProps={{ disabled: joinMode === "password" && (pin.length !== 4 || pinConfirmation.length !== 4 || pinMismatch) }}><Form layout="vertical"><Form.Item label={t("room.joinMode")}><Radio.Group value={joinMode} onChange={(event) => setJoinMode(event.target.value)} options={[{ value: "open", label: t("room.open") }, { value: "password", label: t("room.password") }, { value: "owner_approval", label: t("room.ownerApproval") }]} /></Form.Item>{joinMode === "password" && <><Form.Item label={t("room.pin")} required><Input.OTP length={4} value={pin} onChange={setPin} inputMode="numeric" /></Form.Item><Form.Item label={t("room.pinConfirmation")} required validateStatus={pinMismatch ? "error" : undefined} help={pinMismatch ? t("room.pinMismatch") : undefined}><Input.OTP length={4} value={pinConfirmation} onChange={setPinConfirmation} inputMode="numeric" /></Form.Item></>}{mutation.isError && <ErrorAlert error={mutation.error} />}</Form></Modal>;
+  const canCreate = joinMode !== "password" || isPinPairValid(pin, pinConfirmation);
+  const resetForm = () => {
+    setJoinMode("open");
+    setPin("");
+    setPinConfirmation("");
+    mutation.reset();
+  };
+  const focusTarget = (mode: JoinMode = joinMode) => {
+    window.requestAnimationFrame(() => {
+      if (mode === "password") pinRef.current?.focus();
+      else modeRef.current?.querySelector<HTMLInputElement>("input[type=radio]")?.focus();
+    });
+  };
+  useEffect(() => {
+    if (!open) return;
+    resetForm();
+    focusTarget("open");
+  }, [open]);
+  useEffect(() => {
+    if (!open || joinMode !== "password") return;
+    focusTarget();
+  }, [joinMode, open]);
+  useEffect(() => {
+    if (joinMode === "password" && pin.length === 4) pinConfirmationRef.current?.focus();
+  }, [joinMode, pin]);
+  const handleModeChange = (nextMode: JoinMode) => {
+    setJoinMode(nextMode);
+    if (nextMode !== "password") {
+      setPin("");
+      setPinConfirmation("");
+    }
+  };
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+  const handleCreate = () => {
+    if (!canCreate || mutation.isPending) return;
+    mutation.mutate();
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || !canCreate || mutation.isPending) return;
+    event.preventDefault();
+    event.stopPropagation();
+    handleCreate();
+  };
+  return <Modal className="create-room-modal" title={t("room.create")} open={open} onCancel={handleClose} afterOpenChange={(visible) => { if (visible) focusTarget(joinMode); }} destroyOnHidden footer={null} width={420}><div className="create-room-modal-content" onKeyDown={handleKeyDown}><Form layout="vertical"><div ref={modeRef} className="create-room-modal-mode"><Form.Item label={t("room.joinMode")}><Radio.Group value={joinMode} onChange={(event) => handleModeChange(event.target.value)} options={[{ value: "open", label: t("room.open") }, { value: "password", label: t("room.password") }, { value: "owner_approval", label: t("room.ownerApproval") }]} /></Form.Item></div>{joinMode === "password" && <div className="create-room-modal-pin-fields"><Form.Item label={t("room.pin")} required><Input.OTP ref={pinRef} length={4} value={pin} onInput={(values) => setPin(normalizePin(values.join("")))} inputMode="numeric" type="tel" autoComplete="one-time-code" /></Form.Item><Form.Item label={t("room.pinConfirmation")} required validateStatus={pinMismatch ? "error" : undefined} help={pinMismatch ? t("room.pinMismatch") : undefined}><Input.OTP ref={pinConfirmationRef} length={4} value={pinConfirmation} onInput={(values) => setPinConfirmation(normalizePin(values.join("")))} inputMode="numeric" type="tel" autoComplete="one-time-code" /></Form.Item></div>}{mutation.isError && <ErrorAlert error={mutation.error} />}<div className="create-room-modal-actions"><Button type="primary" loading={mutation.isPending} disabled={!canCreate} onClick={handleCreate}>{t("room.create")}</Button></div></Form></div></Modal>;
 }
 
 function JoinRoomModal({ open, onClose, onJoined }: { open: boolean; onClose: () => void; onJoined: (roomCode: string) => void }) {

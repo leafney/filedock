@@ -25,6 +25,10 @@ export function normalizePin(value: string): string {
   return value.replace(/[^0-9]/g, "").slice(0, 4);
 }
 
+export function isPinPairValid(pin: string, confirmation: string): boolean {
+  return /^\d{4}$/.test(pin) && /^\d{4}$/.test(confirmation) && pin === confirmation;
+}
+
 export interface PinSubmissionGate {
   tryStart: (pin: string) => boolean;
   fail: () => void;
