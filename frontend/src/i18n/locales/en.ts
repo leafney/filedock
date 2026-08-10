@@ -192,6 +192,7 @@ const en = {
     statusDestroyed: "Released",
     workspace: {
       copied: "Room code copied",
+      copyDone: "Copied",
       people: "{{count}} people",
       remaining: "Time remaining",
       duration: "{{hours}}h {{minutes}}m {{seconds}}s",

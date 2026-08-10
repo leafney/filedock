@@ -186,6 +186,7 @@ const zhCN = {
     statusDestroyed: "已释放",
     workspace: {
       copied: "房间号已复制",
+      copyDone: "已复制",
       people: "{{count}} 人",
       remaining: "剩余时间",
       duration: "{{hours}}时 {{minutes}}分 {{seconds}}秒",

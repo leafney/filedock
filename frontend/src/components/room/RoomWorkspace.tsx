@@ -168,9 +168,9 @@ function ShareRoomPanel({ open, room, onClose }: { open: boolean; room: RoomSnap
       <span className="room-share-code" aria-label={`${t("room.code")} ${room.roomCode}`}><b>{room.roomCode}</b></span>
       {qr.data?.svg ? <div className="room-qr" dangerouslySetInnerHTML={{ __html: qr.data.svg }} /> : <p className="room-modal-message">{qr.isError ? t("room.qrcodeUnavailable") : t("room.loading")}</p>}
       <div className="room-share-actions">
-        <button type="button" onClick={() => void copy("code", room.roomCode)}>{copied === "code" ? t("room.workspace.copied") : t("room.workspace.copyRoomCode")}</button>
-        <button type="button" onClick={() => void copy("link", link)}>{copied === "link" ? t("room.workspace.copied") : t("room.workspace.copyLink")}</button>
-        <button type="button" onClick={() => void copy("invite", invite)}>{copied === "invite" ? t("room.workspace.copied") : t("room.workspace.copyInvite")}</button>
+        <button type="button" onClick={() => void copy("code", room.roomCode)}>{copied === "code" ? t("room.workspace.copyDone") : t("room.workspace.copyRoomCode")}</button>
+        <button type="button" onClick={() => void copy("link", link)}>{copied === "link" ? t("room.workspace.copyDone") : t("room.workspace.copyLink")}</button>
+        <button type="button" onClick={() => void copy("invite", invite)}>{copied === "invite" ? t("room.workspace.copyDone") : t("room.workspace.copyInvite")}</button>
       </div>
       {copyError && <p className="room-modal-message">{t("room.workspace.copyFailed")}</p>}
     </div>
