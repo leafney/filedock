@@ -54,7 +54,7 @@ export function ProfileModal({ open, onClose, session, ownerRoom, onReset }: Pro
   const version = versionQuery.data ? getVersionDetails(versionQuery.data) : undefined;
   const profileError = randomNickname.error ?? update.error;
 
-  return <Modal title={t("home.profile")} open={open} onCancel={onClose} footer={null} destroyOnHidden width={420}>
+  return <Modal title={t("home.profile")} open={open} onCancel={onClose} footer={null} destroyOnHidden width={440}>
     <div className="home-profile">
       <Avatar size={72} style={{ backgroundColor: getStableAvatarColor(session.displayName), fontSize: 28 }}>{getAvatarInitial(session.displayName)}</Avatar>
       <Form layout="vertical" className="home-profile-form">
