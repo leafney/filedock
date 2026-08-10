@@ -911,9 +911,12 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-share-actions button { min-height: 2.2rem; border: 1px solid var(--room-border); border-radius: 0.45rem; background: #fff; color: var(--room-primary); cursor: pointer; font-size: 0.66rem; padding: 0.35rem; }
 .room-share-actions button:hover, .room-share-actions button:focus-visible { border-color: #5eead4; background: #f0fdfa; outline: none; }
 .room-modal-message { color: var(--room-muted); padding: 1.5rem; text-align: center; }
-.room-capacity-details { display: grid; gap: 0.6rem; padding: 1rem; }
-.room-capacity-details div { display: flex; align-items: center; justify-content: space-between; border-radius: 0.6rem; background: #f8fafc; color: var(--room-muted); padding: 0.75rem; }
-.room-capacity-details dd { color: var(--room-text); font-weight: 650; }
+.room-capacity-modal { max-width: calc(100vw - 2rem); }
+.room-capacity-modal .ant-modal-body { padding: 0.35rem 1rem 1rem; }
+.room-capacity-details { display: grid; gap: 0.65rem; margin: 0; }
+.room-capacity-details div { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 3.4rem; align-items: center; gap: 1rem; border: 1px solid #f1f5f9; border-radius: 0.75rem; background: #f8fafc; padding: 0.8rem 1rem; }
+.room-capacity-details dt { min-width: 0; overflow: hidden; color: var(--room-muted); font-size: 0.88rem; text-overflow: ellipsis; white-space: nowrap; }
+.room-capacity-details dd { min-width: 0; color: var(--room-text); font-size: 0.9rem; font-weight: 700; margin: 0; text-align: right; white-space: nowrap; }
 .room-floating-error { position: fixed; right: 1rem; bottom: 3.5rem; z-index: 12; width: min(25rem, calc(100vw - 2rem)); }
 .room-blocking-state { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(circle at 50% 35%, rgb(255 255 255 / 98%), rgb(240 253 250 / 97%) 45%, rgb(238 242 245 / 98%)); color: var(--room-muted); padding: 2rem; text-align: center; }
 .room-blocking-state > svg { width: 2.5rem; height: 2.5rem; color: var(--room-primary); }
@@ -1453,6 +1456,9 @@ html[data-theme="dark"] .file-trash-status.rejected { background: var(--fd-dange
 html[data-theme="dark"] .file-trash-status.approved { background: #143b2a; color: #86efac; }
 html[data-theme="dark"] .room-capacity-details div,
 html[data-theme="dark"] .file-details dl div { background: var(--fd-surface-soft); color: var(--fd-text-secondary); }
+html[data-theme="dark"] .room-capacity-details div { border-color: var(--fd-border-soft); }
+html[data-theme="dark"] .room-capacity-details dt { color: var(--fd-text-muted); }
+html[data-theme="dark"] .room-capacity-details dd { color: var(--fd-text-strong); }
 html[data-theme="dark"] .room-blocking-state { background: radial-gradient(circle at 50% 35%, rgb(30 41 59 / 98%), rgb(19 78 74 / 97%) 45%, rgb(15 23 42 / 98%)); }
 html[data-theme="dark"] .chat-mobile-overlay { background: var(--fd-page); }
 html[data-theme="dark"] .chat-mobile-overlay > section > header { background: var(--fd-surface); }
