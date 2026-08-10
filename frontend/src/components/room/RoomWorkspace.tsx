@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Modal } from "antd";
 import { Copy, Crown, DoorOpen, MessageSquare, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -98,7 +99,9 @@ export function RoomWorkspace(props: Props) {
 
       {membersOpen && <Overlay title={t("room.members")} onClose={() => setMembersOpen(false)}><MemberPanel room={props.room} session={props.session} onKick={props.onKick} drawer /></Overlay>}
       {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
-      {capacityOpen && <Overlay title={t("room.workspace.capacityDetails")} onClose={() => setCapacityOpen(false)}><CapacityPanel room={props.room} /></Overlay>}
+      <Modal className="room-capacity-modal" title={t("room.workspace.capacityDetails")} open={capacityOpen} onCancel={() => setCapacityOpen(false)} footer={null} destroyOnHidden width={460}>
+        <CapacityPanel room={props.room} />
+      </Modal>
       {chatMobileOpen && <div className="chat-mobile-overlay"><section><header><strong>{t("chat.conversations")}</strong><button type="button" aria-label={t("chat.closeMobile")} onClick={() => setChatMobileOpen(false)}><X aria-hidden="true" /></button></header><ChatWorkspace roomId={props.room.roomId} code={props.code} members={props.room.members} selfId={props.session.userId} mode="mobile" launchPeerUserId={mobileChatLaunch?.peerUserId} launchToken={mobileChatLaunch?.token} onLaunchConsumed={(token) => setMobileChatLaunch((current) => current?.token === token ? undefined : current)} onUnreadCount={setChatUnread} /></section></div>}
       {props.actionError != null && <div className="room-floating-error"><ErrorNotice error={props.actionError} /></div>}
       {(props.destroyAt || props.room.status === "destroying") && <div className="room-blocking-state"><RefreshCw aria-hidden="true" /><h2>{t("room.destroyingTitle")}</h2><p>{t("room.destroyingHint")}</p><strong>{t("room.destroyCountdown", { seconds: String(countdown) })}</strong></div>}
