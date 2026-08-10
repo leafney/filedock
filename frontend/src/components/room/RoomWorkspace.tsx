@@ -98,7 +98,7 @@ export function RoomWorkspace(props: Props) {
       </div>
 
       {membersOpen && <Overlay title={t("room.members")} onClose={() => setMembersOpen(false)}><MemberPanel room={props.room} session={props.session} onKick={props.onKick} drawer /></Overlay>}
-      {shareOpen && <ShareRoomPanel room={props.room} onClose={() => setShareOpen(false)} />}
+      <ShareRoomPanel open={shareOpen} room={props.room} onClose={() => setShareOpen(false)} />
       <Modal className="room-capacity-modal" title={t("room.workspace.capacityDetails")} open={capacityOpen} onCancel={() => setCapacityOpen(false)} footer={null} destroyOnHidden width={460}>
         <CapacityPanel room={props.room} />
       </Modal>
@@ -149,9 +149,9 @@ function Overlay({ title, onClose, children }: { title: string; onClose: () => v
   return <div className="room-overlay" role="dialog" aria-modal="true" aria-label={title}><section ref={panelRef}><header><h2>{title}</h2><button type="button" aria-label={t("room.workspace.close")} onClick={onClose}><X aria-hidden="true" /></button></header>{children}</section></div>;
 }
 
-function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => void }) {
+function ShareRoomPanel({ open, room, onClose }: { open: boolean; room: RoomSnapshot; onClose: () => void }) {
   const { t } = useTranslation();
-  const qr = useQuery({ queryKey: ["room-qrcode", room.roomCode], queryFn: () => getRoomQRCode(room.roomCode), retry: false });
+  const qr = useQuery({ queryKey: ["room-qrcode", room.roomCode], queryFn: () => getRoomQRCode(room.roomCode), retry: false, enabled: open });
   const [copied, setCopied] = useState<string>();
   const [copyError, setCopyError] = useState(false);
   const link = `${window.location.origin}/rooms/${room.roomCode}`;
@@ -162,12 +162,11 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
     setCopied(kind);
     window.setTimeout(() => setCopied(undefined), 1500);
   };
-  return <Overlay title={t("room.workspace.shareRoom")} onClose={onClose}>
+  return <Modal className="room-share-modal" title={t("room.workspace.shareRoom")} open={open} onCancel={onClose} footer={null} destroyOnHidden width={460}>
     <div className="room-share-panel">
-      <strong title={room.title}>{room.title}</strong>
-      <span>{t("room.code")} {room.roomCode}</span>
+      <strong className="room-share-title" title={room.title}>{room.title}</strong>
+      <span className="room-share-code">{t("room.code")} <b>{room.roomCode}</b></span>
       {qr.data?.svg ? <div className="room-qr" dangerouslySetInnerHTML={{ __html: qr.data.svg }} /> : <p className="room-modal-message">{qr.isError ? t("room.qrcodeUnavailable") : t("room.loading")}</p>}
-      <label><span>{t("room.workspace.joinLink")}</span><input readOnly value={link} /></label>
       <div className="room-share-actions">
         <button type="button" onClick={() => void copy("code", room.roomCode)}>{copied === "code" ? t("room.workspace.copied") : t("room.workspace.copyRoomCode")}</button>
         <button type="button" onClick={() => void copy("link", link)}>{copied === "link" ? t("room.workspace.copied") : t("room.workspace.copyLink")}</button>
@@ -175,7 +174,7 @@ function ShareRoomPanel({ room, onClose }: { room: RoomSnapshot; onClose: () => 
       </div>
       {copyError && <p className="room-modal-message">{t("room.workspace.copyFailed")}</p>}
     </div>
-  </Overlay>;
+  </Modal>;
 }
 
 function CapacityPanel({ room }: { room: RoomSnapshot }) {
