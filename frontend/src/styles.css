@@ -902,14 +902,14 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-qr { display: grid; place-items: center; padding: 1.5rem; }
 .room-qr svg { width: min(18rem, 100%); height: auto; }
 .room-share-modal { max-width: calc(100vw - 2rem); }
-.room-share-modal .ant-modal-body { padding: 0.35rem 0.75rem 1rem; }
+.room-share-modal .ant-modal-body { padding: 0.35rem 0.5rem 1rem; }
 .room-share-panel { display: grid; gap: 0.6rem; padding: 0.2rem 0 0.2rem; }
 .room-share-title { overflow: hidden; color: var(--room-text); font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-.room-share-code { color: var(--room-muted); font-size: 0.78rem; }
-.room-share-code b { color: var(--room-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.2rem; letter-spacing: 0.08em; }
+.room-share-code { display: flex; align-items: baseline; justify-content: center; gap: 0.75rem; color: var(--room-muted); font-size: 0.78rem; }
+.room-share-code b { color: var(--room-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: clamp(1.4rem, 4vw, 1.8rem); font-weight: 800; letter-spacing: 0.16em; line-height: 1.2; }
 .room-share-panel .room-qr { padding-inline: 0; }
 .room-share-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-.room-share-actions button { min-height: 2.2rem; border: 1px solid var(--room-border); border-radius: 0.45rem; background: #fff; color: var(--room-primary); cursor: pointer; font-size: 0.66rem; padding: 0.35rem; }
+.room-share-actions button { min-height: 2.35rem; border: 1px solid var(--room-primary); border-radius: 0.55rem; background: #fff; box-shadow: 0 1px 2px rgb(15 23 42 / 8%); color: var(--room-primary); cursor: pointer; font-size: 0.66rem; font-weight: 650; padding: 0.4rem 0.35rem; }
 .room-share-actions button:hover, .room-share-actions button:focus-visible { border-color: #5eead4; background: #f0fdfa; outline: none; }
 .room-modal-message { color: var(--room-muted); padding: 1.5rem; text-align: center; }
 .room-capacity-modal { max-width: calc(100vw - 2rem); }
