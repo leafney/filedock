@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Modal } from "antd";
+import { Modal, Tooltip } from "antd";
 import { Copy, Crown, DoorOpen, MessageSquare, RefreshCw, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -114,21 +114,23 @@ function Summary({ label, value }: { label: string; value: string }) { return <d
 
 function MemberPanel({ room, session, onKick, onChat, selectedUserId, unreadByUser = {}, drawer = false }: { room: RoomSnapshot; session: Session; onKick: (id: string) => void; onChat?: (id: string) => void; selectedUserId?: string; unreadByUser?: Record<string, number>; drawer?: boolean }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{ kind: "success" | "error" }>();
+  useEffect(() => {
+    if (!copyFeedback) return;
+    const timer = window.setTimeout(() => setCopyFeedback(undefined), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copyFeedback]);
   const copyCode = async () => {
-    setCopyError(false);
-    if (!await copyText(room.roomCode)) { setCopyError(true); return; }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    setCopyFeedback(undefined);
+    setCopyFeedback({ kind: await copyText(room.roomCode) ? "success" : "error" });
   };
   return <aside className={drawer ? "room-member-panel is-drawer" : "room-member-panel"}>
     <div className="room-panel-heading">
       <div className="room-panel-room-info">
         <strong title={room.title}>{room.title}</strong>
-        <button type="button" onClick={() => void copyCode()}><span>{t("room.code")} {room.roomCode}</span><Copy aria-hidden="true" /></button>
-        {copied && <small>{t("room.workspace.copied")}</small>}
-        {copyError && <small>{t("room.workspace.copyFailed")}</small>}
+        <Tooltip title={copyFeedback ? t(copyFeedback.kind === "success" ? "room.workspace.copied" : "room.workspace.copyFailed") : undefined} open={Boolean(copyFeedback)} placement="top">
+          <button type="button" onClick={() => void copyCode()}><span>{t("room.code")} {room.roomCode}</span><Copy aria-hidden="true" /></button>
+        </Tooltip>
       </div>
     </div>
     <div className="room-member-list">{room.members.map((member) => <MemberItem key={member.userId} member={member} self={member.userId === session.userId} selected={member.userId === selectedUserId} unreadCount={unreadByUser[member.userId] ?? 0} canKick={room.role === "owner" && member.role !== "owner"} onKick={onKick} onChat={onChat} />)}</div>
