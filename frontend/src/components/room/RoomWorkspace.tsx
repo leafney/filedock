@@ -165,7 +165,7 @@ function ShareRoomPanel({ open, room, onClose }: { open: boolean; room: RoomSnap
   return <Modal className="room-share-modal" title={t("room.workspace.shareRoom")} open={open} onCancel={onClose} footer={null} destroyOnHidden width={420}>
     <div className="room-share-panel">
       <strong className="room-share-title" title={room.title}>{room.title}</strong>
-      <span className="room-share-code">{t("room.code")} <b>{room.roomCode}</b></span>
+      <span className="room-share-code" aria-label={`${t("room.code")} ${room.roomCode}`}><b>{room.roomCode}</b></span>
       {qr.data?.svg ? <div className="room-qr" dangerouslySetInnerHTML={{ __html: qr.data.svg }} /> : <p className="room-modal-message">{qr.isError ? t("room.qrcodeUnavailable") : t("room.loading")}</p>}
       <div className="room-share-actions">
         <button type="button" onClick={() => void copy("code", room.roomCode)}>{copied === "code" ? t("room.workspace.copied") : t("room.workspace.copyRoomCode")}</button>
