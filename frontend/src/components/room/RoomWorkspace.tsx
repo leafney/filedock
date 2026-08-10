@@ -162,7 +162,7 @@ function ShareRoomPanel({ open, room, onClose }: { open: boolean; room: RoomSnap
     setCopied(kind);
     window.setTimeout(() => setCopied(undefined), 1500);
   };
-  return <Modal className="room-share-modal" title={t("room.workspace.shareRoom")} open={open} onCancel={onClose} footer={null} destroyOnHidden width={460}>
+  return <Modal className="room-share-modal" title={t("room.workspace.shareRoom")} open={open} onCancel={onClose} footer={null} destroyOnHidden width={420}>
     <div className="room-share-panel">
       <strong className="room-share-title" title={room.title}>{room.title}</strong>
       <span className="room-share-code">{t("room.code")} <b>{room.roomCode}</b></span>
