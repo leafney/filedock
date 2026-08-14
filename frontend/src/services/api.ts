@@ -166,9 +166,6 @@ export interface FileListParams {
   identity: FileIdentity;
   search: string;
   sort: FileSort;
-  limit?: number;
-  sharedCursor?: string;
-  directCursor?: string;
 }
 
 export function listRoomFiles(code: string, params: FileListParams) {
