@@ -1595,11 +1595,15 @@ html[data-theme="dark"] .ant-message-notice-content {
 .file-range-option svg { width: 0.85rem; height: 0.85rem; }
 .file-range-option .ant-badge { margin-left: 0.12rem; }
 .file-range-option .ant-badge-count { background: var(--room-border); box-shadow: none; color: var(--room-muted); }
-.file-search-ant { min-width: 12rem; max-width: none; flex: 1 1 18rem; }
+.file-search-slot { min-width: 12rem; flex: 1 1 18rem; }
+.file-search-ant { width: 100%; min-width: 0; max-width: none; }
 .file-search-ant .ant-input { height: 2.35rem; }
-.file-filter-button { min-width: 8.5rem; justify-content: space-between; color: var(--room-text); }
+.file-toolbar-actions { display: flex; min-width: 0; max-width: 40rem; flex: 0 0 auto; align-items: center; gap: 0.45rem; overflow: hidden; opacity: 1; transform: translateX(0); transition: max-width 220ms ease-out, opacity 220ms ease-out, transform 220ms ease-out; }
+.file-toolbar-actions.is-hidden { max-width: 0; opacity: 0; pointer-events: none; transform: translateX(0.5rem); transition-duration: 180ms; transition-timing-function: ease-in; }
+.file-filter-button, .file-sort-button { color: var(--room-text); white-space: nowrap; }
+.file-filter-button svg, .file-sort-button svg { width: 1rem; height: 1rem; }
 .file-filter-bar > .ant-select { min-width: 9rem; }
-.file-filter-bar > .ant-btn { min-height: 2.35rem; white-space: nowrap; }
+.file-toolbar-actions > .ant-btn { min-height: 2.35rem; white-space: nowrap; }
 .file-unified-list { overflow: hidden; border: 1px solid var(--room-border); border-radius: 0.8rem; background: var(--room-panel); }
 .file-row { grid-template-columns: auto minmax(0, 1fr) auto minmax(9.5rem, auto); min-height: 4.15rem; border-bottom-color: var(--room-border-soft, var(--room-border)); padding: 0.55rem 0.7rem; }
 .file-row::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: #22c55e; content: ""; }
@@ -1622,8 +1626,10 @@ html[data-theme="dark"] .ant-message-notice-content {
 
 @media (max-width: 940px) {
   .file-filter-bar { flex-wrap: wrap; }
-  .file-search-ant { order: 5; flex-basis: 100%; }
-  .file-filter-button, .file-filter-bar > .ant-select { flex: 1 1 9rem; }
+  .file-search-slot { order: 5; flex-basis: 100%; }
+  .file-toolbar-actions { order: 6; max-width: none; flex: 1 1 100%; justify-content: flex-end; overflow: visible; opacity: 1; transform: none; }
+  .file-toolbar-actions.is-hidden { max-width: none; opacity: 1; pointer-events: auto; transform: none; }
+  .file-filter-button, .file-sort-button, .file-filter-bar > .ant-select { flex: 1 1 9rem; }
   .file-row { grid-template-columns: auto minmax(0, 1fr) auto minmax(8.5rem, auto); }
 }
 
@@ -1638,9 +1644,10 @@ html[data-theme="dark"] .ant-message-notice-content {
   .file-filter-bar { min-height: 0; }
   .file-range-tabs-ant { flex: 1 1 100%; order: 1; }
   .file-range-tabs-ant .ant-segmented-item-label { min-width: 0; padding-inline: 0.35rem; }
-  .file-search-ant { order: 2; flex-basis: 100%; }
-  .file-filter-button, .file-filter-bar > .ant-select { flex: 1 1 0; min-width: 0; }
-  .file-filter-bar > .ant-btn { flex: 0 0 auto; }
+  .file-search-slot { order: 2; flex-basis: 100%; }
+  .file-toolbar-actions { order: 3; flex-wrap: wrap; justify-content: stretch; }
+  .file-filter-button, .file-sort-button, .file-filter-bar > .ant-select { flex: 1 1 0; min-width: 0; }
+  .file-toolbar-actions > .ant-btn { flex: 0 0 auto; }
   .file-row { grid-template-columns: auto minmax(0, 1fr) auto; min-height: 4.35rem; gap: 0.45rem; padding: 0.55rem 0.6rem; }
   .file-type-icon { display: grid; width: 1.8rem; height: 1.8rem; }
   .file-row-main { min-width: 0; }
@@ -1678,6 +1685,7 @@ html[data-theme="dark"] .file-menu-desktop .ant-dropdown-trigger { border-color:
 .file-count-badge { position: absolute; top: -0.55rem; right: -0.5rem; z-index: 1; line-height: 1; }
 .file-count-badge .ant-badge-count { min-width: 1.1rem; height: 1.1rem; border: 2px solid var(--room-panel); border-radius: 999px; background: var(--room-border); box-shadow: none; color: var(--room-muted); font-size: 0.58rem; line-height: 0.85rem; padding: 0 0.18rem; }
 .file-count-badge-danger .ant-badge-count { background: #ef4444; color: #fff; }
+.file-search-slot { display: flex; min-width: 0; align-items: center; }
 .file-search-ant { display: inline-flex; align-items: center; min-height: 2.35rem; }
 .file-search-ant.ant-input-affix-wrapper { border-radius: 0.7rem; }
 .file-search-ant .ant-input-prefix { color: var(--room-muted); margin-inline-end: 0.35rem; }

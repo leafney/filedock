@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Button, Dropdown, Input, Modal, Segmented, Tabs, Tooltip, message } from "antd";
-import { ArrowDownUp, CheckSquare, ChevronDown, FileLock2, FilePlus2, FolderOpen, ListFilter, Search, Send, Square } from "lucide-react";
+import { Alert, Badge, Button, Dropdown, Input, Modal, Segmented, Tabs, message } from "antd";
+import { ArrowDownUp, CheckSquare, FileLock2, FilePlus2, FolderOpen, ListFilter, Search, Send, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -27,6 +27,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   const [identity, setIdentity] = useState<FileIdentity>("all");
   const [sort, setSort] = useState<FileSort>("newest");
   const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<File[]>([]);
@@ -182,7 +183,6 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     { key: "uploaded", label: t("room.files.identity.uploaded") },
     ...(range === "shared" ? [] : [{ key: "received", label: t("room.files.identity.received") }]),
   ];
-  const identityLabel = identityItems.find((item) => item.key === identity)?.label ?? t("room.files.identity.all");
   const sortItems = [
     { key: "newest", label: t("room.files.sort.newest") },
     { key: "oldest", label: t("room.files.sort.oldest") },
@@ -208,10 +208,14 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     {view === "list" ? <div className="file-workspace-body">
       <div className="file-filter-bar">
         <Segmented className="file-range-tabs-ant" aria-label={t("room.files.scopeFilter")} value={range} onChange={(value) => changeFilter(setRange, value as FileRange)} options={rangeOptions} />
-        <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
-        <Dropdown menu={{ items: identityItems, selectable: true, selectedKeys: [identity], onClick: ({ key }) => changeFilter(setIdentity, key as FileIdentity) }} trigger={["click"]}><Button className="file-filter-button" icon={<ListFilter aria-hidden="true" />}>{identityLabel}<ChevronDown aria-hidden="true" size={15} /></Button></Dropdown>
-        <Dropdown menu={{ items: sortItems, selectable: true, selectedKeys: [sort], onClick: ({ key }) => setSort(key as FileSort) }} trigger={["click"]}><Tooltip title={currentSortLabel}><Button className="file-sort-icon-button" aria-label={`${t("room.files.sortLabel")}：${currentSortLabel}`} icon={<ArrowDownUp aria-hidden="true" />} /></Tooltip></Dropdown>
-        <Button className={`file-batch-toggle ${batchMode ? "active" : ""}`} type={batchMode ? "primary" : "default"} icon={batchMode ? <CheckSquare aria-hidden="true" /> : <Square aria-hidden="true" />} onClick={toggleBatch}>{batchMode ? t("room.files.exitBatch") : t("room.files.batchSelect")}</Button>
+        <div className={`file-search-slot ${searchFocused ? "is-focused" : ""}`}>
+          <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
+        </div>
+        <div className={`file-toolbar-actions ${searchFocused ? "is-hidden" : ""}`}>
+          <Dropdown menu={{ items: identityItems, selectable: true, selectedKeys: [identity], onClick: ({ key }) => changeFilter(setIdentity, key as FileIdentity) }} trigger={["click"]}><Button className="file-filter-button" icon={<ListFilter aria-hidden="true" />} aria-label={t("room.files.filterLabel")}>{t("room.files.filterLabel")}</Button></Dropdown>
+          <Dropdown menu={{ items: sortItems, selectable: true, selectedKeys: [sort], onClick: ({ key }) => setSort(key as FileSort) }} trigger={["click"]}><Button className="file-sort-button" aria-label={`${t("room.files.sortLabel")}: ${currentSortLabel}`} icon={<ArrowDownUp aria-hidden="true" />}>{t("room.files.sortButtonLabel")}</Button></Dropdown>
+          <Button className={`file-batch-toggle ${batchMode ? "active" : ""}`} type={batchMode ? "primary" : "default"} icon={batchMode ? <CheckSquare aria-hidden="true" /> : <Square aria-hidden="true" />} onClick={toggleBatch}>{batchMode ? t("room.files.exitBatch") : t("room.files.batchSelect")}</Button>
+        </div>
       </div>
       {actionError != null && <div className="file-action-error"><ErrorNotice error={actionError} /></div>}
       <FileList code={code} range={range} identity={identity} search={search} sort={sort} batchMode={batchMode} selected={selected} onSelectedChange={setSelected} onDropFiles={addFiles} onChooseFiles={chooseFiles} onDownload={(file) => void download(file)} onAccept={(file) => void accept(file)} onDecline={(file) => void decline(file)} onReuse={(files) => setReuseFiles(files.map((file) => file.fileId))} onPublish={(file) => void publish(file)} onTrash={openTrash} onDetails={setDetails} onBatchDownload={(files) => void batchDownload(files)} onCounts={setFileCounts} />
