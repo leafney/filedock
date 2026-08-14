@@ -35,8 +35,15 @@ type FileListQuery struct {
 }
 
 type FileListResult struct {
-	Items []FileProjection `json:"items"`
-	Total int              `json:"total"`
+	Items  []FileProjection `json:"items"`
+	Total  int              `json:"total"`
+	Counts FileListCounts   `json:"counts"`
+}
+
+type FileListCounts struct {
+	All    int `json:"all"`
+	Shared int `json:"shared"`
+	Direct int `json:"direct"`
 }
 
 type FileEventProjection struct {
@@ -94,9 +101,6 @@ func (s *FileSvc) ListFiles(userID, roomCode string, query FileListQuery) (FileL
 	normalizeFileListQuery(&query)
 	var files []model.RoomFile
 	dbQuery := s.db.Where("room_id = ? AND status IN ?", room.ID, []string{model.FileStatusUploading, model.FileStatusAvailable})
-	if query.Range == model.FileScopeShared || query.Range == model.FileScopeDirect {
-		dbQuery = dbQuery.Where("scope = ?", query.Range)
-	}
 	if query.Identity == FileIdentityMine {
 		dbQuery = dbQuery.Where("uploader_user_id = ?", userID)
 	} else if query.Identity == FileIdentityToMe {
@@ -117,7 +121,24 @@ func (s *FileSvc) ListFiles(userID, roomCode string, query FileListQuery) (FileL
 		}
 	}
 	sortFileProjections(filtered, query.Sort)
-	return FileListResult{Items: filtered, Total: len(filtered)}, nil
+	counts := FileListCounts{All: len(filtered)}
+	for _, file := range filtered {
+		if file.Scope == model.FileScopeShared {
+			counts.Shared++
+		} else if file.Scope == model.FileScopeDirect {
+			counts.Direct++
+		}
+	}
+	items := filtered
+	if query.Range == model.FileScopeShared || query.Range == model.FileScopeDirect {
+		items = make([]FileProjection, 0, len(filtered))
+		for _, file := range filtered {
+			if file.Scope == query.Range {
+				items = append(items, file)
+			}
+		}
+	}
+	return FileListResult{Items: items, Total: len(items), Counts: counts}, nil
 }
 
 func (s *FileSvc) ReusableFiles(userID, roomCode string) ([]FileProjection, error) {

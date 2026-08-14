@@ -266,16 +266,10 @@ export interface RoomFile {
   capabilities: FileCapabilities;
 }
 
-export interface FileGroup {
-  scope: FileScope;
-  items: RoomFile[];
-  total: number;
-  nextCursor?: string;
-}
-
 export interface FileListResult {
-  shared?: FileGroup;
-  direct?: FileGroup;
+	items: RoomFile[];
+	total: number;
+	counts: { all: number; shared: number; direct: number };
 }
 
 export interface FileEventItem {

@@ -34,7 +34,7 @@ func TestListFilesAppliesSafeProjectionBeforeSearchAndCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uploaderList.Total != 2 || len(uploaderList.Items) != 2 || uploaderList.Items[0].FileID != direct.ID || uploaderList.Items[1].FileID != shared.ID {
+	if uploaderList.Total != 2 || len(uploaderList.Items) != 2 || uploaderList.Counts.All != 2 || uploaderList.Counts.Shared != 1 || uploaderList.Counts.Direct != 1 || uploaderList.Items[0].FileID != direct.ID || uploaderList.Items[1].FileID != shared.ID {
 		t.Fatalf("uploader list = %+v", uploaderList)
 	}
 	ownerList, err := fixture.svc.ListFiles(fixture.owner.UserID, fixture.room.Code, FileListQuery{Range: FileRangeAll, Search: "绝密计划"})
@@ -95,7 +95,7 @@ func TestPrivateRecipientStateReuseAndPublishShared(t *testing.T) {
 		t.Fatal(err)
 	}
 	sharedList, err := fixture.svc.ListFiles(fixture.outsider.UserID, fixture.room.Code, FileListQuery{Range: model.FileScopeShared})
-	if err != nil || sharedList.Total != 1 || sharedList.Items[0].OriginalName != "private.bin" {
+	if err != nil || sharedList.Total != 1 || sharedList.Counts.All != 1 || sharedList.Counts.Shared != 1 || sharedList.Counts.Direct != 0 || sharedList.Items[0].OriginalName != "private.bin" {
 		t.Fatalf("published list=%+v error=%v", sharedList, err)
 	}
 	var room model.Room
