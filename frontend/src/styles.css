@@ -1589,6 +1589,7 @@ html[data-theme="dark"] .ant-message-notice-content {
 .room-file-actions .ant-btn:not(.ant-btn-primary) { border-color: var(--room-primary); color: var(--room-primary); }
 .mobile-action-label { display: none; }
 .file-filter-bar { min-height: 3.2rem; flex-wrap: nowrap; background: var(--room-panel); padding: 0.4rem 0.85rem; }
+.file-range-anchor { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; }
 .file-range-tabs-ant { flex: 0 0 auto; height: 2.35rem; }
 .file-range-tabs-ant.ant-segmented { height: 100%; }
 .file-range-tabs-ant .ant-segmented-item-label { min-width: 4rem; padding: 0.35rem 0.5rem; }
@@ -1629,6 +1630,7 @@ html[data-theme="dark"] .ant-message-notice-content {
 @media (max-width: 940px) {
   .file-filter-bar { flex-wrap: wrap; }
   .file-search-slot { order: 5; flex-basis: 100%; }
+  .file-range-anchor { flex: 1 1 100%; }
   .file-toolbar-actions { order: 6; max-width: none; flex: 1 1 100%; justify-content: flex-end; overflow: visible; opacity: 1; transform: none; }
   .file-toolbar-actions.is-hidden { max-width: none; opacity: 1; pointer-events: auto; transform: none; }
   .file-filter-button, .file-sort-button, .file-filter-bar > .ant-select { flex: 1 1 9rem; }
@@ -1646,6 +1648,7 @@ html[data-theme="dark"] .ant-message-notice-content {
   .file-filter-bar { min-height: 0; }
   .file-range-tabs-ant, .file-search-slot, .file-toolbar-actions { height: auto; }
   .file-range-tabs-ant { flex: 1 1 100%; order: 1; }
+  .file-range-anchor { flex: 1 1 100%; }
   .file-range-tabs-ant .ant-segmented-item-label { min-width: 0; padding-inline: 0.35rem; }
   .file-search-slot { order: 2; flex-basis: 100%; }
   .file-toolbar-actions { order: 3; flex-wrap: wrap; justify-content: stretch; }
@@ -1725,5 +1728,5 @@ html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: 
 html[data-theme="dark"] .file-sort-icon-button { border-color: var(--fd-border); background: var(--fd-surface-soft); color: var(--fd-text-secondary); }
 
 @media (min-width: 941px) {
-  .file-search-slot.is-focused { margin-right: 0; }
+  .file-search-slot.is-focused { position: absolute; z-index: 2; top: 0.4rem; right: 0.85rem; left: var(--file-search-left); }
 }

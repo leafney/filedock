@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Button, Dropdown, Input, Modal, Segmented, Tabs, message } from "antd";
 import { ArrowDownUp, CheckSquare, FileLock2, FilePlus2, FolderOpen, ListFilter, Search, Send, Square } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ErrorNotice } from "../common";
@@ -22,12 +22,15 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
+  const filterBarRef = useRef<HTMLDivElement>(null);
+  const rangeRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<"list" | "timeline" | "trash">("list");
   const [range, setRange] = useState<FileRange>("all");
   const [identity, setIdentity] = useState<FileIdentity>("all");
   const [sort, setSort] = useState<FileSort>("newest");
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchLeft, setSearchLeft] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<File[]>([]);
@@ -190,6 +193,17 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     { key: "size_desc", label: t("room.files.sort.sizeDesc") },
   ];
   const currentSortLabel = sortItems.find((item) => item.key === sort)?.label ?? t("room.files.sort.newest");
+  const updateSearchLeft = useCallback(() => {
+    const bar = filterBarRef.current;
+    const rangeElement = rangeRef.current;
+    if (!bar || !rangeElement) return;
+    setSearchLeft(Math.max(0, rangeElement.getBoundingClientRect().right - bar.getBoundingClientRect().left + 8));
+  }, []);
+  useLayoutEffect(() => {
+    updateSearchLeft();
+    window.addEventListener("resize", updateSearchLeft);
+    return () => window.removeEventListener("resize", updateSearchLeft);
+  }, [updateSearchLeft]);
   const rangeOptions = (["all", "shared", "direct"] as FileRange[]).map((value) => ({
     value,
     label: <span className="file-range-option"><span className="file-range-option-content">{value === "shared" ? <FolderOpen aria-hidden="true" /> : value === "direct" ? <FileLock2 aria-hidden="true" /> : null}{t(`room.files.range.${value}`)}</span><Badge className="file-count-badge" count={fileCounts[value]} showZero size="small" /></span>,
@@ -206,10 +220,10 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
       <Tabs className="room-file-tabs-ant" activeKey={view} onChange={(key) => setView(key as "list" | "timeline" | "trash")} items={viewTabs} tabBarExtraContent={view === "list" ? <div className="room-file-actions"><Button type="primary" icon={<FilePlus2 aria-hidden="true" />} onClick={chooseFiles}><span className="desktop-action-label">{t("room.workspace.addFiles")}</span><span className="mobile-action-label">{t("room.workspace.addFilesShort")}</span></Button><Button icon={<Send aria-hidden="true" />} onClick={() => setReuseFiles([])}><span className="desktop-action-label">{t("room.workspace.privateForward")}</span><span className="mobile-action-label">{t("room.workspace.privateForwardShort")}</span></Button></div> : undefined} />
     </div>
     {view === "list" ? <div className="file-workspace-body">
-      <div className="file-filter-bar">
-        <Segmented className="file-range-tabs-ant" aria-label={t("room.files.scopeFilter")} value={range} onChange={(value) => changeFilter(setRange, value as FileRange)} options={rangeOptions} />
-        <div className={`file-search-slot ${searchFocused ? "is-focused" : ""}`}>
-          <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
+      <div ref={filterBarRef} className="file-filter-bar">
+        <div ref={rangeRef} className="file-range-anchor"><Segmented className="file-range-tabs-ant" aria-label={t("room.files.scopeFilter")} value={range} onChange={(value) => changeFilter(setRange, value as FileRange)} options={rangeOptions} /></div>
+        <div className={`file-search-slot ${searchFocused ? "is-focused" : ""}`} style={searchFocused ? { "--file-search-left": `${searchLeft}px` } as React.CSSProperties : undefined}>
+          <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onFocus={() => { updateSearchLeft(); setSearchFocused(true); }} onBlur={() => setSearchFocused(false)} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
         </div>
         <div className={`file-toolbar-actions ${searchFocused ? "is-hidden" : ""}`}>
           <Dropdown menu={{ items: identityItems, selectable: true, selectedKeys: [identity], onClick: ({ key }) => changeFilter(setIdentity, key as FileIdentity) }} trigger={["click"]}><Button className="file-filter-button" icon={<ListFilter aria-hidden="true" />} aria-label={t("room.files.filterLabel")}>{t("room.files.filterLabel")}</Button></Dropdown>
