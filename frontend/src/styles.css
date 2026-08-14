@@ -1668,3 +1668,20 @@ html[data-theme="dark"] .file-type-icon { background: var(--fd-primary-soft); co
 html[data-theme="dark"] .file-scope-badge.shared { background: #143b2a; color: #86efac; }
 html[data-theme="dark"] .file-scope-badge.direct { background: #3b2f16; color: #fcd34d; }
 html[data-theme="dark"] .file-menu-desktop .ant-dropdown-trigger { border-color: var(--fd-border); background: var(--fd-surface-soft); color: var(--fd-text-secondary); }
+
+/* Count badges sit at label corners without affecting tab alignment. */
+.file-range-option,
+.file-tab-label { position: relative; display: inline-flex; align-items: center; }
+.file-range-option { min-height: 1.75rem; padding: 0 0.5rem 0 0.15rem; }
+.file-range-option-content { display: inline-flex; align-items: center; gap: 0.25rem; padding-right: 0.35rem; }
+.file-tab-label { min-height: 1.4rem; padding-right: 0.45rem; }
+.file-count-badge { position: absolute; top: -0.55rem; right: -0.5rem; z-index: 1; line-height: 1; }
+.file-count-badge .ant-badge-count { min-width: 1.1rem; height: 1.1rem; border: 2px solid var(--room-panel); border-radius: 999px; background: var(--room-border); box-shadow: none; color: var(--room-muted); font-size: 0.58rem; line-height: 0.85rem; padding: 0 0.18rem; }
+.file-count-badge-danger .ant-badge-count { background: #ef4444; color: #fff; }
+.file-search-ant { display: inline-flex; align-items: center; min-height: 2.35rem; }
+.file-search-ant.ant-input-affix-wrapper { border-radius: 0.7rem; }
+.file-search-ant .ant-input-prefix { color: var(--room-muted); margin-inline-end: 0.35rem; }
+.file-search-ant:focus,
+.file-search-ant:focus-within { border-color: var(--room-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--room-primary) 18%, transparent); }
+html[data-theme="dark"] .file-count-badge .ant-badge-count { border-color: var(--fd-surface); background: var(--fd-border); color: var(--fd-text-secondary); }
+html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: #dc2626; color: #fff; }

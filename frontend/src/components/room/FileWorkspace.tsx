@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Button, Dropdown, Input, Modal, Segmented, Select, Tabs, message } from "antd";
-import { CheckSquare, ChevronDown, FileLock2, FilePlus2, FolderOpen, ListFilter, Send, Square } from "lucide-react";
+import { CheckSquare, ChevronDown, FileLock2, FilePlus2, FolderOpen, ListFilter, Search, Send, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -185,12 +185,12 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   const identityLabel = identityItems.find((item) => item.key === identity)?.label ?? t("room.files.identity.all");
   const rangeOptions = (["all", "shared", "direct"] as FileRange[]).map((value) => ({
     value,
-    label: <span className="file-range-option">{value === "shared" ? <FolderOpen aria-hidden="true" /> : value === "direct" ? <FileLock2 aria-hidden="true" /> : null}{t(`room.files.range.${value}`)} <Badge count={fileCounts[value]} showZero size="small" /></span>,
+    label: <span className="file-range-option"><span className="file-range-option-content">{value === "shared" ? <FolderOpen aria-hidden="true" /> : value === "direct" ? <FileLock2 aria-hidden="true" /> : null}{t(`room.files.range.${value}`)}</span><Badge className="file-count-badge" count={fileCounts[value]} showZero size="small" /></span>,
   }));
   const viewTabs = [
     { key: "list", label: t("room.workspace.fileList") },
     { key: "timeline", label: t("room.workspace.timeline") },
-    { key: "trash", label: <span>{t("room.workspace.trash")} <Badge count={trashCountQuery.data?.total ?? 0} showZero size="small" /></span> },
+    { key: "trash", label: <span className="file-tab-label"><span>{t("room.workspace.trash")}</span><Badge className="file-count-badge file-count-badge-danger" count={trashCountQuery.data?.total ?? 0} showZero size="small" /></span> },
   ];
 
   return <section className="room-files-shell">
@@ -201,7 +201,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     {view === "list" ? <div className="file-workspace-body">
       <div className="file-filter-bar">
         <Segmented className="file-range-tabs-ant" aria-label={t("room.files.scopeFilter")} value={range} onChange={(value) => changeFilter(setRange, value as FileRange)} options={rangeOptions} />
-        <Input.Search className="file-search-ant" aria-label={t("room.files.search")} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
+        <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
         <Dropdown menu={{ items: identityItems, selectable: true, selectedKeys: [identity], onClick: ({ key }) => changeFilter(setIdentity, key as FileIdentity) }} trigger={["click"]}><Button className="file-filter-button" icon={<ListFilter aria-hidden="true" />}>{identityLabel}<ChevronDown aria-hidden="true" size={15} /></Button></Dropdown>
         <Select aria-label={t("room.files.sortLabel")} value={sort} onChange={(value) => setSort(value as FileSort)} options={[{ value: "newest", label: t("room.files.sort.newest") }, { value: "oldest", label: t("room.files.sort.oldest") }, { value: "size_asc", label: t("room.files.sort.sizeAsc") }, { value: "size_desc", label: t("room.files.sort.sizeDesc") }]} />
         <Button className={`file-batch-toggle ${batchMode ? "active" : ""}`} type={batchMode ? "primary" : "default"} icon={batchMode ? <CheckSquare aria-hidden="true" /> : <Square aria-hidden="true" />} onClick={toggleBatch}>{batchMode ? t("room.files.exitBatch") : t("room.files.batchSelect")}</Button>
