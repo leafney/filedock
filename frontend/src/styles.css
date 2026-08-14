@@ -1603,7 +1603,7 @@ html[data-theme="dark"] .ant-message-notice-content {
 .file-unified-list { overflow: hidden; border: 1px solid var(--room-border); border-radius: 0.8rem; background: var(--room-panel); }
 .file-row { grid-template-columns: auto minmax(0, 1fr) auto minmax(9.5rem, auto); min-height: 4.15rem; border-bottom-color: var(--room-border-soft, var(--room-border)); padding: 0.55rem 0.7rem; }
 .file-row::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: #22c55e; content: ""; }
-.file-row:has(.file-scope-badge.direct)::before { background: #f59e0b; }
+.file-row.scope-direct::before { background: #f59e0b; }
 .file-row:hover { background: var(--room-panel-hover, #f8fafc); }
 .file-type-icon { width: 2.1rem; height: 2.1rem; border-radius: 0.65rem; }
 .file-row-main > strong { font-size: 0.74rem; line-height: 1.25; }
