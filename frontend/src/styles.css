@@ -719,7 +719,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-capacity-summary > i { display: block; height: 3px; overflow: hidden; border-radius: 999px; background: #e2e8f0; margin-top: 0.3rem; }
 .room-capacity-summary > i > i { display: block; height: 100%; border-radius: inherit; background: var(--room-primary); }
 
-.room-workspace-layout { display: grid; grid-template-columns: 240px minmax(540px, 1fr) 320px; height: 100%; min-height: 0; overflow: hidden; }
+.room-workspace-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; height: 100%; min-height: 0; overflow: hidden; }
 .room-member-panel, .room-files-shell, .room-chat-placeholder { min-width: 0; min-height: 0; background: var(--room-panel); }
 .room-member-panel { overflow: hidden; border-right: 1px solid var(--room-border); }
 .room-member-panel.is-drawer { border: 0; }
@@ -926,7 +926,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .room-blocking-state strong { color: var(--room-primary); margin: 0.8rem 0; }
 
 @media (max-width: 1180px) {
-  .room-workspace-layout { grid-template-columns: minmax(480px, 1fr) 300px; }
+  .room-workspace-layout { grid-template-columns: minmax(0, 1fr) 300px; }
   .room-member-panel:not(.is-drawer) { display: none; }
   .room-members-trigger { display: inline-grid; }
   .room-topbar > .global-header-inner { grid-template-columns: minmax(240px, 1fr) auto minmax(150px, 1fr); gap: 0.75rem; }
@@ -1685,3 +1685,26 @@ html[data-theme="dark"] .file-menu-desktop .ant-dropdown-trigger { border-color:
 .file-search-ant:focus-within { border-color: var(--room-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--room-primary) 18%, transparent); }
 html[data-theme="dark"] .file-count-badge .ant-badge-count { border-color: var(--fd-surface); background: var(--fd-border); color: var(--fd-text-secondary); }
 html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: #dc2626; color: #fff; }
+
+/* Prevent the file workspace from forcing page-level horizontal overflow. */
+.room-workspace-layout,
+.room-files-shell,
+.room-file-header,
+.file-workspace-body,
+.file-filter-bar,
+.file-list-view,
+.file-unified-list { min-width: 0; max-width: 100%; }
+.file-row { grid-template-columns: auto minmax(0, 1fr) auto minmax(7rem, auto); }
+.file-row-actions { min-width: 0; }
+.file-row-actions > button { max-width: 8rem; }
+.file-row-main { min-width: 0; overflow: hidden; }
+.file-filter-bar { overflow-x: hidden; }
+
+@media (max-width: 940px) {
+  .file-row { grid-template-columns: auto minmax(0, 1fr) auto minmax(6.5rem, auto); }
+  .file-row-actions > button { max-width: 7rem; }
+}
+
+@media (max-width: 760px) {
+  .file-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+}
