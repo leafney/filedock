@@ -97,8 +97,7 @@ func (a *FileAPI) HandleList(c *fiber.Ctx) error {
 	if !ok {
 		return response.Error(c, errc.ErrUnAuthorized, nil)
 	}
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	result, err := a.biz.List(principal.UserID, c.Params("code"), service.FileListQuery{Range: c.Query("range"), Identity: c.Query("identity"), Search: c.Query("search"), Sort: c.Query("sort"), Limit: limit, SharedCursor: c.Query("sharedCursor"), DirectCursor: c.Query("directCursor")})
+	result, err := a.biz.List(principal.UserID, c.Params("code"), service.FileListQuery{Range: c.Query("range"), Identity: c.Query("identity"), Search: c.Query("search"), Sort: c.Query("sort")})
 	if err != nil {
 		return response.Failed(c, err)
 	}

@@ -34,44 +34,40 @@ func TestListFilesAppliesSafeProjectionBeforeSearchAndCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uploaderList.Shared.Total != 1 || uploaderList.Direct.Total != 1 || uploaderList.Shared.Items[0].FileID != shared.ID || uploaderList.Direct.Items[0].FileID != direct.ID {
+	if uploaderList.Total != 2 || len(uploaderList.Items) != 2 || uploaderList.Items[0].FileID != direct.ID || uploaderList.Items[1].FileID != shared.ID {
 		t.Fatalf("uploader list = %+v", uploaderList)
 	}
 	ownerList, err := fixture.svc.ListFiles(fixture.owner.UserID, fixture.room.Code, FileListQuery{Range: FileRangeAll, Search: "绝密计划"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ownerList.Shared.Total != 0 || ownerList.Direct.Total != 0 {
+	if ownerList.Total != 0 || len(ownerList.Items) != 0 {
 		t.Fatalf("owner matched hidden original name: %+v", ownerList)
 	}
 	ownerByCode, err := fixture.svc.ListFiles(fixture.owner.UserID, fixture.room.Code, FileListQuery{Range: model.FileScopeDirect, Search: direct.PrivateCode})
-	if err != nil || ownerByCode.Direct.Total != 1 || ownerByCode.Direct.Items[0].Level != ProjectionAnonymous || ownerByCode.Direct.Items[0].OriginalName != "" {
+	if err != nil || ownerByCode.Total != 1 || ownerByCode.Items[0].Level != ProjectionAnonymous || ownerByCode.Items[0].OriginalName != "" {
 		t.Fatalf("owner anonymous list = %+v error=%v", ownerByCode, err)
 	}
 	outsiderList, err := fixture.svc.ListFiles(fixture.outsider.UserID, fixture.room.Code, FileListQuery{Range: FileRangeAll})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outsiderList.Shared.Total != 1 || outsiderList.Direct.Total != 0 {
+	if outsiderList.Total != 1 || len(outsiderList.Items) != 1 || outsiderList.Items[0].Scope != model.FileScopeShared {
 		t.Fatalf("outsider list leaked direct file: %+v", outsiderList)
 	}
 }
 
-func TestFileListGroupsHaveIndependentCursors(t *testing.T) {
+func TestFileListReturnsAllFilesWithoutPagination(t *testing.T) {
 	fixture := newFileTestFixture(t, 10_000)
 	makeAvailableFile(t, fixture, "shared-page-1", model.FileScopeShared, "one", 10, nil)
 	makeAvailableFile(t, fixture, "shared-page-2", model.FileScopeShared, "two", 20, nil)
 	makeAvailableFile(t, fixture, "direct-page-1", model.FileScopeDirect, "private", 30, []string{fixture.recipient.UserID})
-	first, err := fixture.svc.ListFiles(fixture.uploader.UserID, fixture.room.Code, FileListQuery{Range: FileRangeAll, Limit: 1})
+	result, err := fixture.svc.ListFiles(fixture.uploader.UserID, fixture.room.Code, FileListQuery{Range: FileRangeAll})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Shared.NextCursor == "" || first.Direct.NextCursor != "" || len(first.Shared.Items) != 1 || len(first.Direct.Items) != 1 {
-		t.Fatalf("first page = %+v", first)
-	}
-	second, err := fixture.svc.ListFiles(fixture.uploader.UserID, fixture.room.Code, FileListQuery{Range: FileRangeAll, Limit: 1, SharedCursor: first.Shared.NextCursor})
-	if err != nil || len(second.Shared.Items) != 1 || second.Direct.Items[0].FileID != first.Direct.Items[0].FileID {
-		t.Fatalf("second page = %+v error=%v", second, err)
+	if err != nil || result.Total != 3 || len(result.Items) != 3 {
+		t.Fatalf("result = %+v error=%v", result, err)
 	}
 }
 
@@ -92,14 +88,14 @@ func TestPrivateRecipientStateReuseAndPublishShared(t *testing.T) {
 		t.Fatal(err)
 	}
 	recipientList, err := fixture.svc.ListFiles(fixture.recipient.UserID, fixture.room.Code, FileListQuery{Range: model.FileScopeDirect})
-	if err != nil || !recipientList.Direct.Items[0].Capabilities.CanDownload || recipientList.Direct.Items[0].Capabilities.CanAccept {
+	if err != nil || !recipientList.Items[0].Capabilities.CanDownload || recipientList.Items[0].Capabilities.CanAccept {
 		t.Fatalf("accepted projection=%+v error=%v", recipientList, err)
 	}
 	if err := fixture.svc.PublishShared(fixture.uploader.UserID, fixture.room.Code, file.ID); err != nil {
 		t.Fatal(err)
 	}
 	sharedList, err := fixture.svc.ListFiles(fixture.outsider.UserID, fixture.room.Code, FileListQuery{Range: model.FileScopeShared})
-	if err != nil || sharedList.Shared.Total != 1 || sharedList.Shared.Items[0].OriginalName != "private.bin" {
+	if err != nil || sharedList.Total != 1 || sharedList.Items[0].OriginalName != "private.bin" {
 		t.Fatalf("published list=%+v error=%v", sharedList, err)
 	}
 	var room model.Room

@@ -18,7 +18,7 @@ func TestListTrashAppliesVisibilityProjectionSearchAndCapabilities(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ownerActiveFile := activeOwner.Direct.Items[0]
+	ownerActiveFile := activeOwner.Items[0]
 	if ownerActiveFile.Level != ProjectionAnonymous || !ownerActiveFile.Capabilities.CanTrash || !ownerActiveFile.Capabilities.CanSetTrashReason {
 		t.Fatalf("owner active projection=%+v", ownerActiveFile)
 	}

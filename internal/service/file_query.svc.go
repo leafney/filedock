@@ -28,25 +28,15 @@ const (
 )
 
 type FileListQuery struct {
-	Range        string
-	Identity     string
-	Search       string
-	Sort         string
-	Limit        int
-	SharedCursor string
-	DirectCursor string
-}
-
-type FileGroupResult struct {
-	Scope      string           `json:"scope"`
-	Items      []FileProjection `json:"items"`
-	Total      int              `json:"total"`
-	NextCursor string           `json:"nextCursor,omitempty"`
+	Range    string
+	Identity string
+	Search   string
+	Sort     string
 }
 
 type FileListResult struct {
-	Shared *FileGroupResult `json:"shared,omitempty"`
-	Direct *FileGroupResult `json:"direct,omitempty"`
+	Items []FileProjection `json:"items"`
+	Total int              `json:"total"`
 }
 
 type FileEventProjection struct {
@@ -127,16 +117,7 @@ func (s *FileSvc) ListFiles(userID, roomCode string, query FileListQuery) (FileL
 		}
 	}
 	sortFileProjections(filtered, query.Sort)
-	result := FileListResult{}
-	if query.Range == FileRangeAll || query.Range == model.FileScopeShared {
-		group := paginateFileGroup(filtered, model.FileScopeShared, query.SharedCursor, query.Limit)
-		result.Shared = &group
-	}
-	if query.Range == FileRangeAll || query.Range == model.FileScopeDirect {
-		group := paginateFileGroup(filtered, model.FileScopeDirect, query.DirectCursor, query.Limit)
-		result.Direct = &group
-	}
-	return result, nil
+	return FileListResult{Items: filtered, Total: len(filtered)}, nil
 }
 
 func (s *FileSvc) ReusableFiles(userID, roomCode string) ([]FileProjection, error) {
@@ -622,7 +603,6 @@ func normalizeFileListQuery(query *FileListQuery) {
 	if query.Sort != FileSortOldest && query.Sort != FileSortSizeAsc && query.Sort != FileSortSizeDesc {
 		query.Sort = FileSortNewest
 	}
-	query.Limit = normalizeLimit(query.Limit)
 }
 
 func normalizeLimit(limit int) int {
@@ -658,28 +638,6 @@ func sortFileProjections(files []FileProjection, order string) {
 		}
 		return left.FileID > right.FileID
 	})
-}
-
-func paginateFileGroup(files []FileProjection, scope, cursor string, limit int) FileGroupResult {
-	items := make([]FileProjection, 0)
-	for _, file := range files {
-		if file.Scope == scope {
-			items = append(items, file)
-		}
-	}
-	total := len(items)
-	start := cursorStart(items, cursor, func(file FileProjection) string { return file.FileID })
-	if start > len(items) {
-		start = len(items)
-	}
-	end := start + limit
-	next := ""
-	if end < len(items) {
-		next = encodeCursor(items[end-1].FileID)
-	} else {
-		end = len(items)
-	}
-	return FileGroupResult{Scope: scope, Items: items[start:end], Total: total, NextCursor: next}
 }
 
 func encodeCursor(value string) string { return base64.RawURLEncoding.EncodeToString([]byte(value)) }
