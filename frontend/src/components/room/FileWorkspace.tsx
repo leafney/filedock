@@ -31,6 +31,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchLeft, setSearchLeft] = useState(0);
+  const [searchRight, setSearchRight] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<File[]>([]);
@@ -197,7 +198,11 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     const bar = filterBarRef.current;
     const rangeElement = rangeRef.current;
     if (!bar || !rangeElement) return;
-    setSearchLeft(Math.max(0, rangeElement.getBoundingClientRect().right - bar.getBoundingClientRect().left + 8));
+    const barRect = bar.getBoundingClientRect();
+    const listElement = bar.closest(".room-files-shell")?.querySelector<HTMLElement>(".file-unified-list, .file-empty-state");
+    const listRight = listElement?.getBoundingClientRect().right ?? barRect.right;
+    setSearchLeft(Math.max(0, rangeElement.getBoundingClientRect().right - barRect.left + 8));
+    setSearchRight(Math.max(0, barRect.right - listRight));
   }, []);
   useLayoutEffect(() => {
     updateSearchLeft();
@@ -222,7 +227,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     {view === "list" ? <div className="file-workspace-body">
       <div ref={filterBarRef} className="file-filter-bar">
         <div ref={rangeRef} className="file-range-anchor"><Segmented className="file-range-tabs-ant" aria-label={t("room.files.scopeFilter")} value={range} onChange={(value) => changeFilter(setRange, value as FileRange)} options={rangeOptions} /></div>
-        <div className={`file-search-slot ${searchFocused ? "is-focused" : ""}`} style={searchFocused ? { "--file-search-left": `${searchLeft}px` } as React.CSSProperties : undefined}>
+        <div className={`file-search-slot ${searchFocused ? "is-focused" : ""}`} style={searchFocused ? { "--file-search-left": `${searchLeft}px`, "--file-search-right": `${searchRight}px` } as React.CSSProperties : undefined}>
           <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onFocus={() => { updateSearchLeft(); setSearchFocused(true); }} onBlur={() => setSearchFocused(false)} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
         </div>
         <div className={`file-toolbar-actions ${searchFocused ? "is-hidden" : ""}`}>
