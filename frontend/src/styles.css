@@ -1708,3 +1708,7 @@ html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: 
 @media (max-width: 760px) {
   .file-row { grid-template-columns: auto minmax(0, 1fr) auto; }
 }
+
+.file-sort-icon-button { width: 2.35rem; min-width: 2.35rem; padding-inline: 0; }
+.file-sort-icon-button svg { width: 1.05rem; height: 1.05rem; }
+html[data-theme="dark"] .file-sort-icon-button { border-color: var(--fd-border); background: var(--fd-surface-soft); color: var(--fd-text-secondary); }

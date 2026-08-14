@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Button, Dropdown, Input, Modal, Segmented, Select, Tabs, message } from "antd";
-import { CheckSquare, ChevronDown, FileLock2, FilePlus2, FolderOpen, ListFilter, Search, Send, Square } from "lucide-react";
+import { Alert, Badge, Button, Dropdown, Input, Modal, Segmented, Tabs, Tooltip, message } from "antd";
+import { ArrowDownUp, CheckSquare, ChevronDown, FileLock2, FilePlus2, FolderOpen, ListFilter, Search, Send, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -183,6 +183,13 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
     ...(range === "shared" ? [] : [{ key: "received", label: t("room.files.identity.received") }]),
   ];
   const identityLabel = identityItems.find((item) => item.key === identity)?.label ?? t("room.files.identity.all");
+  const sortItems = [
+    { key: "newest", label: t("room.files.sort.newest") },
+    { key: "oldest", label: t("room.files.sort.oldest") },
+    { key: "size_asc", label: t("room.files.sort.sizeAsc") },
+    { key: "size_desc", label: t("room.files.sort.sizeDesc") },
+  ];
+  const currentSortLabel = sortItems.find((item) => item.key === sort)?.label ?? t("room.files.sort.newest");
   const rangeOptions = (["all", "shared", "direct"] as FileRange[]).map((value) => ({
     value,
     label: <span className="file-range-option"><span className="file-range-option-content">{value === "shared" ? <FolderOpen aria-hidden="true" /> : value === "direct" ? <FileLock2 aria-hidden="true" /> : null}{t(`room.files.range.${value}`)}</span><Badge className="file-count-badge" count={fileCounts[value]} showZero size="small" /></span>,
@@ -203,7 +210,7 @@ export function FileWorkspace({ code, members, selfId, fileLaunch, onFileLaunchC
         <Segmented className="file-range-tabs-ant" aria-label={t("room.files.scopeFilter")} value={range} onChange={(value) => changeFilter(setRange, value as FileRange)} options={rangeOptions} />
         <Input className="file-search-ant" aria-label={t("room.files.search")} prefix={<Search aria-hidden="true" />} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("room.files.searchPlaceholder")} allowClear />
         <Dropdown menu={{ items: identityItems, selectable: true, selectedKeys: [identity], onClick: ({ key }) => changeFilter(setIdentity, key as FileIdentity) }} trigger={["click"]}><Button className="file-filter-button" icon={<ListFilter aria-hidden="true" />}>{identityLabel}<ChevronDown aria-hidden="true" size={15} /></Button></Dropdown>
-        <Select aria-label={t("room.files.sortLabel")} value={sort} onChange={(value) => setSort(value as FileSort)} options={[{ value: "newest", label: t("room.files.sort.newest") }, { value: "oldest", label: t("room.files.sort.oldest") }, { value: "size_asc", label: t("room.files.sort.sizeAsc") }, { value: "size_desc", label: t("room.files.sort.sizeDesc") }]} />
+        <Dropdown menu={{ items: sortItems, selectable: true, selectedKeys: [sort], onClick: ({ key }) => setSort(key as FileSort) }} trigger={["click"]}><Tooltip title={currentSortLabel}><Button className="file-sort-icon-button" aria-label={`${t("room.files.sortLabel")}：${currentSortLabel}`} icon={<ArrowDownUp aria-hidden="true" />} /></Tooltip></Dropdown>
         <Button className={`file-batch-toggle ${batchMode ? "active" : ""}`} type={batchMode ? "primary" : "default"} icon={batchMode ? <CheckSquare aria-hidden="true" /> : <Square aria-hidden="true" />} onClick={toggleBatch}>{batchMode ? t("room.files.exitBatch") : t("room.files.batchSelect")}</Button>
       </div>
       {actionError != null && <div className="file-action-error"><ErrorNotice error={actionError} /></div>}
