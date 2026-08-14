@@ -1005,7 +1005,7 @@ button.global-notification-item:focus-visible { outline: 2px solid #0f766e; outl
 .file-drop-overlay strong { border: 2px solid #14b8a6; border-radius: 0.75rem; background: rgb(255 255 255 / 94%); box-shadow: 0 8px 24px rgb(15 118 110 / 12%); font-size: 0.85rem; padding: 0.9rem 1.2rem; }
 .file-batch-bar { display: flex; align-items: center; gap: 0.45rem; border: 1px solid #99f6e4; border-radius: 0.65rem; background: #f0fdfa; color: #115e59; margin-bottom: 0.75rem; padding: 0.55rem 0.7rem; }
 .file-batch-bar strong { flex: 1; font-size: 0.72rem; }
-.file-batch-bar button { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid #5eead4; border-radius: 0.45rem; background: #fff; color: #0f766e; cursor: pointer; font-size: 0.68rem; padding: 0.4rem 0.55rem; }
+.file-batch-bar button { display: inline-flex; height: 2.45rem; align-items: center; gap: 0.3rem; border: 1px solid #5eead4; border-radius: 0.45rem; background: #fff; color: #0f766e; cursor: pointer; font-size: 0.68rem; padding: 0 0.75rem; }
 .file-batch-bar button:disabled { color: #94a3b8; cursor: not-allowed; opacity: 0.65; }
 .file-groups { display: grid; gap: 0.65rem; }
 .file-group { overflow: visible; border: 1px solid var(--room-border); border-radius: 0.75rem; background: #fff; }
@@ -1709,6 +1709,7 @@ html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: 
 .file-list-view,
 .file-unified-list { min-width: 0; max-width: 100%; }
 .file-row { grid-template-columns: auto minmax(0, 1fr) auto minmax(7rem, auto); }
+.file-row.is-batch-mode { grid-template-columns: auto auto minmax(0, 1fr) auto minmax(7rem, auto); }
 .file-row-actions { min-width: 0; }
 .file-row-actions > button { max-width: 8rem; }
 .file-row-main { min-width: 0; overflow: hidden; }
@@ -1721,6 +1722,8 @@ html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: 
 
 @media (max-width: 760px) {
   .file-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .file-row.is-batch-mode { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  .file-row.is-batch-mode .file-row-actions { grid-column: 4; }
 }
 
 .file-sort-icon-button { width: 2.35rem; min-width: 2.35rem; padding-inline: 0; }

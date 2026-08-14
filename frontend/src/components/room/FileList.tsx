@@ -130,7 +130,7 @@ function FileRow({ file, batchMode, selected, onSelectedChange, onDownload, onAc
   const title = file.scope === "direct" && file.privateCode ? `${t("room.files.privateNumber")}#${file.privateCode} · ${file.displayName}` : file.displayName;
   const recipientSummary = summarizeRecipients(file.recipients, t);
   const metadata = [file.uploaderName, formatBytes(file.size), formatDate(file.completedAt ?? file.createdAt), recipientSummary].filter(Boolean).join(" · ");
-  return <article className={`file-row scope-${file.scope} ${file.projection === "anonymous" ? "is-anonymous" : ""}`}>
+  return <article className={`file-row scope-${file.scope} ${batchMode ? "is-batch-mode" : ""} ${file.projection === "anonymous" ? "is-anonymous" : ""}`}>
     {batchMode && <input type="checkbox" checked={checked} aria-label={file.displayName} onChange={toggle} />}
     <span className="file-type-icon">{file.scope === "direct" ? <FileLock2 aria-hidden="true" /> : <File aria-hidden="true" />}</span>
     <div className="file-row-main"><strong title={title}>{title}</strong><small title={metadata}>{metadata}</small></div>
