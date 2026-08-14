@@ -1728,5 +1728,5 @@ html[data-theme="dark"] .file-count-badge-danger .ant-badge-count { background: 
 html[data-theme="dark"] .file-sort-icon-button { border-color: var(--fd-border); background: var(--fd-surface-soft); color: var(--fd-text-secondary); }
 
 @media (min-width: 941px) {
-  .file-search-slot.is-focused { position: absolute; z-index: 2; top: 0.4rem; right: 0.85rem; left: var(--file-search-left); }
+  .file-search-slot.is-focused { position: absolute; z-index: 2; top: 0.4rem; right: 0; left: var(--file-search-left); }
 }
