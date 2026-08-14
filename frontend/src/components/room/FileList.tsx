@@ -146,10 +146,17 @@ function FileRow({ file, batchMode, selected, onSelectedChange, onDownload, onAc
 
 function summarizeRecipients(recipients: RoomFile["recipients"], t: ReturnType<typeof useTranslation>["t"]) {
   if (!recipients || recipients.length === 0) return "";
+  const labels: Record<string, string> = {
+    pending: t("room.files.recipientStatus.pending"),
+    accepted: t("room.files.recipientStatus.accepted"),
+    declined: t("room.files.recipientStatus.declined"),
+    downloaded: t("room.files.recipientStatus.downloaded"),
+    skipped: t("room.files.recipientStatus.skipped"),
+  };
   const counts = recipients.reduce<Record<string, number>>((result, recipient) => {
     const status = recipient.status ?? "pending";
     result[status] = (result[status] ?? 0) + 1;
     return result;
   }, {});
-  return Object.entries(counts).map(([status, count]) => `${t(`room.files.recipientStatus.${status}`)} ${count}`).join(" · ");
+  return Object.entries(counts).map(([status, count]) => `${labels[status] ?? status} ${count}`).join(" · ");
 }
