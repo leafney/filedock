@@ -59,7 +59,7 @@ Related discussion: [docs/discuss/2026-08-14-room-file-list-refresh.md](../discu
 ### 1. 后端文件列表契约
 
 - 文件列表接口改为非分页扁平返回：`items` 保存当前范围匹配文件，`total` 保存当前范围匹配数量，并返回 `counts` 保存全部、共享、私密三类匹配数量。
-- 请求参数保留：`range`、`identity`、`search`、`sort`、`limit` 不再使用；实现中应移除游标参数和分页逻辑。
+- 请求参数保留：`range`、`identity`、`search`、`sort`；实现中应移除 `limit`、游标参数和分页逻辑。
 - `range` 取值：`all`、`shared`、`direct`。`all` 返回共享和私密文件混合结果。
 - `identity` 取值：`all`、`uploaded`、`received`。
 - `search` 对当前用户可见的显示名称和允许暴露的私密编号执行不区分大小写匹配；不得因为搜索泄露匿名投影的原始文件名。
