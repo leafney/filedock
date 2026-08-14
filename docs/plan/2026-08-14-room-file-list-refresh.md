@@ -58,7 +58,7 @@ Related discussion: [docs/discuss/2026-08-14-room-file-list-refresh.md](../discu
 
 ### 1. 后端文件列表契约
 
-- 文件列表接口改为非分页扁平返回：`items` 保存所有匹配文件，`total` 保存匹配数量。
+- 文件列表接口改为非分页扁平返回：`items` 保存当前范围匹配文件，`total` 保存当前范围匹配数量，并返回 `counts` 保存全部、共享、私密三类匹配数量。
 - 请求参数保留：`range`、`identity`、`search`、`sort`、`limit` 不再使用；实现中应移除游标参数和分页逻辑。
 - `range` 取值：`all`、`shared`、`direct`。`all` 返回共享和私密文件混合结果。
 - `identity` 取值：`all`、`uploaded`、`received`。
@@ -67,6 +67,7 @@ Related discussion: [docs/discuss/2026-08-14-room-file-list-refresh.md](../discu
 - 后端必须先按权限生成安全投影，再执行搜索、排序和返回，不能先搜索原始私密名称再隐藏结果。
 - 排序规则：主字段相同时用 `fileId` 做稳定的次排序；`newest` 使用完成时间，未完成上传回退创建时间。
 - 每个文件继续返回 `scope`、`projection`、`privateCode`、`recipients`、`status`、`progress`、`capabilities` 等现有业务字段。
+- `counts` 必须基于相同的搜索和身份筛选条件计算，结构为 `{ all: number, shared: number, direct: number }`；`range` 只决定 `items` 返回范围，不改变三类数量计算。
 - 删除、接收、拒绝、下载、私密转发、公开、详情等后端业务接口不改变。
 
 ### 2. 前端查询和状态
