@@ -1588,9 +1588,9 @@ html[data-theme="dark"] .ant-message-notice-content {
 .room-file-actions .ant-btn-primary { border-color: var(--room-primary); background: var(--room-primary); }
 .room-file-actions .ant-btn:not(.ant-btn-primary) { border-color: var(--room-primary); color: var(--room-primary); }
 .mobile-action-label { display: none; }
-.file-filter-bar { position: relative; min-height: 3.4rem; flex-wrap: nowrap; background: var(--room-panel); padding: 0.4rem 0.85rem; }
+.file-filter-bar { position: relative; min-height: 3.2rem; flex-wrap: nowrap; background: var(--room-panel); padding: 0.4rem 0.85rem; }
 .file-range-anchor { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; }
-.file-range-anchor, .file-search-slot, .file-toolbar-actions { height: 2.6rem; }
+.file-range-anchor, .file-search-slot, .file-toolbar-actions { height: 2.4rem; }
 .file-range-tabs-ant { flex: 0 0 auto; height: 100%; }
 .file-range-tabs-ant.ant-segmented { height: 100%; }
 .file-range-tabs-ant .ant-segmented-item-label { min-width: 4rem; padding: 0.35rem 0.5rem; }
