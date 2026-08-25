@@ -11,7 +11,7 @@ BIN_LIN_ARM := $(BIN)_linux_arm64
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "dev")
 GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_TIME ?= $(shell date +"%Y-%m-%d %H:%M:%S")
+BUILD_TIME ?= $(shell TZ=Asia/Shanghai date +"%Y-%m-%dT%H:%M:%S%z" | sed -E 's/([+-][0-9]{2})([0-9]{2})$$/\1:\2/')
 
 LDFLAGS := -s -w \
 	-X 'main.Version=$(VERSION)' \
