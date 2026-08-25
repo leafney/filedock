@@ -98,7 +98,7 @@ func (a *App) Close() error {
 		if err := a.db.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("close sqlite: %w", err))
 		}
-		if err := a.log.Sync(); err != nil && !errors.Is(err, syscall.ENOTTY) && !errors.Is(err, syscall.EBADF) {
+		if err := a.log.Sync(); err != nil && !errors.Is(err, syscall.ENOTTY) && !errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.EINVAL) {
 			errs = append(errs, fmt.Errorf("sync logger: %w", err))
 		}
 		a.closeErr = errors.Join(errs...)
