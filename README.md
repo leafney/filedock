@@ -138,6 +138,34 @@ make build-lin
 make build-lin-arm
 ```
 
+## 自动发布
+
+推送格式为 `v数字.数字.数字` 的稳定版本 Tag 后，GitHub Actions 会自动执行 Go 测试、前端测试、前端生产构建和多平台二进制编译，并创建正式 GitHub Release。Tag 可以指向任意分支提交，推送前请确认目标提交正确。
+
+创建并推送 Tag：
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+发布流程构建以下资产：
+
+| 目标平台 | Release 资产 |
+| --- | --- |
+| macOS ARM64 | `filedock_v0.2.0_darwin_arm64.tar.gz` |
+| Windows AMD64 | `filedock_v0.2.0_windows_amd64.zip` |
+| Linux AMD64 | `filedock_v0.2.0_linux_amd64.tar.gz` |
+| Linux ARM64 | `filedock_v0.2.0_linux_arm64.tar.gz` |
+
+每个压缩包内只有一个 `filedock` 或 `filedock.exe` 二进制文件，不包含二级目录、README 或示例配置。Release 同时提供 `checksums.txt`，用于校验四个压缩包的 SHA-256；Release notes 由 GitHub 自动生成。
+
+构建信息中的 `BuildTime` 固定使用 `Asia/Shanghai` 时区和带偏移的 RFC 3339 格式，例如 `2026-08-25T16:16:45+08:00`。同次发布的四个平台共用同一个构建时间。
+
+Bark 通知需要在 GitHub 仓库 Secrets 中配置 `BARK_KEY`。通知会显示发布版本和成功或失败结果；Bark 配置缺失或发送失败不会改变 Release 结果。
+
+发布产物未进行 macOS 或 Windows 代码签名。首次运行时，操作系统可能显示无法验证开发者或未知发布者的安全提示。
+
 ## 常用命令
 
 ```text
