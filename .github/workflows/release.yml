@@ -169,11 +169,17 @@ jobs:
 
           binary="${APP_NAME}${{ matrix.binary_ext }}"
           asset="${APP_NAME}_${VERSION}_${GOOS}_${GOARCH}.${{ matrix.archive }}"
+          git_commit="$(git rev-parse --short HEAD)"
+
+          if [[ ! "${git_commit}" =~ ^[0-9a-f]+$ ]]; then
+            echo "::error::Invalid Git short commit: ${git_commit}"
+            exit 1
+          fi
 
           mkdir -p dist artifacts
           go build \
             -trimpath \
-            -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.GitBranch=${GITHUB_REF_NAME}' -X 'main.GitCommit=${GITHUB_SHA}' -X 'main.BuildTime=${BUILD_TIME}'" \
+            -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.GitBranch=${GITHUB_REF_NAME}' -X 'main.GitCommit=${git_commit}' -X 'main.BuildTime=${BUILD_TIME}'" \
             -o "dist/${binary}" \
             .
 
