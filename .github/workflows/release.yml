@@ -223,6 +223,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download release artifacts
         uses: actions/download-artifact@v8
         with:
@@ -277,6 +282,29 @@ jobs:
             fi
           done
 
+      - name: Generate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          previous_tag="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [[ -n "${previous_tag}" ]]; then
+            commit_range="${previous_tag}..${GITHUB_REF_NAME}"
+          else
+            commit_range="${GITHUB_REF_NAME}"
+          fi
+
+          commits="$(git log --pretty=format:'- `%h` %s' "${commit_range}")"
+          {
+            echo "## 提交记录"
+            echo
+            if [[ -n "${commits}" ]]; then
+              printf '%s\n' "${commits}"
+            else
+              echo "- 无新增提交"
+            fi
+          } > release-notes.md
+
       - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
@@ -284,7 +312,7 @@ jobs:
           name: ${{ needs.prepare.outputs.release_name }}
           draft: false
           prerelease: false
-          generate_release_notes: true
+          body_path: release-notes.md
           overwrite_files: true
           fail_on_unmatched_files: true
           files: |

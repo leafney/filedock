@@ -158,7 +158,7 @@ git push origin v0.2.0
 | Linux AMD64 | `filedock_v0.2.0_linux_amd64.tar.gz` |
 | Linux ARM64 | `filedock_v0.2.0_linux_arm64.tar.gz` |
 
-每个压缩包内只有一个 `filedock` 或 `filedock.exe` 二进制文件，不包含二级目录、README 或示例配置。Release 同时提供 `checksums.txt`，用于校验四个压缩包的 SHA-256；Release notes 由 GitHub 自动生成。
+每个压缩包内只有一个 `filedock` 或 `filedock.exe` 二进制文件，不包含二级目录、README 或示例配置。Release 同时提供 `checksums.txt`，用于校验四个压缩包的 SHA-256。Release 说明按提交时间倒序列出上一个可达稳定版本 Tag 到当前 Tag 之间的全部 Commit 主题；首次发布时列出当前 Tag 可达的全部提交。
 
 构建信息中的 `BuildTime` 固定使用 `Asia/Shanghai` 时区和带偏移的 RFC 3339 格式，例如 `2026-08-25T16:16:45+08:00`。同次发布的四个平台共用同一个构建时间。
 
