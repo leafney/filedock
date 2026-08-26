@@ -24,7 +24,7 @@ FileDock 的前端会通过 Go embed 进入最终二进制。发布流程不能�
 
 构建矩阵覆盖 `darwin/arm64`、`windows/amd64`、`linux/amd64`、`linux/arm64`。各矩阵在 Ubuntu Runner 上以 `CGO_ENABLED=0` 交叉编译，注入同一版本、Tag、提交 SHA 和构建时间。Windows 生成 `filedock.exe` 并打包为 ZIP；其余平台生成 `filedock` 并打包为 TAR.GZ。每个压缩包根目录只有一个二进制文件。
 
-全部矩阵成功后，Release 阶段下载四个压缩包，计算 SHA-256，创建或更新 Tag 对应的正式 Release，上传四个压缩包和 `checksums.txt`，并让 GitHub 自动生成 Release notes。中间 Artifact 保留 1 天，Release 资产长期保留。Bark 根据完整链路结果发送成功或失败通知，但通知失败不会把成功发布改成失败。
+全部矩阵成功后，Release 阶段下载四个压缩包，计算 SHA-256，创建或更新 Tag 对应的正式 Release，上传四个压缩包和 `checksums.txt`，并根据 Git 提交历史生成 Release notes。中间 Artifact 保留 1 天，Release 资产长期保留。Bark 根据完整链路结果发送成功或失败通知，但通知失败不会把成功发布改成失败。
 
 根 Makefile 只同步 BuildTime 的东八区 RFC 3339 生成逻辑，不新增或调整平台发布目标。根 README 增加自动发布说明。
 
@@ -57,7 +57,7 @@ FileDock 的前端会通过 Go embed 进入最终二进制。发布流程不能�
 25. 作为问题排查人员，我希望同次发布的四个平台具有完全相同的 BuildTime，以便确认它们属于同一构建批次。
 26. 作为本地开发者，我希望 Makefile 的 BuildTime 与 CI 使用相同格式和时区语义，以便本地构建和发布构建信息一致。
 27. 作为项目维护者，我希望任一测试、前端构建或平台构建失败时不创建不完整 Release。
-28. 作为项目维护者，我希望 Release notes 由 GitHub 自动生成，以便无需维护额外变更日志脚本。
+28. 作为项目维护者，我希望 Release notes 直接列出上一个 Tag 到当前 Tag 的 Commit 主题，以便无需点击比较链接即可查看全部提交。
 29. 作为项目维护者，我希望重新运行同一 Tag 的 Workflow 时更新已有 Release 并覆盖同名资产，以便恢复失败发布而不产生重复记录。
 30. 作为项目维护者，我希望同一 Tag 的多个发布运行不会同时写入 Release，以便避免资产上传竞态。
 31. 作为项目维护者，我希望不同 Tag 可以并行发布，以便不造成不必要的全仓库串行等待。
@@ -220,7 +220,13 @@ Go build 必须加入 `-trimpath`，linker flags 必须保留 `-s -w` 并注入�
 - Release 使用触发 Tag 作为 Release tag，不创建新 Tag。
 - Release 标题使用准备 Job 输出，例如 `FileDock v0.2.0`。
 - `draft` 固定为 false，`prerelease` 固定为 false。
-- 开启 GitHub 自动生成 Release notes，不自行拼接 `git log`，不维护独立 release-notes 文件。
+- Release Job 必须使用 `fetch-depth: 0` 检出完整 Git 历史，以便查找上一个 Tag 和读取提交记录。
+- 使用当前 Tag 的父提交作为查找起点，通过 `git describe` 查找上一个可达且匹配稳定版本模式的 Tag，避免把当前 Tag 自身识别为上一个 Tag。
+- 普通版本的提交范围为“上一个可达稳定版本 Tag（不含）到当前 Tag（含）”；首次发布找不到上一个 Tag 时，范围为当前 Tag 的全部可达历史。
+- 使用“提交记录”作为 Release 说明标题。每个提交占一行，内容为反引号包裹的 Git 短哈希、一个空格和 Commit 主题；顺序采用 `git log` 默认的时间倒序。
+- 若两个 Tag 指向同一个提交而导致范围为空，说明中显示“无新增提交”。
+- Release Job 生成独立 `release-notes.md`，发布 Action 通过 `body_path` 读取该文件。
+- 关闭 GitHub 自动生成 Release notes，不生成或追加 `Full Changelog` 链接。
 - 上传文件列表只能包含四个平台压缩包与 `checksums.txt`。
 - 同一 Tag 重新运行时应定位并更新已有 Release，而不是创建第二条 Release。
 - 同名资产必须允许覆盖，使失败修复后的重新运行可以替换旧压缩包和校验文件。
@@ -275,7 +281,7 @@ README 的构建区域附近增加独立自动发布说明，至少写清：
 - 四个目标平台及各自压缩格式。
 - 完整资产命名示例，以及压缩包内只有单个二进制。
 - Release 同时提供 `checksums.txt`。
-- Release notes 由 GitHub 自动生成。
+- Release notes 直接列出上一个 Tag 到当前 Tag 的全部 Commit 主题。
 - Bark 需要仓库 Secret `BARK_KEY`；Bark 失败不影响 Release。
 - BuildTime 固定为 `Asia/Shanghai` 的带偏移 RFC 3339 字符串。
 - 发布二进制未进行 macOS 或 Windows 代码签名，用户可能看到系统安全提示。
@@ -328,6 +334,8 @@ README 是开发/运维文档，不需要复制一份英文版；不得因此修
 - 检查所有 Artifact 显式保留 1 天，缺少文件时失败。
 - 检查全局最小权限与 Release Job 独立写权限。
 - 检查 Release 只上传四个压缩包与校验文件。
+- 检查 Release Job 使用完整 Git 历史，生成 `release-notes.md`，并通过 `body_path` 发布。
+- 检查 Workflow 未启用 GitHub 自动 Release notes。
 - 检查 Bark 成功/失败条件互斥，且发送步骤允许失败。
 
 ### 4. 本地可执行验证
@@ -349,7 +357,7 @@ README 是开发/运维文档，不需要复制一份英文版；不得因此修
 5. 四个平台构建日志显示复用同一个 BuildTime。
 6. Release 为正式状态，不是草稿或预发布。
 7. Release 标题与 Tag 一致。
-8. Release notes 由 GitHub 自动生成。
+8. Release notes 以“提交记录”为标题，列出上一个 Tag 到当前 Tag 的全部 Commit 短哈希与主题，不显示 `Full Changelog` 链接。
 9. Release 恰好包含四个平台压缩包和一个 `checksums.txt`。
 10. Release 不包含裸二进制或前端 Artifact。
 11. 解压每个平台资产后只有 `filedock` 或 `filedock.exe` 一个文件，无二级目录。
@@ -400,3 +408,10 @@ README 是开发/运维文档，不需要复制一份英文版；不得因此修
 - 构建 Job 必须在 checkout 后通过 `git rev-parse --short HEAD` 计算短哈希，并把结果注入 `main.GitCommit`。
 - 四个平台必须得到相同短哈希。
 - 禁止继续直接注入完整 `GITHUB_SHA`，也禁止硬编码固定截取 7 个字符。
+
+### 2026-08-26：Release 说明 Commit 列表修订
+
+- 用户明确要求 Release 页面直接列出自上一个 Tag 以来的全部 Commit message，不再只显示 GitHub 的 `Full Changelog` 比较链接。
+- Release Job 必须 checkout 完整 Git 历史，查找上一个可达稳定版本 Tag，并生成 Markdown Commit 列表。
+- 每行显示 Git 短哈希和 Commit 主题；这里的 Commit message 指单行主题，不展开多行正文，避免破坏 Release Markdown 结构。
+- 发布 Action 必须使用 `body_path`，不得继续设置 `generate_release_notes: true`。

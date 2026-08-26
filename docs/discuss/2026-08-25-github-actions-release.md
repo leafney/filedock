@@ -216,3 +216,11 @@ Bark 使用 `BARK_KEY` Secret。只有完整发布链路成功才发送成功通
 - 最终决定：GitHub Actions 不再直接使用完整 `GITHUB_SHA`，而是在已检出源码的构建 Job 中执行 `git rev-parse --short HEAD`。
 - 四个平台都从同一 Tag 提交计算短哈希，因此得到相同的 `GitCommit`。
 - 该方式与 Makefile 的现有 `GIT_COMMIT` 默认计算方式完全一致，不硬编码固定截取长度，并遵循 Git 自身的短哈希规则。
+
+### 2026-08-26：Release 说明改为 Commit 列表
+
+- 用户发现 GitHub 自动生成的 Release notes 只有 `Full Changelog` 比较链接，没有展示从上一个 Tag 到当前 Tag 的提交内容。
+- 最终决定：关闭 GitHub 自动生成 Release notes，改由 Release Job 使用完整 Git 历史生成 `release-notes.md`。
+- Release 说明使用“提交记录”标题，按 Git 默认时间倒序逐行显示短哈希与 Commit 主题。
+- 普通版本使用“上一个可达稳定版本 Tag（不含）到当前 Tag（含）”作为范围；首次发布没有上一个 Tag 时，列出当前 Tag 可达的全部提交。
+- Release 说明不再添加 `Full Changelog` 链接。
