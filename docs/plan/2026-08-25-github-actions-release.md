@@ -51,7 +51,7 @@ FileDock 的前端会通过 Go embed 进入最终二进制。发布流程不能�
 19. 作为下载用户，我希望平台资产名包含应用名、完整版本、目标系统和架构，以便下载前即可判断用途。
 20. 作为安全意识较强的用户，我希望 Release 提供 SHA-256 校验文件，以便验证下载完整性。
 21. 作为问题排查人员，我希望二进制版本信息包含完整 Tag，以便确认正在运行的发布版本。
-22. 作为问题排查人员，我希望二进制包含完整 40 位 Git SHA，以便精确定位源码提交。
+22. 作为问题排查人员，我希望二进制包含与 Makefile 一致的 Git 短哈希，以便显示紧凑并保持本地与发布构建一致。
 23. 作为问题排查人员，我希望 Tag 构建的分支字段明确写入 Tag 名，以便不猜测提交属于哪个分支。
 24. 作为问题排查人员，我希望构建时间带有明确 `+08:00` 时区，以便不同地区查看时不会误解。
 25. 作为问题排查人员，我希望同次发布的四个平台具有完全相同的 BuildTime，以便确认它们属于同一构建批次。
@@ -178,7 +178,7 @@ Go build 必须加入 `-trimpath`，linker flags 必须保留 `-s -w` 并注入�
 
 - `Version`：准备 Job 的完整版本 Tag。
 - `GitBranch`：完整 Tag 名。不要从远程分支列表猜测分支，因为一个提交可能被多个分支包含或没有远程分支包含。
-- `GitCommit`：触发提交的完整 40 位 `GITHUB_SHA`，不得截断为 7 位。
+- `GitCommit`：在已检出源码的构建 Job 中执行 `git rev-parse --short HEAD` 得到的 Git 短哈希。不得直接注入完整 `GITHUB_SHA`，也不得硬编码字符串截取长度；该计算方式必须与 Makefile 的 `GIT_COMMIT` 默认值保持一致。
 - `BuildTime`：准备 Job 生成的同一个带 `+08:00` BuildTime。
 
 不得启用 UPX，不得安装 UPX，不得执行 macOS notarization、Apple 签名、Windows Authenticode 签名或其他二进制后处理。
@@ -393,3 +393,10 @@ README 是开发/运维文档，不需要复制一份英文版；不得因此修
 - Go embed 在编译时读取 `static/dist`。如果构建矩阵把 Artifact 下载到其他目录，Go build 可能只嵌入仓库中的占位文件，生成表面成功但网页不可用的二进制；实施时必须重点检查下载目录。
 - Release workflow 使用版本标签而不是完整 Action Commit SHA，这是用户明确接受的维护性取舍。
 - 当前 PRD 已获用户批准。实施必须按本文阶段顺序完成，并在每个阶段创建独立 Git 提交。
+
+### 2026-08-26：Git Commit 短哈希修订
+
+- 用户明确要求 GitHub Actions 生成的 `GitCommit` 改用短哈希，与 Makefile 保持一致。
+- 构建 Job 必须在 checkout 后通过 `git rev-parse --short HEAD` 计算短哈希，并把结果注入 `main.GitCommit`。
+- 四个平台必须得到相同短哈希。
+- 禁止继续直接注入完整 `GITHUB_SHA`，也禁止硬编码固定截取 7 个字符。

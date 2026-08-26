@@ -207,3 +207,12 @@
 Release 只上传四个压缩包与 `checksums.txt`，不上传裸二进制。Linux 与 macOS 使用 `.tar.gz`，Windows 使用 `.zip`；每个包内只有平台二进制且无二级目录。全部测试、前端构建和四平台构建成功后才发布正式 Release。Release notes 由 GitHub 自动生成，重复运行覆盖同名资产。
 
 Bark 使用 `BARK_KEY` Secret。只有完整发布链路成功才发送成功通知，其他状态发送失败通知；Bark 自身失败不改变 Release 结果。Workflow 使用最小权限、固定 Action 大版本、固定 Bun `1.3.5`、冻结锁文件和同 Tag 串行策略。README 同步记录发布方法和约束。
+
+## 实施后需求变更
+
+### 2026-08-26：Git Commit 改用短哈希
+
+- 用户发现 GitHub Actions 发布的二进制写入了完整 40 位 Commit ID，与 Makefile 的本地构建结果不一致。
+- 最终决定：GitHub Actions 不再直接使用完整 `GITHUB_SHA`，而是在已检出源码的构建 Job 中执行 `git rev-parse --short HEAD`。
+- 四个平台都从同一 Tag 提交计算短哈希，因此得到相同的 `GitCommit`。
+- 该方式与 Makefile 的现有 `GIT_COMMIT` 默认计算方式完全一致，不硬编码固定截取长度，并遵循 Git 自身的短哈希规则。
